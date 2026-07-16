@@ -1,0 +1,1034 @@
+import { useState } from 'react';
+import {
+  Settings,
+  Clock,
+  Users,
+  Bell,
+  Database,
+  CreditCard,
+  Plus,
+  Edit,
+  Trash2,
+  Upload,
+  Download,
+  Save,
+  RefreshCw,
+  ToggleLeft,
+  ToggleRight,
+  Eye,
+  EyeOff,
+  Copy,
+} from 'lucide-react';
+import { DEFAULT_CREDENTIAL_LAYOUT, type CredentialLayout } from '../utils/generateCredentialsPDF';
+
+const TABS = [
+  { id: 'general', label: 'General', icon: Settings },
+  { id: 'horarios', label: 'Horarios', icon: Clock },
+  { id: 'usuarios', label: 'Usuarios', icon: Users },
+  { id: 'credencial', label: 'Credencial', icon: CreditCard },
+  { id: 'notificaciones', label: 'Notificaciones', icon: Bell },
+  { id: 'respaldo', label: 'Respaldo', icon: Database },
+] as const;
+
+type TabId = (typeof TABS)[number]['id'];
+
+interface HorarioEspecial {
+  id: number;
+  nombre: string;
+  entrada: string;
+  salida: string;
+  fecha: string;
+}
+
+interface Usuario {
+  id: number;
+  nombre: string;
+  correo: string;
+  rol: string;
+  estado: string;
+  ultimoAcceso: string;
+}
+
+interface Plantilla {
+  id: number;
+  nombre: string;
+  asunto: string;
+  cuerpo: string;
+  variables: string[];
+}
+
+interface Respaldo {
+  id: number;
+  fecha: string;
+  tamano: string;
+  tipo: string;
+  estado: string;
+}
+
+const colors = {
+  primary: '#EB2466',
+  primaryDark: '#AB1748',
+  success: '#0F8122',
+  info: '#1792AB',
+  bg: '#F0EFEF',
+  white: '#FFFFFF',
+  border: '#CAC6C7',
+  textPrimary: '#1C1819',
+  textSecondary: '#5F5657',
+  textMuted: '#85787A',
+  lightPink: '#FEEBEE',
+  lightGreen: '#E8F5E9',
+  lightBlue: '#E3F2FD',
+};
+
+export default function ConfigPage() {
+  const [activeTab, setActiveTab] = useState<TabId>('general');
+
+  const [plantelNombre, setPlantelNombre] = useState('Plantel 27 Miahuatlan');
+  const [direccion, setDireccion] = useState('');
+  const [telefono, setTelefono] = useState('');
+  const [correoInstitucional, setCorreoInstitucional] = useState('');
+  const [zonaHoraria, setZonaHoraria] = useState('America/Mexico_City');
+  const [logo, setLogo] = useState<string | null>(null);
+
+  const [horaEntrada, setHoraEntrada] = useState('07:00');
+  const [horaSalida, setHoraSalida] = useState('14:00');
+  const [diasHabiles, setDiasHabiles] = useState<Record<string, boolean>>({
+    Lunes: true,
+    Martes: true,
+    Miercoles: true,
+    Jueves: true,
+    Viernes: true,
+    Sabado: false,
+    Domingo: false,
+  });
+  const [toleranciaRetardo, setToleranciaRetardo] = useState(30);
+  const [horariosEspeciales, setHorariosEspeciales] = useState<HorarioEspecial[]>([
+    { id: 1, nombre: 'Examen final', entrada: '08:00', salida: '13:00', fecha: '2026-07-20' },
+    { id: 2, nombre: 'Evento deportivo', entrada: '09:00', salida: '12:00', fecha: '2026-07-25' },
+    { id: 3, nombre: 'Jornada extendida', entrada: '07:00', salida: '17:00', fecha: '2026-08-01' },
+  ]);
+
+  const [usuarios, setUsuarios] = useState<Usuario[]>([
+    { id: 1, nombre: 'Director Perez', correo: 'director@plantel27.edu.mx', rol: 'Directivo', estado: 'Activo', ultimoAcceso: '2026-07-12 09:15' },
+    { id: 2, nombre: 'Prefecto Ramirez', correo: 'prefecto@plantel27.edu.mx', rol: 'Prefectura', estado: 'Activo', ultimoAcceso: '2026-07-12 08:30' },
+    { id: 3, nombre: 'Admin Lopez', correo: 'admin@plantel27.edu.mx', rol: 'Directivo', estado: 'Inactivo', ultimoAcceso: '2026-06-30 14:45' },
+  ]);
+  const [showUsuarioModal, setShowUsuarioModal] = useState(false);
+  const [nuevoUsuario, setNuevoUsuario] = useState({ nombre: '', correo: '', contrasena: '', rol: 'Prefectura', enviarCorreo: true });
+  const [showPassword, setShowPassword] = useState(false);
+  const [autoGenerate, setAutoGenerate] = useState(true);
+
+  const [notifEmail, setNotifEmail] = useState(true);
+  const [notifSMS, setNotifSMS] = useState(false);
+  const [notifWhatsApp, setNotifWhatsApp] = useState(false);
+
+  const [smtp, setSmtp] = useState({ servidor: 'smtp.gmail.com', puerto: '587', usuario: '', contrasena: '', remitente: '' });
+  const [smsApi, setSmsApi] = useState({ proveedor: '', apiToken: '', remitente: '' });
+  const [whatsappApi, setWhatsappApi] = useState({ phoneNumberId: '', accessToken: '', businessAccountId: '' });
+
+  const [plantillas, setPlantillas] = useState<Plantilla[]>([
+    {
+      id: 1,
+      nombre: 'Entrada registrada',
+      asunto: 'Entrada registrada - {nombre_alumno}',
+      cuerpo: 'El alumno {nombre_alumno} del grupo {grupo} registro su entrada a las {hora}.',
+      variables: ['{nombre_alumno}', '{grupo}', '{hora}'],
+    },
+    {
+      id: 2,
+      nombre: 'Salida registrada',
+      asunto: 'Salida registrada - {nombre_alumno}',
+      cuerpo: 'El alumno {nombre_alumno} del grupo {grupo} registro su salida a las {hora}.',
+      variables: ['{nombre_alumno}', '{grupo}', '{hora}'],
+    },
+    {
+      id: 3,
+      nombre: 'Retardo',
+      asunto: 'Retardo registrado - {nombre_alumno}',
+      cuerpo: 'El alumno {nombre_alumno} del grupo {grupo} presento retardo a las {hora}.',
+      variables: ['{nombre_alumno}', '{grupo}', '{hora}'],
+    },
+    {
+      id: 4,
+      nombre: 'Falta',
+      asunto: 'Falta registrada - {nombre_alumno}',
+      cuerpo: 'El alumno {nombre_alumno} del grupo {grupo} registro falta el dia de hoy.',
+      variables: ['{nombre_alumno}', '{grupo}'],
+    },
+    {
+      id: 5,
+      nombre: 'Salida anticipada',
+      asunto: 'Salida anticipada - {nombre_alumno}',
+      cuerpo: 'El alumno {nombre_alumno} del grupo {grupo} salio anticipadamente a las {hora} por motivo de: {motivo}.',
+      variables: ['{nombre_alumno}', '{grupo}', '{hora}', '{motivo}'],
+    },
+    {
+      id: 6,
+      nombre: 'Incidencia de seguridad',
+      asunto: 'Incidencia de seguridad - {nombre_alumno}',
+      cuerpo: 'Se reporto una incidencia de seguridad con el alumno {nombre_alumno} del grupo {grupo}. Motivo: {motivo}.',
+      variables: ['{nombre_alumno}', '{grupo}', '{motivo}'],
+    },
+    {
+      id: 7,
+      nombre: 'Credencial bloqueada',
+      asunto: 'Credencial bloqueada - {nombre_alumno}',
+      cuerpo: 'La credencial del alumno {nombre_alumno} del grupo {grupo} ha sido bloqueada. Motivo: {motivo}.',
+      variables: ['{nombre_alumno}', '{grupo}', '{motivo}'],
+    },
+  ]);
+  const [editingPlantilla, setEditingPlantilla] = useState<number | null>(null);
+
+  const [frecuencia, setFrecuencia] = useState('Diario');
+  const [ubicacion, setUbicacion] = useState('Local');
+  const [retencion, setRetencion] = useState(30);
+  const [respaldos] = useState<Respaldo[]>([
+    { id: 1, fecha: '2026-07-12 23:00', tamano: '15.4 MB', tipo: 'Automatico', estado: 'Completado' },
+    { id: 2, fecha: '2026-07-11 23:00', tamano: '15.2 MB', tipo: 'Automatico', estado: 'Completado' },
+    { id: 3, fecha: '2026-07-10 15:30', tamano: '14.9 MB', tipo: 'Manual', estado: 'Completado' },
+  ]);
+
+  // Estado del layout de credencial (cargado de localStorage o defaults)
+  const [credLayout, setCredLayout] = useState<CredentialLayout>(() => {
+    try {
+      const saved = localStorage.getItem('credentialLayout');
+      if (saved) return { ...DEFAULT_CREDENTIAL_LAYOUT, ...JSON.parse(saved) };
+    } catch { }
+    return { ...DEFAULT_CREDENTIAL_LAYOUT };
+  });
+
+  const generarContrasena = () => {
+    const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789!@#$%';
+    let result = '';
+    for (let i = 0; i < 12; i++) result += chars.charAt(Math.floor(Math.random() * chars.length));
+    return result;
+  };
+
+  const toggleDia = (dia: string) => setDiasHabiles(prev => ({ ...prev, [dia]: !prev[dia] }));
+
+  const addHorarioEspecial = () => {
+    const newId = Math.max(...horariosEspeciales.map(h => h.id), 0) + 1;
+    setHorariosEspeciales([...horariosEspeciales, { id: newId, nombre: '', entrada: '07:00', salida: '14:00', fecha: '' }]);
+  };
+
+  const removeHorarioEspecial = (id: number) => setHorariosEspeciales(horariosEspeciales.filter(h => h.id !== id));
+
+  const addUsuario = () => {
+    const newId = Math.max(...usuarios.map(u => u.id), 0) + 1;
+    setUsuarios([...usuarios, { id: newId, nombre: nuevoUsuario.nombre, correo: nuevoUsuario.correo, rol: nuevoUsuario.rol, estado: 'Activo', ultimoAcceso: 'Nunca' }]);
+    setShowUsuarioModal(false);
+    setNuevoUsuario({ nombre: '', correo: '', contrasena: '', rol: 'Prefectura', enviarCorreo: true });
+  };
+
+  const removeUsuario = (id: number) => setUsuarios(usuarios.filter(u => u.id !== id));
+
+  const s = {
+    page: { padding: '24px', background: colors.bg, minHeight: '100vh', fontFamily: "'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" } as React.CSSProperties,
+    header: { marginBottom: '24px' } as React.CSSProperties,
+    title: { display: 'flex', alignItems: 'center', gap: '10px', fontSize: '24px', fontWeight: 700, color: colors.textPrimary, margin: 0 } as React.CSSProperties,
+    subtitle: { color: colors.textSecondary, fontSize: '14px', marginTop: '6px', marginBottom: 0 } as React.CSSProperties,
+    tabs: { display: 'flex', gap: '0', borderBottom: `2px solid ${colors.border}`, marginBottom: '24px', background: colors.white, borderRadius: '12px 12px 0 0', padding: '0 8px', overflowX: 'auto' } as React.CSSProperties,
+    tab: (active: boolean): React.CSSProperties => ({
+      display: 'flex', alignItems: 'center', gap: '8px', padding: '14px 20px', border: 'none', background: 'transparent', cursor: 'pointer', fontSize: '14px', fontWeight: active ? 600 : 400, color: active ? colors.primary : colors.textMuted, borderBottom: active ? `3px solid ${colors.primary}` : '3px solid transparent', marginBottom: '-2px', transition: 'all 0.2s', whiteSpace: 'nowrap',
+    }),
+    content: { display: 'flex', flexDirection: 'column' as const, gap: '20px' } as React.CSSProperties,
+    tabContent: { display: 'flex', flexDirection: 'column' as const, gap: '20px' } as React.CSSProperties,
+    section: { background: colors.white, borderRadius: '12px', padding: '24px', border: `1px solid ${colors.border}` } as React.CSSProperties,
+    sectionTitle: { fontSize: '16px', fontWeight: 600, color: colors.textPrimary, margin: '0 0 16px 0' } as React.CSSProperties,
+    sectionHeader: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' } as React.CSSProperties,
+    grid2: { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' } as React.CSSProperties,
+    field: { display: 'flex', flexDirection: 'column' as const, gap: '6px', marginBottom: '16px' } as React.CSSProperties,
+    label: { fontSize: '13px', fontWeight: 500, color: colors.textSecondary } as React.CSSProperties,
+    input: { padding: '10px 14px', borderRadius: '8px', border: `1px solid ${colors.border}`, background: colors.bg, fontSize: '14px', color: colors.textPrimary, outline: 'none', transition: 'border-color 0.2s', width: '100%', boxSizing: 'border-box' as const } as React.CSSProperties,
+    inputSm: { padding: '10px 14px', borderRadius: '8px', border: `1px solid ${colors.border}`, background: colors.bg, fontSize: '14px', color: colors.textPrimary, outline: 'none', width: '120px', boxSizing: 'border-box' as const } as React.CSSProperties,
+    textarea: { padding: '10px 14px', borderRadius: '8px', border: `1px solid ${colors.border}`, background: colors.bg, fontSize: '14px', color: colors.textPrimary, outline: 'none', resize: 'vertical' as const, minHeight: '80px', fontFamily: 'inherit', width: '100%', boxSizing: 'border-box' as const } as React.CSSProperties,
+    select: { padding: '10px 14px', borderRadius: '8px', border: `1px solid ${colors.border}`, background: colors.bg, fontSize: '14px', color: colors.textPrimary, outline: 'none', cursor: 'pointer', width: '100%', boxSizing: 'border-box' as const } as React.CSSProperties,
+    btnPrimary: { display: 'inline-flex', alignItems: 'center', gap: '8px', padding: '10px 20px', background: colors.primary, color: colors.white, border: 'none', borderRadius: '8px', fontSize: '14px', fontWeight: 600, cursor: 'pointer', transition: 'background 0.2s', whiteSpace: 'nowrap' as const } as React.CSSProperties,
+    btnSecondary: { display: 'inline-flex', alignItems: 'center', gap: '8px', padding: '10px 20px', background: colors.white, color: colors.textSecondary, border: `1px solid ${colors.border}`, borderRadius: '8px', fontSize: '14px', fontWeight: 500, cursor: 'pointer', transition: 'all 0.2s', whiteSpace: 'nowrap' as const } as React.CSSProperties,
+    btnIcon: (danger?: boolean): React.CSSProperties => ({
+      display: 'inline-flex', alignItems: 'center', justifyContent: 'center', padding: '8px', border: 'none', background: 'transparent', borderRadius: '8px', cursor: 'pointer', color: danger ? colors.primary : colors.textMuted, transition: 'all 0.2s',
+    }),
+    actions: { display: 'flex', justifyContent: 'flex-end', gap: '12px', paddingTop: '8px' } as React.CSSProperties,
+    tableWrapper: { overflowX: 'auto' as const } as React.CSSProperties,
+    table: { width: '100%', borderCollapse: 'collapse' as const } as React.CSSProperties,
+    th: { padding: '12px 16px', textAlign: 'left' as const, fontSize: '12px', fontWeight: 600, color: colors.textSecondary, borderBottom: `2px solid ${colors.border}`, background: colors.bg, textTransform: 'uppercase' as const, letterSpacing: '0.05em' } as React.CSSProperties,
+    td: { padding: '12px 16px', borderBottom: `1px solid ${colors.border}`, fontSize: '14px', color: colors.textPrimary } as React.CSSProperties,
+    tdBold: { padding: '12px 16px', borderBottom: `1px solid ${colors.border}`, fontSize: '14px', color: colors.textPrimary, fontWeight: 600 } as React.CSSProperties,
+    tableInput: { padding: '8px 12px', borderRadius: '6px', border: `1px solid ${colors.border}`, background: colors.bg, fontSize: '13px', color: colors.textPrimary, outline: 'none', width: '100%', boxSizing: 'border-box' as const } as React.CSSProperties,
+    actionsCell: { display: 'flex', gap: '4px' } as React.CSSProperties,
+    badge: (variant: 'blue' | 'green' | 'gray'): React.CSSProperties => {
+      const bg = variant === 'blue' ? colors.lightBlue : variant === 'green' ? colors.lightGreen : colors.bg;
+      const color = variant === 'blue' ? colors.info : variant === 'green' ? colors.success : colors.textMuted;
+      return { display: 'inline-block', padding: '4px 10px', borderRadius: '20px', fontSize: '12px', fontWeight: 600, background: bg, color: color };
+    },
+    toggleRow: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '14px 0', borderBottom: `1px solid ${colors.border}` } as React.CSSProperties,
+    toggleLabel: { fontSize: '14px', color: colors.textPrimary, fontWeight: 500 } as React.CSSProperties,
+    modalOverlay: { position: 'fixed' as const, inset: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, backdropFilter: 'blur(2px)' } as React.CSSProperties,
+    modal: { background: colors.white, borderRadius: '16px', padding: '28px', maxWidth: '480px', width: '90%', maxHeight: '90vh', overflowY: 'auto' as const, boxShadow: '0 20px 60px rgba(0,0,0,0.2)' } as React.CSSProperties,
+    modalTitle: { fontSize: '20px', fontWeight: 700, color: colors.textPrimary, margin: '0 0 20px 0' } as React.CSSProperties,
+    modalActions: { display: 'flex', justifyContent: 'flex-end', gap: '12px', marginTop: '20px', paddingTop: '16px', borderTop: `1px solid ${colors.border}` } as React.CSSProperties,
+    passwordRow: { display: 'flex', gap: '8px', alignItems: 'center' } as React.CSSProperties,
+    checkboxLabel: { display: 'flex', alignItems: 'center', gap: '8px', fontSize: '14px', color: colors.textSecondary, cursor: 'pointer', marginTop: '8px' } as React.CSSProperties,
+    diaChip: (active: boolean): React.CSSProperties => ({
+      display: 'inline-flex', alignItems: 'center', gap: '6px', padding: '10px 18px', borderRadius: '20px', border: active ? `2px solid ${colors.primary}` : `2px solid ${colors.border}`, background: active ? colors.lightPink : colors.white, color: active ? colors.primary : colors.textMuted, fontSize: '14px', fontWeight: active ? 600 : 400, cursor: 'pointer', transition: 'all 0.2s', userSelect: 'none' as const,
+    }),
+    diasGrid: { display: 'flex', flexWrap: 'wrap' as const, gap: '10px' } as React.CSSProperties,
+    logoUpload: { display: 'flex', justifyContent: 'center', marginTop: '8px' } as React.CSSProperties,
+    dropzone: { display: 'flex', flexDirection: 'column' as const, alignItems: 'center', justifyContent: 'center', padding: '40px', border: `2px dashed ${colors.border}`, borderRadius: '12px', background: colors.bg, cursor: 'pointer', textAlign: 'center' as const, position: 'relative' as const, width: '100%' } as React.CSSProperties,
+    dropzoneText: { fontSize: '14px', color: colors.textSecondary, margin: '12px 0 4px 0' } as React.CSSProperties,
+    dropzoneHint: { fontSize: '12px', color: colors.textMuted } as React.CSSProperties,
+    fileInput: { position: 'absolute' as const, inset: 0, opacity: 0, cursor: 'pointer' } as React.CSSProperties,
+    logoPreview: { display: 'flex', flexDirection: 'column' as const, alignItems: 'center', gap: '12px', padding: '20px', border: `1px solid ${colors.border}`, borderRadius: '12px', background: colors.bg } as React.CSSProperties,
+    logoPreviewImg: { maxWidth: '200px', maxHeight: '120px', borderRadius: '8px', objectFit: 'contain' } as React.CSSProperties,
+    btnRemove: { display: 'inline-flex', alignItems: 'center', gap: '6px', padding: '6px 12px', background: colors.lightPink, color: colors.primary, border: 'none', borderRadius: '6px', fontSize: '13px', fontWeight: 500, cursor: 'pointer' } as React.CSSProperties,
+    radioGroup: { display: 'flex', flexDirection: 'column' as const, gap: '10px' } as React.CSSProperties,
+    radio: { display: 'flex', alignItems: 'center', gap: '10px', fontSize: '14px', color: colors.textPrimary, cursor: 'pointer', padding: '10px 14px', borderRadius: '8px', border: `1px solid ${colors.border}`, background: colors.white, transition: 'border-color 0.2s' } as React.CSSProperties,
+    radioActive: { display: 'flex', alignItems: 'center', gap: '10px', fontSize: '14px', color: colors.textPrimary, cursor: 'pointer', padding: '10px 14px', borderRadius: '8px', border: `2px solid ${colors.primary}`, background: colors.lightPink, transition: 'border-color 0.2s' } as React.CSSProperties,
+    plantillasList: { display: 'flex', flexDirection: 'column' as const, gap: '12px' } as React.CSSProperties,
+    plantillaCard: { border: `1px solid ${colors.border}`, borderRadius: '10px', overflow: 'hidden' as const, transition: 'border-color 0.2s' } as React.CSSProperties,
+    plantillaHeader: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '14px 16px', background: colors.bg } as React.CSSProperties,
+    plantillaName: { fontSize: '14px', fontWeight: 600, color: colors.textPrimary } as React.CSSProperties,
+    plantillaEditor: { padding: '16px', borderTop: `1px solid ${colors.border}` } as React.CSSProperties,
+    variables: { display: 'flex', flexWrap: 'wrap' as const, gap: '6px', alignItems: 'center', marginTop: '8px' } as React.CSSProperties,
+    variablesLabel: { fontSize: '12px', color: colors.textMuted } as React.CSSProperties,
+    variableTag: { display: 'inline-block', padding: '2px 8px', borderRadius: '4px', background: colors.bg, border: `1px solid ${colors.border}`, fontSize: '12px', fontFamily: 'monospace', color: colors.info } as React.CSSProperties,
+  };
+
+  const handleInputFocus = (e: React.FocusEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
+    e.target.style.borderColor = colors.primary;
+  };
+
+  const handleInputBlur = (e: React.FocusEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
+    e.target.style.borderColor = colors.border;
+  };
+
+  const renderToggle = (value: boolean, onChange: (v: boolean) => void, label: string) => (
+    <div style={s.toggleRow} key={label}>
+      <span style={s.toggleLabel}>{label}</span>
+      <button style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '4px' }} onClick={() => onChange(!value)}>
+        {value ? <ToggleRight size={28} color={colors.primary} /> : <ToggleLeft size={28} color={colors.textMuted} />}
+      </button>
+    </div>
+  );
+
+  const renderGeneralTab = () => (
+    <div style={s.tabContent}>
+      <div style={s.section}>
+        <h3 style={s.sectionTitle}>Informacion del Plantel</h3>
+        <div style={s.grid2}>
+          <div style={s.field}>
+            <label style={s.label}>Nombre del Plantel</label>
+            <input type="text" style={s.input} value={plantelNombre} onChange={e => setPlantelNombre(e.target.value)} onFocus={handleInputFocus} onBlur={handleInputBlur} />
+          </div>
+          <div style={s.field}>
+            <label style={s.label}>Telefono</label>
+            <input type="tel" style={s.input} value={telefono} onChange={e => setTelefono(e.target.value)} placeholder="(273) 123-4567" onFocus={handleInputFocus} onBlur={handleInputBlur} />
+          </div>
+        </div>
+        <div style={s.field}>
+          <label style={s.label}>Direccion</label>
+          <textarea style={s.textarea} rows={3} value={direccion} onChange={e => setDireccion(e.target.value)} placeholder="Direccion completa del plantel" onFocus={handleInputFocus} onBlur={handleInputBlur} />
+        </div>
+        <div style={s.grid2}>
+          <div style={s.field}>
+            <label style={s.label}>Correo Institucional</label>
+            <input type="email" style={s.input} value={correoInstitucional} onChange={e => setCorreoInstitucional(e.target.value)} placeholder="contacto@plantel27.edu.mx" onFocus={handleInputFocus} onBlur={handleInputBlur} />
+          </div>
+          <div style={s.field}>
+            <label style={s.label}>Zona Horaria</label>
+            <select style={s.select} value={zonaHoraria} onChange={e => setZonaHoraria(e.target.value)} onFocus={handleInputFocus} onBlur={handleInputBlur}>
+              <option value="America/Mexico_City">America/Mexico_City (UTC-6)</option>
+              <option value="America/Mexico_Cancun">America/Mexico_Cancun (UTC-5)</option>
+              <option value="America/Tijuana">America/Tijuana (UTC-8)</option>
+              <option value="America/Mazatlan">America/Mazatlan (UTC-7)</option>
+            </select>
+          </div>
+        </div>
+      </div>
+
+      <div style={s.section}>
+        <h3 style={s.sectionTitle}>Logo del Plantel</h3>
+        <div style={s.logoUpload}>
+          {logo ? (
+            <div style={s.logoPreview}>
+              <img src={logo} alt="Logo" style={s.logoPreviewImg} />
+              <button style={s.btnRemove} onClick={() => setLogo(null)}>
+                <Trash2 size={16} /> Eliminar
+              </button>
+            </div>
+          ) : (
+            <div style={s.dropzone}>
+              <Upload size={48} color={colors.textMuted} />
+              <p style={s.dropzoneText}>Arrastra el logo aqui o haz clic para seleccionar</p>
+              <span style={s.dropzoneHint}>Formatos: PNG, JPG, SVG (Max 5MB)</span>
+              <input
+                type="file"
+                accept="image/*"
+                style={s.fileInput}
+                onChange={e => {
+                  const file = e.target.files?.[0];
+                  if (file) {
+                    const reader = new FileReader();
+                    reader.onload = ev => setLogo(ev.target?.result as string);
+                    reader.readAsDataURL(file);
+                  }
+                }}
+              />
+            </div>
+          )}
+        </div>
+      </div>
+
+      <div style={s.actions}>
+        <button style={s.btnPrimary}><Save size={16} /> Guardar cambios</button>
+      </div>
+    </div>
+  );
+
+  const renderHorariosTab = () => (
+    <div style={s.tabContent}>
+      <div style={s.section}>
+        <h3 style={s.sectionTitle}>Horario Oficial</h3>
+        <div style={s.grid2}>
+          <div style={s.field}>
+            <label style={s.label}>Hora de entrada oficial</label>
+            <input type="time" style={s.input} value={horaEntrada} onChange={e => setHoraEntrada(e.target.value)} onFocus={handleInputFocus} onBlur={handleInputBlur} />
+          </div>
+          <div style={s.field}>
+            <label style={s.label}>Hora de salida oficial</label>
+            <input type="time" style={s.input} value={horaSalida} onChange={e => setHoraSalida(e.target.value)} onFocus={handleInputFocus} onBlur={handleInputBlur} />
+          </div>
+        </div>
+        <div style={s.field}>
+          <label style={s.label}>Minutos de tolerancia para retardo</label>
+          <input type="number" style={s.inputSm} value={toleranciaRetardo} onChange={e => setToleranciaRetardo(Number(e.target.value))} min={0} max={120} onFocus={handleInputFocus} onBlur={handleInputBlur} />
+        </div>
+      </div>
+
+      <div style={s.section}>
+        <h3 style={s.sectionTitle}>Dias Habiles</h3>
+        <div style={s.diasGrid}>
+          {Object.entries(diasHabiles).map(([dia, activo]) => (
+            <label key={dia} style={s.diaChip(activo)} onClick={() => toggleDia(dia)}>
+              <input type="checkbox" checked={activo} readOnly style={{ display: 'none' }} />
+              {dia}
+            </label>
+          ))}
+        </div>
+      </div>
+
+      <div style={s.section}>
+        <div style={s.sectionHeader}>
+          <h3 style={{ ...s.sectionTitle, marginBottom: 0 }}>Horarios Especiales</h3>
+          <button style={s.btnSecondary} onClick={addHorarioEspecial}><Plus size={16} /> Agregar horario</button>
+        </div>
+        <div style={s.tableWrapper}>
+          <table style={s.table}>
+            <thead>
+              <tr>
+                <th style={s.th}>Nombre</th>
+                <th style={s.th}>Fecha</th>
+                <th style={s.th}>Entrada</th>
+                <th style={s.th}>Salida</th>
+                <th style={s.th}>Acciones</th>
+              </tr>
+            </thead>
+            <tbody>
+              {horariosEspeciales.map(h => (
+                <tr key={h.id}>
+                  <td style={s.td}><input style={s.tableInput} value={h.nombre} onChange={e => setHorariosEspeciales(horariosEspeciales.map(x => x.id === h.id ? { ...x, nombre: e.target.value } : x))} onFocus={handleInputFocus} onBlur={handleInputBlur} /></td>
+                  <td style={s.td}><input type="date" style={s.tableInput} value={h.fecha} onChange={e => setHorariosEspeciales(horariosEspeciales.map(x => x.id === h.id ? { ...x, fecha: e.target.value } : x))} onFocus={handleInputFocus} onBlur={handleInputBlur} /></td>
+                  <td style={s.td}><input type="time" style={s.tableInput} value={h.entrada} onChange={e => setHorariosEspeciales(horariosEspeciales.map(x => x.id === h.id ? { ...x, entrada: e.target.value } : x))} onFocus={handleInputFocus} onBlur={handleInputBlur} /></td>
+                  <td style={s.td}><input type="time" style={s.tableInput} value={h.salida} onChange={e => setHorariosEspeciales(horariosEspeciales.map(x => x.id === h.id ? { ...x, salida: e.target.value } : x))} onFocus={handleInputFocus} onBlur={handleInputBlur} /></td>
+                  <td style={s.td}><button style={s.btnIcon(true)} onClick={() => removeHorarioEspecial(h.id)}><Trash2 size={16} /></button></td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div style={s.actions}>
+        <button style={s.btnPrimary}><Save size={16} /> Guardar cambios</button>
+      </div>
+    </div>
+  );
+
+  const renderUsuariosTab = () => (
+    <div style={s.tabContent}>
+      <div style={s.section}>
+        <div style={s.sectionHeader}>
+          <h3 style={{ ...s.sectionTitle, marginBottom: 0 }}>Usuarios del Sistema</h3>
+          <button style={s.btnPrimary} onClick={() => setShowUsuarioModal(true)}><Plus size={16} /> Nuevo usuario</button>
+        </div>
+        <div style={s.tableWrapper}>
+          <table style={s.table}>
+            <thead>
+              <tr>
+                <th style={s.th}>Nombre</th>
+                <th style={s.th}>Correo</th>
+                <th style={s.th}>Rol</th>
+                <th style={s.th}>Estado</th>
+                <th style={s.th}>Ultimo acceso</th>
+                <th style={s.th}>Acciones</th>
+              </tr>
+            </thead>
+            <tbody>
+              {usuarios.map(u => (
+                <tr key={u.id}>
+                  <td style={s.tdBold}>{u.nombre}</td>
+                  <td style={s.td}>{u.correo}</td>
+                  <td style={s.td}><span style={s.badge(u.rol === 'Directivo' ? 'blue' : 'green')}>{u.rol}</span></td>
+                  <td style={s.td}><span style={s.badge(u.estado === 'Activo' ? 'green' : 'gray')}>{u.estado}</span></td>
+                  <td style={s.td}>{u.ultimoAcceso}</td>
+                  <td style={s.td}>
+                    <div style={s.actionsCell}>
+                      <button style={s.btnIcon()}><Edit size={16} /></button>
+                      <button style={s.btnIcon(true)} onClick={() => removeUsuario(u.id)}><Trash2 size={16} /></button>
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      {showUsuarioModal && (
+        <div style={s.modalOverlay} onClick={() => setShowUsuarioModal(false)}>
+          <div style={s.modal} onClick={e => e.stopPropagation()}>
+            <h3 style={s.modalTitle}>Nuevo Usuario</h3>
+            <div style={s.field}>
+              <label style={s.label}>Nombre completo</label>
+              <input style={s.input} value={nuevoUsuario.nombre} onChange={e => setNuevoUsuario({ ...nuevoUsuario, nombre: e.target.value })} onFocus={handleInputFocus} onBlur={handleInputBlur} />
+            </div>
+            <div style={s.field}>
+              <label style={s.label}>Correo electronico</label>
+              <input type="email" style={s.input} value={nuevoUsuario.correo} onChange={e => setNuevoUsuario({ ...nuevoUsuario, correo: e.target.value })} onFocus={handleInputFocus} onBlur={handleInputBlur} />
+            </div>
+            <div style={s.field}>
+              <label style={s.label}>Rol</label>
+              <select style={s.select} value={nuevoUsuario.rol} onChange={e => setNuevoUsuario({ ...nuevoUsuario, rol: e.target.value })} onFocus={handleInputFocus} onBlur={handleInputBlur}>
+                <option value="Directivo">Directivo</option>
+                <option value="Prefectura">Prefectura</option>
+              </select>
+            </div>
+            <div style={s.field}>
+              <label style={s.label}>Contrasena</label>
+              <div style={s.passwordRow}>
+                <input
+                  type={showPassword ? 'text' : 'password'}
+                  style={{ ...s.input, flex: 1 }}
+                  value={autoGenerate ? '' : nuevoUsuario.contrasena}
+                  placeholder={autoGenerate ? generarContrasena() : ''}
+                  disabled={autoGenerate}
+                  onChange={e => setNuevoUsuario({ ...nuevoUsuario, contrasena: e.target.value })}
+                  onFocus={handleInputFocus}
+                  onBlur={handleInputBlur}
+                />
+                <button style={s.btnIcon()} onClick={() => setShowPassword(!showPassword)}>
+                  {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+                </button>
+                <button
+                  style={s.btnIcon()}
+                  onClick={() => {
+                    setNuevoUsuario({ ...nuevoUsuario, contrasena: generarContrasena() });
+                    setAutoGenerate(false);
+                  }}
+                >
+                  <Copy size={16} />
+                </button>
+              </div>
+              <label style={s.checkboxLabel}>
+                <input type="checkbox" checked={autoGenerate} onChange={e => setAutoGenerate(e.target.checked)} />
+                Contrasena auto-generada
+              </label>
+            </div>
+            <label style={s.checkboxLabel}>
+              <input type="checkbox" checked={nuevoUsuario.enviarCorreo} onChange={e => setNuevoUsuario({ ...nuevoUsuario, enviarCorreo: e.target.checked })} />
+              Enviar credenciales por correo
+            </label>
+            <div style={s.modalActions}>
+              <button style={s.btnSecondary} onClick={() => setShowUsuarioModal(false)}>Cancelar</button>
+              <button style={s.btnPrimary} onClick={addUsuario}><Save size={16} /> Crear usuario</button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+
+  const renderNotificacionesTab = () => (
+    <div style={s.tabContent}>
+      <div style={s.section}>
+        <h3 style={s.sectionTitle}>Canales de Notificacion</h3>
+        {renderToggle(notifEmail, setNotifEmail, 'Correo electronico')}
+        {renderToggle(notifSMS, setNotifSMS, 'SMS')}
+        {renderToggle(notifWhatsApp, setNotifWhatsApp, 'WhatsApp')}
+      </div>
+
+      {notifEmail && (
+        <div style={s.section}>
+          <h3 style={s.sectionTitle}>Configuracion SMTP</h3>
+          <div style={s.grid2}>
+            <div style={s.field}>
+              <label style={s.label}>Servidor SMTP</label>
+              <input style={s.input} value={smtp.servidor} onChange={e => setSmtp({ ...smtp, servidor: e.target.value })} onFocus={handleInputFocus} onBlur={handleInputBlur} />
+            </div>
+            <div style={s.field}>
+              <label style={s.label}>Puerto</label>
+              <input style={s.input} value={smtp.puerto} onChange={e => setSmtp({ ...smtp, puerto: e.target.value })} onFocus={handleInputFocus} onBlur={handleInputBlur} />
+            </div>
+            <div style={s.field}>
+              <label style={s.label}>Usuario</label>
+              <input style={s.input} value={smtp.usuario} onChange={e => setSmtp({ ...smtp, usuario: e.target.value })} placeholder="usuario@gmail.com" onFocus={handleInputFocus} onBlur={handleInputBlur} />
+            </div>
+            <div style={s.field}>
+              <label style={s.label}>Contrasena</label>
+              <input type="password" style={s.input} value={smtp.contrasena} onChange={e => setSmtp({ ...smtp, contrasena: e.target.value })} onFocus={handleInputFocus} onBlur={handleInputBlur} />
+            </div>
+          </div>
+          <div style={s.field}>
+            <label style={s.label}>Direccion remitente</label>
+            <input style={s.input} value={smtp.remitente} onChange={e => setSmtp({ ...smtp, remitente: e.target.value })} placeholder="Plantel 27 <notificaciones@plantel27.edu.mx>" onFocus={handleInputFocus} onBlur={handleInputBlur} />
+          </div>
+        </div>
+      )}
+
+      {notifSMS && (
+        <div style={s.section}>
+          <h3 style={s.sectionTitle}>Configuracion SMS API</h3>
+          <div style={s.grid2}>
+            <div style={s.field}>
+              <label style={s.label}>Proveedor</label>
+              <input style={s.input} value={smsApi.proveedor} onChange={e => setSmsApi({ ...smsApi, proveedor: e.target.value })} placeholder="Twilio / Vonage / etc." onFocus={handleInputFocus} onBlur={handleInputBlur} />
+            </div>
+            <div style={s.field}>
+              <label style={s.label}>API Token</label>
+              <input type="password" style={s.input} value={smsApi.apiToken} onChange={e => setSmsApi({ ...smsApi, apiToken: e.target.value })} onFocus={handleInputFocus} onBlur={handleInputBlur} />
+            </div>
+          </div>
+          <div style={s.field}>
+            <label style={s.label}>Numero remitente</label>
+            <input style={s.input} value={smsApi.remitente} onChange={e => setSmsApi({ ...smsApi, remitente: e.target.value })} placeholder="+52 123 456 7890" onFocus={handleInputFocus} onBlur={handleInputBlur} />
+          </div>
+        </div>
+      )}
+
+      {notifWhatsApp && (
+        <div style={s.section}>
+          <h3 style={s.sectionTitle}>Configuracion WhatsApp Business API</h3>
+          <div style={s.grid2}>
+            <div style={s.field}>
+              <label style={s.label}>Phone Number ID</label>
+              <input style={s.input} value={whatsappApi.phoneNumberId} onChange={e => setWhatsappApi({ ...whatsappApi, phoneNumberId: e.target.value })} onFocus={handleInputFocus} onBlur={handleInputBlur} />
+            </div>
+            <div style={s.field}>
+              <label style={s.label}>Business Account ID</label>
+              <input style={s.input} value={whatsappApi.businessAccountId} onChange={e => setWhatsappApi({ ...whatsappApi, businessAccountId: e.target.value })} onFocus={handleInputFocus} onBlur={handleInputBlur} />
+            </div>
+          </div>
+          <div style={s.field}>
+            <label style={s.label}>Access Token</label>
+            <input type="password" style={s.input} value={whatsappApi.accessToken} onChange={e => setWhatsappApi({ ...whatsappApi, accessToken: e.target.value })} onFocus={handleInputFocus} onBlur={handleInputBlur} />
+          </div>
+        </div>
+      )}
+
+      <div style={s.section}>
+        <h3 style={s.sectionTitle}>Plantillas de Mensajes</h3>
+        <div style={s.plantillasList}>
+          {plantillas.map(p => (
+            <div key={p.id} style={s.plantillaCard}>
+              <div style={s.plantillaHeader}>
+                <span style={s.plantillaName}>{p.nombre}</span>
+                <button style={s.btnIcon()} onClick={() => setEditingPlantilla(editingPlantilla === p.id ? null : p.id)}>
+                  <Edit size={16} />
+                </button>
+              </div>
+              {editingPlantilla === p.id && (
+                <div style={s.plantillaEditor}>
+                  <div style={s.field}>
+                    <label style={s.label}>Asunto</label>
+                    <input style={s.input} value={p.asunto} onChange={e => setPlantillas(plantillas.map(x => x.id === p.id ? { ...x, asunto: e.target.value } : x))} onFocus={handleInputFocus} onBlur={handleInputBlur} />
+                  </div>
+                  <div style={s.field}>
+                    <label style={s.label}>Cuerpo del mensaje</label>
+                    <textarea style={s.textarea} rows={3} value={p.cuerpo} onChange={e => setPlantillas(plantillas.map(x => x.id === p.id ? { ...x, cuerpo: e.target.value } : x))} onFocus={handleInputFocus} onBlur={handleInputBlur} />
+                  </div>
+                  <div style={s.variables}>
+                    <span style={s.variablesLabel}>Variables disponibles: </span>
+                    {p.variables.map(v => (
+                      <code key={v} style={s.variableTag}>{v}</code>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+      </div>
+
+      <div style={s.actions}>
+        <button style={s.btnPrimary}><Save size={16} /> Guardar cambios</button>
+      </div>
+    </div>
+  );
+
+  const saveCredLayout = () => {
+    localStorage.setItem('credentialLayout', JSON.stringify(credLayout));
+  };
+
+  const resetCredLayout = () => {
+    setCredLayout({ ...DEFAULT_CREDENTIAL_LAYOUT });
+    localStorage.removeItem('credentialLayout');
+  };
+
+  const updateCredField = (key: keyof CredentialLayout, field: 'y' | 'size', value: number) => {
+    setCredLayout(prev => ({
+      ...prev,
+      [key]: { ...prev[key], [field]: value },
+    }));
+  };
+
+  const renderCredencialTab = () => {
+    const MM = 2.835;
+    const BLOCK_HEIGHT = 182.1;
+    const PREVIEW_SCALE = 0.62;
+    const previewH = BLOCK_HEIGHT / PREVIEW_SCALE;
+    const toPreview = (yPt: number) => yPt / PREVIEW_SCALE;
+
+    const sampleTexts: Record<string, string> = {
+      nombre: 'NOMBRE: JUAN PEREZ LOPEZ',
+      plantel: 'PLANTEL 27 MIAHUATLAN',
+      no_control: 'NO. DE CONTROL: 20240012',
+      domicilio1: 'DOMICILIO: C. PRINCIPAL #123',
+      domicilio2: 'COL. CENTRO',
+      domicilio3: 'C.P. 75920',
+      curp: 'CURP: MAJP050310HTCPPR09',
+      tipo_sangre: 'TIPO DE SANGRE: O+',
+      afiliacion: 'NUMERO DE AFILIACION: 987654',
+      tutor: 'TUTOR: MARIA LOPEZ GARCIA',
+      tel_tutor: 'TELEFONO TUTOR: 2731234567',
+      firma: 'LIC. FABIAN OCAMPO GODINEZ',
+    };
+
+    const groups: { title: string; color: string; accent: string; keys: (keyof CredentialLayout)[] }[] = [
+      { title: 'Izquierda', color: '#DBEAFE', accent: '#2563EB', keys: ['nombre', 'plantel', 'no_control'] },
+      { title: 'Derecha', color: '#DCFCE7', accent: '#16A34A', keys: ['domicilio1', 'domicilio2', 'domicilio3', 'curp', 'tipo_sangre', 'afiliacion', 'tutor', 'tel_tutor'] },
+      { title: 'Firma', color: '#FEE2E2', accent: '#DC2626', keys: ['firma'] },
+    ];
+
+    const allSorted = groups.flatMap(g => g.keys).sort((a, b) => credLayout[a].y - credLayout[b].y);
+
+    return (
+      <div style={s.tabContent}>
+        <div style={s.section}>
+          <div style={s.sectionHeader}>
+            <h3 style={s.sectionTitle}>Diseno de la Credencial</h3>
+            <div style={{ display: 'flex', gap: 8 }}>
+              <button style={s.btnSecondary} onClick={resetCredLayout}><RefreshCw size={16} /> Restaurar</button>
+              <button style={s.btnPrimary} onClick={saveCredLayout}><Save size={16} /> Guardar</button>
+            </div>
+          </div>
+
+          <div style={{ display: 'flex', gap: 24, alignItems: 'stretch' }}>
+
+            <div style={{ flex: '1 1 55%', minWidth: 0 }}>
+              <div style={{
+                background: '#fff', border: `1px solid ${colors.border}`, borderRadius: 10,
+                padding: 16, boxShadow: '0 1px 8px rgba(0,0,0,0.06)',
+              }}>
+                <div style={{ fontSize: 11, fontWeight: 700, color: colors.textMuted, marginBottom: 10, textTransform: 'uppercase', letterSpacing: '0.1em' }}>
+                  Vista Previa
+                </div>
+
+                <div style={{
+                  position: 'relative', width: '100%', height: previewH,
+                  background: '#fff', border: `1px solid ${colors.border}`, borderRadius: 6,
+                  overflow: 'hidden', boxShadow: 'inset 0 1px 3px rgba(0,0,0,0.04)',
+                }}>
+                  {/* Linea central divisoria */}
+                  <div style={{ position: 'absolute', left: '49.5%', top: 0, bottom: 0, width: 1, background: `${colors.border}88`, borderLeft: '1px dashed #ccc' }} />
+
+                  {/* Label columnas */}
+                  <div style={{ position: 'absolute', top: 3, left: 4, fontSize: 8, fontWeight: 700, color: '#93C5FD', textTransform: 'uppercase', letterSpacing: '0.1em' }}>IZQ</div>
+                  <div style={{ position: 'absolute', top: 3, right: 4, fontSize: 8, fontWeight: 700, color: '#86EFAC', textTransform: 'uppercase', letterSpacing: '0.1em' }}>DER</div>
+
+                  {/* Todos los campos */}
+                  {allSorted.map(key => {
+                    const campo = credLayout[key];
+                    const top = toPreview(campo.y);
+                    const isLeft = campo.x === 'izq';
+                    const isFirma = campo.x === 'firma';
+                    const group = groups.find(g => g.keys.includes(key))!;
+                    const text = sampleTexts[key] ?? key;
+
+                    const leftPos = isFirma ? '52%' : isLeft ? 6 : '50.5%';
+                    const rightPos = isFirma ? 6 : isLeft ? '50.5%' : 6;
+
+                    return (
+                      <div key={key} style={{
+                        position: 'absolute', top, left: leftPos, right: rightPos,
+                      }}>
+                        <div style={{
+                          background: group.color, border: `1px solid ${group.accent}30`,
+                          borderRadius: 3, padding: '1px 5px',
+                          fontSize: Math.max(campo.size * 0.7, 8),
+                          color: group.accent, fontWeight: 600, lineHeight: 1.5,
+                          whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
+                          position: 'relative',
+                        }}>
+                          {text}
+                          {/* Indicador de tamano de fuente */}
+                          <span style={{
+                            position: 'absolute', top: -1, right: 2,
+                            fontSize: 7, fontWeight: 700, color: `${group.accent}99`,
+                            background: `${group.accent}12`, borderRadius: 2, padding: '0 2px',
+                          }}>{campo.size}</span>
+                        </div>
+                      </div>
+                    );
+                  })}
+
+                  {/* Regla vertical con marcas de mm */}
+                  <div style={{ position: 'absolute', top: 0, left: 0, bottom: 0, width: 14, background: '#f8f8f8', borderRight: `1px solid ${colors.border}` }}>
+                    {Array.from({ length: 20 }, (_, i) => {
+                      const yPt = i * (BLOCK_HEIGHT / 19);
+                      const yPx = toPreview(yPt);
+                      return (
+                        <div key={i} style={{ position: 'absolute', top: yPx, left: 0, display: 'flex', alignItems: 'center' }}>
+                          <div style={{ width: i % 5 === 0 ? 8 : 4, height: 1, background: '#bbb' }} />
+                          {i % 5 === 0 && (
+                            <span style={{ fontSize: 7, color: '#999', marginLeft: 1, lineHeight: 1 }}>{(yPt / MM).toFixed(0)}</span>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                {/* Leyenda */}
+                <div style={{ display: 'flex', gap: 16, marginTop: 10, justifyContent: 'center' }}>
+                  {groups.map(g => (
+                    <div key={g.title} style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 11, color: colors.textSecondary }}>
+                      <div style={{ width: 12, height: 8, borderRadius: 2, background: g.color, border: `1px solid ${g.accent}40` }} />
+                      {g.title}
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Dimensiones */}
+              <div style={{ marginTop: 12, display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+                {[
+                  { l: 'Bloque', v: '182 pt' },
+                  { l: 'Pagina', v: '4 cred.' },
+                  { l: 'Margen sup.', v: '23 pt' },
+                  { l: 'Ancho nombre', v: '56 mm' },
+                ].map(d => (
+                  <div key={d.l} style={{ flex: '1 1 100px', padding: '6px 10px', background: colors.bg, borderRadius: 6, textAlign: 'center' }}>
+                    <div style={{ fontSize: 10, color: colors.textMuted }}>{d.l}</div>
+                    <div style={{ fontSize: 12, fontWeight: 700, color: colors.textPrimary }}>{d.v}</div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <div style={{ flex: '1 1 45%', minWidth: 0 }}>
+              <div style={{
+                background: colors.white, border: `1px solid ${colors.border}`, borderRadius: 10,
+                padding: 14, maxHeight: previewH + 160, overflowY: 'auto',
+              }}>
+
+                {groups.map(group => (
+                  <div key={group.title} style={{ marginBottom: 14 }}>
+                    <div style={{
+                      display: 'flex', alignItems: 'center', gap: 6, marginBottom: 6,
+                      paddingBottom: 4, borderBottom: `2px solid ${group.accent}30`,
+                    }}>
+                      <div style={{ width: 10, height: 10, borderRadius: 3, background: group.accent }} />
+                      <span style={{ fontSize: 12, fontWeight: 700, color: colors.textPrimary }}>
+                        {group.title}
+                      </span>
+                      <span style={{ fontSize: 10, color: colors.textMuted, marginLeft: 'auto' }}>
+                        {group.keys.length} campos
+                      </span>
+                    </div>
+
+                    {group.keys.map(key => {
+                      const campo = credLayout[key];
+                      const yMm = (campo.y / MM).toFixed(1);
+                      return (
+                        <div key={key} style={{
+                          display: 'flex', alignItems: 'center', gap: 6,
+                          padding: '5px 0', borderBottom: `1px solid ${colors.border}40`,
+                        }}>
+                          <div style={{
+                            width: 72, flexShrink: 0,
+                            fontSize: 11, fontWeight: 600, color: colors.textPrimary,
+                            whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
+                          }}>
+                            {key === 'no_control' ? 'No. Ctrl' :
+                             key === 'tipo_sangre' ? 'Sangre' :
+                             key === 'afiliacion' ? 'Afiliacion' :
+                             key === 'tel_tutor' ? 'Tel.Tutor' :
+                             key.charAt(0).toUpperCase() + key.slice(1).replace('_', '.')}
+                          </div>
+
+                          <input
+                            type="range"
+                            min={0}
+                            max={BLOCK_HEIGHT}
+                            step={0.5}
+                            value={campo.y}
+                            onChange={e => updateCredField(key, 'y', Number(e.target.value))}
+                            style={{
+                              flex: 1, height: 4, borderRadius: 2, outline: 'none', cursor: 'pointer',
+                              accentColor: group.accent,
+                            }}
+                          />
+
+                          {/* Valor Y mm */}
+                          <div style={{
+                            width: 36, textAlign: 'right', fontSize: 10,
+                            color: colors.textMuted, fontVariantNumeric: 'tabular-nums',
+                          }}>
+                            {yMm}
+                          </div>
+
+                          {/* Tamano de fuente */}
+                          <input
+                            type="number"
+                            min={5}
+                            max={14}
+                            step={0.5}
+                            value={campo.size}
+                            onChange={e => updateCredField(key, 'size', Number(e.target.value))}
+                            style={{
+                              width: 36, padding: '1px 3px', borderRadius: 3,
+                              border: `1px solid ${colors.border}`, fontSize: 10, textAlign: 'center',
+                              background: colors.bg, color: colors.textPrimary, flexShrink: 0,
+                            }}
+                          />
+                        </div>
+                      );
+                    })}
+                  </div>
+                ))}
+
+                <div style={{ marginTop: 8, padding: '6px 10px', background: colors.bg, borderRadius: 6, fontSize: 10, color: colors.textMuted, lineHeight: 1.5 }}>
+                  Arrastra las barras para mover los campos verticalmente.
+                  El numero a la derecha es el tamano de fuente (pt).
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  };
+
+  const renderRespaldoTab = () => (
+    <div style={s.tabContent}>
+      <div style={s.section}>
+        <h3 style={s.sectionTitle}>Configuracion de Respaldo</h3>
+        <div style={s.grid2}>
+          <div style={s.field}>
+            <label style={s.label}>Frecuencia</label>
+            <select style={s.select} value={frecuencia} onChange={e => setFrecuencia(e.target.value)} onFocus={handleInputFocus} onBlur={handleInputBlur}>
+              <option value="Hora">Cada hora</option>
+              <option value="Diario">Diario</option>
+              <option value="Semanal">Semanal</option>
+              <option value="Mensual">Mensual</option>
+            </select>
+          </div>
+          <div style={s.field}>
+            <label style={s.label}>Retention de respaldos (dias)</label>
+            <input type="number" style={s.input} value={retencion} onChange={e => setRetencion(Number(e.target.value))} min={1} max={365} onFocus={handleInputFocus} onBlur={handleInputBlur} />
+          </div>
+        </div>
+        <div style={s.field}>
+          <label style={s.label}>Ubicacion de almacenamiento</label>
+          <div style={s.radioGroup}>
+            <label style={ubicacion === 'Local' ? s.radioActive : s.radio}>
+              <input type="radio" name="ubicacion" value="Local" checked={ubicacion === 'Local'} onChange={e => setUbicacion(e.target.value)} style={{ accentColor: colors.primary }} />
+              Local (Dispositivo)
+            </label>
+            <label style={ubicacion === 'Nube' ? s.radioActive : s.radio}>
+              <input type="radio" name="ubicacion" value="Nube" checked={ubicacion === 'Nube'} onChange={e => setUbicacion(e.target.value)} style={{ accentColor: colors.primary }} />
+              Nube (Almacenamiento remoto)
+            </label>
+          </div>
+        </div>
+        <button style={s.btnPrimary}><RefreshCw size={16} /> Generar respaldo manual</button>
+      </div>
+
+      <div style={s.section}>
+        <h3 style={s.sectionTitle}>Respaldos Recientes</h3>
+        <div style={s.tableWrapper}>
+          <table style={s.table}>
+            <thead>
+              <tr>
+                <th style={s.th}>Fecha</th>
+                <th style={s.th}>Tamano</th>
+                <th style={s.th}>Tipo</th>
+                <th style={s.th}>Estado</th>
+                <th style={s.th}>Acciones</th>
+              </tr>
+            </thead>
+            <tbody>
+              {respaldos.map(r => (
+                <tr key={r.id}>
+                  <td style={s.td}>{r.fecha}</td>
+                  <td style={s.td}>{r.tamano}</td>
+                  <td style={s.td}><span style={s.badge(r.tipo === 'Manual' ? 'blue' : 'green')}>{r.tipo}</span></td>
+                  <td style={s.td}><span style={s.badge('green')}>{r.estado}</span></td>
+                  <td style={s.td}>
+                    <div style={s.actionsCell}>
+                      <button style={s.btnIcon()}><Download size={16} /></button>
+                      <button style={s.btnIcon(true)}><Trash2 size={16} /></button>
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  );
+
+  const renderTab = () => {
+    switch (activeTab) {
+      case 'general': return renderGeneralTab();
+      case 'horarios': return renderHorariosTab();
+      case 'usuarios': return renderUsuariosTab();
+      case 'credencial': return renderCredencialTab();
+      case 'notificaciones': return renderNotificacionesTab();
+      case 'respaldo': return renderRespaldoTab();
+    }
+  };
+
+  return (
+    <div style={s.page}>
+      <div style={s.tabs}>
+        {TABS.map(tab => (
+          <button
+            key={tab.id}
+            style={s.tab(activeTab === tab.id)}
+            onClick={() => setActiveTab(tab.id)}
+          >
+            <tab.icon size={18} />
+            {tab.label}
+          </button>
+        ))}
+      </div>
+
+      <div style={s.content}>
+        {renderTab()}
+      </div>
+    </div>
+  );
+}
