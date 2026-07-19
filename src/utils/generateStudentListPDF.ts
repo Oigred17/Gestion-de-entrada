@@ -8,12 +8,12 @@ import type { Alumno } from '../data/mockData';
  */
 
 interface GenerateListOptions {
-  alumnos: Alumno[];
+  students: Alumno[];
   groupName: string;
 }
 
 export function generateStudentListPDF(options: GenerateListOptions) {
-  const { alumnos, groupName } = options;
+  const { students: alumnos, groupName } = options;
   const doc = new jsPDF({ orientation: 'portrait', unit: 'pt', format: 'letter' });
 
   const pageW = doc.internal.pageSize.getWidth();

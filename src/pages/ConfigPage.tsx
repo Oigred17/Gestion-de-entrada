@@ -241,7 +241,7 @@ export default function ConfigPage() {
     content: { display: 'flex', flexDirection: 'column' as const, gap: '20px' } as React.CSSProperties,
     tabContent: { display: 'flex', flexDirection: 'column' as const, gap: '20px' } as React.CSSProperties,
     section: { background: colors.white, borderRadius: '12px', padding: '24px', border: `1px solid ${colors.border}` } as React.CSSProperties,
-    sectionTitle: { fontSize: '16px', fontWeight: 600, color: colors.textPrimary, margin: '0 0 16px 0' } as React.CSSProperties,
+    sectionTitle: { fontSize: '16px', fontWeight: 600, color: colors.textPrimary, marginTop: 0, marginRight: 0, marginBottom: '16px', marginLeft: 0 } as React.CSSProperties,
     sectionHeader: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' } as React.CSSProperties,
     grid2: { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' } as React.CSSProperties,
     field: { display: 'flex', flexDirection: 'column' as const, gap: '6px', marginBottom: '16px' } as React.CSSProperties,

@@ -120,13 +120,13 @@ function drawBlock(doc: jsPDF, data: Record<string, string>, topBlock: number, l
 }
 
 export interface GeneratePDFOptions {
-  alumnos: Alumno[];
+  students: Alumno[];
   groupName: string;
   reposicion?: boolean;
 }
 
 export function generateCredentialsPDF(options: GeneratePDFOptions) {
-  const { alumnos, groupName, reposicion = false } = options;
+  const { students: alumnos, groupName, reposicion = false } = options;
   const doc = new jsPDF({ orientation: 'portrait', unit: 'pt', format: 'letter' });
   const layout = getCredentialLayout();
 

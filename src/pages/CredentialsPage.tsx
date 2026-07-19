@@ -175,14 +175,14 @@ export default function CredentialsPage() {
     }
 
     if (confirm.action === 'activar' && confirm.credId) {
-      setCreds(prev => prev.map(c => c.id === confirm.credId ? { ...c, activa: true } : c));
+      setCreds(prev => prev.map(c => c.idCredencial === confirm.credId ? { ...c, activa: true } : c));
       showToast('Credencial activada correctamente');
     } else if (confirm.action === 'desactivar' && confirm.credId) {
-      setCreds(prev => prev.map(c => c.id === confirm.credId ? { ...c, activa: false } : c));
+      setCreds(prev => prev.map(c => c.idCredencial === confirm.credId ? { ...c, activa: false } : c));
       showToast('Credencial desactivada');
     } else if (confirm.action === 'reasignar' && confirm.credId) {
       const newChip = generateChipId();
-      setCreds(prev => prev.map(c => c.id === confirm.credId ? { ...c, uidNfc: newChip, activa: true } : c));
+      setCreds(prev => prev.map(c => c.idCredencial === confirm.credId ? { ...c, uidNfc: newChip, activa: true } : c));
       showToast(`Credencial reasignada. Nuevo chip: ${newChip}`);
     } else if (confirm.action === 'escanear') {
       const scannedChip = generateChipId();
@@ -407,7 +407,7 @@ export default function CredentialsPage() {
           </thead>
           <tbody>
             {filtered.map((cred, index) => (
-              <tr key={cred.id}>
+              <tr key={cred.idCredencial}>
                 <td>{index + 1}</td>
                 <td style={{ fontWeight: 500 }}>{getStudentName(cred.idAlumno)}</td>
                 <td style={{ fontFamily: 'var(--font-mono)' }}>{getStudentControl(cred.idAlumno)}</td>
@@ -416,13 +416,13 @@ export default function CredentialsPage() {
                 <td><span className={estadoBadgeClass[cred.activa ? 'Activa' : 'Inactiva']}>{cred.activa ? 'Activa' : 'Inactiva'}</span></td>
                 <td>
                   <div style={{ display: 'flex', gap: 4 }}>
-                    <button className="table-action" title="Ver detalle" onClick={() => handleView(cred.id)}><Eye size={18} /></button>
+                    <button className="table-action" title="Ver detalle" onClick={() => handleView(cred.idCredencial)}><Eye size={18} /></button>
                     {cred.activa ? (
-                      <button className="table-action" title="Desactivar" onClick={() => handleDeactivate(cred.id)}><Trash2 size={18} /></button>
+                      <button className="table-action" title="Desactivar" onClick={() => handleDeactivate(cred.idCredencial)}><Trash2 size={18} /></button>
                     ) : (
-                      <button className="table-action" title="Activar" style={{ color: '#0F8122' }} onClick={() => handleActivate(cred.id)}><RefreshCw size={18} /></button>
+                      <button className="table-action" title="Activar" style={{ color: '#0F8122' }} onClick={() => handleActivate(cred.idCredencial)}><RefreshCw size={18} /></button>
                     )}
-                    <button className="table-action" title="Reasignar chip" onClick={() => handleReassign(cred.id)}><RefreshCw size={18} /></button>
+                    <button className="table-action" title="Reasignar chip" onClick={() => handleReassign(cred.idCredencial)}><RefreshCw size={18} /></button>
                   </div>
                 </td>
               </tr>
@@ -726,9 +726,9 @@ export default function CredentialsPage() {
                 <button
                   className="btn btn--primary"
                   onClick={() => {
-                    const newId = Math.max(0, ...creds.map(c => c.id)) + 1;
+                    const newId = Math.max(0, ...creds.map(c => c.idCredencial)) + 1;
                     setCreds(prev => [...prev, {
-                      id: newId,
+                      idCredencial: newId,
                       idAlumno: selectedStudentId!,
                       uidNfc: chipId,
                       fechaEmision: new Date().toISOString().split('T')[0],
@@ -745,10 +745,10 @@ export default function CredentialsPage() {
                 <button
                   className="btn btn--primary"
                   onClick={() => {
-                    const baseId = Math.max(0, ...creds.map(c => c.id)) + 1;
+                    const baseId = Math.max(0, ...creds.map(c => c.idCredencial)) + 1;
                     batchResults.forEach((result, i) => {
                       setCreds(prev => [...prev, {
-                        id: baseId + i,
+                        idCredencial: baseId + i,
                         idAlumno: result.studentId,
                         uidNfc: result.uidNfc,
                         fechaEmision: new Date().toISOString().split('T')[0],
@@ -957,7 +957,7 @@ export default function CredentialsPage() {
 
       {/* ========== PANEL LATERAL DETALLE CREDENCIAL ========== */}
       {selectedCredentialId !== null && (() => {
-        const cred = creds.find(c => c.id === selectedCredentialId);
+        const cred = creds.find(c => c.idCredencial === selectedCredentialId);
         if (!cred) return null;
         const student = getStudent(cred.idAlumno);
         if (!student) return null;
@@ -980,7 +980,7 @@ export default function CredentialsPage() {
         };
 
         const handleConfirmReassign = () => {
-          setCreds(prev => prev.map(c => c.id === cred.id ? { ...c, uidNfc: newChipId, activa: true } : c));
+          setCreds(prev => prev.map(c => c.idCredencial === cred.idCredencial ? { ...c, uidNfc: newChipId, activa: true } : c));
           showToast(`Chip reasignado correctamente. Nuevo ID: ${newChipId}`);
           closePanel();
         };
