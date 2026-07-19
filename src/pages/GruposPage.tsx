@@ -2,36 +2,37 @@ import { useState } from 'react';
 import {
   Search, Users, Building2, Calendar, BookOpen, ChevronDown,
 } from 'lucide-react';
-import { students, recentRecords, credentials } from '../data/mockData';
+import { alumnos, registrosAcceso, credenciales, getAlumnoByCredencialId } from '../data/mockData';
 
 export default function GruposPage() {
   const [search, setSearch] = useState('');
   const [expandedGroup, setExpandedGroup] = useState<string | null>(null);
 
-  const grupos = Array.from(new Set(students.map(s => s.grupo)))
+  const grupos = Array.from(new Set(alumnos.map(s => s.grupo)))
     .sort()
     .map(grupo => {
-      const groupStudents = students.filter(s => s.grupo === grupo);
+      const groupStudents = alumnos.filter(s => s.grupo === grupo);
       const capacitacion = groupStudents[0]?.capacitacion ?? '';
       const cohorte = groupStudents[0]?.cohorte ?? '';
       const turno = groupStudents[0]?.turno ?? '';
-      const activos = groupStudents.filter(s => s.estado === 'Activo').length;
-      const credenciales = credentials.filter(c =>
-        groupStudents.some(s => s.id === c.alumnoId)
+      const activos = groupStudents.filter(s => s.activo).length;
+      const groupCreds = credenciales.filter(c =>
+        groupStudents.some(s => s.idAlumno === c.idAlumno)
       );
-      const activas = credenciales.filter(c => c.estado === 'Activa').length;
-      const records = recentRecords.filter(r =>
-        groupStudents.some(s => s.id === r.alumno.id)
-      );
-      const entradas = records.filter(r => r.tipo === 'entrada').length;
+      const activas = groupCreds.filter(c => c.activa).length;
+      const records = registrosAcceso.filter(r => {
+        const alumno = getAlumnoByCredencialId(r.idCredencial);
+        return alumno && groupStudents.some(s => s.idAlumno === alumno.idAlumno);
+      });
+      const entradas = records.filter(r => r.tipoEvento === 'ENTRADA').length;
       return {
         grupo, capacitacion, cohorte, turno,
         total: groupStudents.length,
         activos,
         inactivos: groupStudents.length - activos,
-        credencialesTotal: credenciales.length,
+        credencialesTotal: groupCreds.length,
         credencialesActivas: activas,
-        students: groupStudents,
+        alumnos: groupStudents,
         registros: records.length,
         entradas,
       };
@@ -57,9 +58,9 @@ export default function GruposPage() {
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 16 }}>
         {[
           { label: 'Total grupos', value: grupos.length, color: '#EB2466', bg: '#FEEBEE', icon: Building2 },
-          { label: 'Total alumnos', value: students.length, color: '#0F8122', bg: '#E8F5E9', icon: Users },
-          { label: 'Credenciales activas', value: credentials.filter(c => c.estado === 'Activa').length, color: '#1792AB', bg: '#DCF5FF', icon: BookOpen },
-          { label: 'Registros hoy', value: recentRecords.length, color: '#5F5657', bg: '#F0EFEF', icon: Calendar },
+          { label: 'Total alumnos', value: alumnos.length, color: '#0F8122', bg: '#E8F5E9', icon: Users },
+          { label: 'Credenciales activas', value: credenciales.filter(c => c.activa).length, color: '#1792AB', bg: '#DCF5FF', icon: BookOpen },
+          { label: 'Registros hoy', value: registrosAcceso.length, color: '#5F5657', bg: '#F0EFEF', icon: Calendar },
         ].map(stat => (
           <div key={stat.label} style={{
             background: '#fff', borderRadius: 12, padding: 20,
@@ -165,46 +166,46 @@ export default function GruposPage() {
                       <thead>
                         <tr style={{ background: '#F0EFEF' }}>
                           <th style={{ textAlign: 'left', padding: '10px 20px', fontSize: 12, fontWeight: 600, color: '#5F5657' }}>Alumno</th>
-                          <th style={{ textAlign: 'left', padding: '10px 16px', fontSize: 12, fontWeight: 600, color: '#5F5657' }}>No. Control</th>
+                          <th style={{ textAlign: 'left', padding: '10px 16px', fontSize: 12, fontWeight: 600, color: '#5F5657' }}>Matricula</th>
                           <th style={{ textAlign: 'left', padding: '10px 16px', fontSize: 12, fontWeight: 600, color: '#5F5657' }}>Estado</th>
                           <th style={{ textAlign: 'left', padding: '10px 16px', fontSize: 12, fontWeight: 600, color: '#5F5657' }}>Credencial</th>
                           <th style={{ textAlign: 'left', padding: '10px 16px', fontSize: 12, fontWeight: 600, color: '#5F5657' }}>Turno</th>
                         </tr>
                       </thead>
                       <tbody>
-                        {g.students.map((s, idx) => {
-                          const cred = credentials.find(c => c.alumnoId === s.id);
+                        {g.alumnos.map((s, idx) => {
+                          const cred = credenciales.find(c => c.idAlumno === s.idAlumno);
                           return (
                             <tr
-                              key={s.id}
+                              key={s.idAlumno}
                               style={{
                                 borderBottom: '1px solid #F0EFEF',
                                 background: idx % 2 === 0 ? '#fff' : '#FAFAFA',
                               }}
                             >
                               <td style={{ padding: '12px 20px', fontSize: 14, fontWeight: 600, color: '#1C1819' }}>
-                                {s.nombre}
+                                {s.nombreCompleto}
                               </td>
                               <td style={{ padding: '12px 16px', fontSize: 13, fontFamily: 'var(--font-mono)', color: '#5F5657' }}>
-                                {s.numControl}
+                                {s.matricula}
                               </td>
                               <td style={{ padding: '12px 16px' }}>
                                 <span style={{
                                   padding: '3px 10px', borderRadius: 12, fontSize: 12, fontWeight: 600,
-                                  background: s.estado === 'Activo' ? '#E8F5E9' : '#FEEBEE',
-                                  color: s.estado === 'Activo' ? '#0F8122' : '#EB2466',
+                                  background: s.activo ? '#E8F5E9' : '#FEEBEE',
+                                  color: s.activo ? '#0F8122' : '#EB2466',
                                 }}>
-                                  {s.estado}
+                                  {s.activo ? 'Activo' : 'Inactivo'}
                                 </span>
                               </td>
                               <td style={{ padding: '12px 16px' }}>
                                 {cred ? (
                                   <span style={{
                                     padding: '3px 10px', borderRadius: 12, fontSize: 12, fontWeight: 600,
-                                    background: cred.estado === 'Activa' ? '#E8F5E9' : cred.estado === 'Bloqueada' ? '#FEEBEE' : '#F0EFEF',
-                                    color: cred.estado === 'Activa' ? '#0F8122' : cred.estado === 'Bloqueada' ? '#EB2466' : '#85787A',
+                                    background: cred.activa ? '#E8F5E9' : '#FEEBEE',
+                                    color: cred.activa ? '#0F8122' : '#EB2466',
                                   }}>
-                                    {cred.estado}
+                                    {cred.activa ? 'Activa' : 'Inactiva'}
                                   </span>
                                 ) : (
                                   <span style={{ fontSize: 12, color: '#85787A' }}>Sin credencial</span>

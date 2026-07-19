@@ -1,7 +1,7 @@
 import { useState, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { Edit, Check, X, RefreshCw, Nfc, Loader2, AlertTriangle, User } from 'lucide-react';
-import { students, credentials } from '../data/mockData';
+import { alumnos, credenciales } from '../data/mockData';
 
 function generateChipId(): string {
   const hex = () => Math.floor(Math.random() * 256).toString(16).toUpperCase().padStart(2, '0');
@@ -33,12 +33,12 @@ export default function CredentialDetailPage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
 
-  const studentData = students.find(s => s.id === Number(id)) ?? students[0];
-  const credentialData = credentials.find(c => c.alumnoId === studentData.id);
+  const studentData = alumnos.find(s => s.idAlumno === Number(id)) ?? alumnos[0];
+  const credentialData = credenciales.find(c => c.idAlumno === studentData.idAlumno);
 
   const [isEditing, setIsEditing] = useState(false);
-  const [editName, setEditName] = useState(studentData.nombre);
-  const [editControl, setEditControl] = useState(studentData.numControl);
+  const [editName, setEditName] = useState(studentData.nombreCompleto);
+  const [editControl, setEditControl] = useState(studentData.matricula);
   const [editGrupo, setEditGrupo] = useState(studentData.grupo);
 
   const [showReassignModal, setShowReassignModal] = useState(false);
@@ -60,8 +60,8 @@ export default function CredentialDetailPage() {
   };
 
   const handleCancelEdit = () => {
-    setEditName(studentData.nombre);
-    setEditControl(studentData.numControl);
+    setEditName(studentData.nombreCompleto);
+    setEditControl(studentData.matricula);
     setEditGrupo(studentData.grupo);
     setIsEditing(false);
   };
@@ -121,8 +121,8 @@ export default function CredentialDetailPage() {
             <User size={36} color="#85787A" />
           </div>
           <div style={{ flex: 1 }}>
-            <div style={{ fontSize: 18, fontWeight: 700, color: '#1C1819' }}>{studentData.nombre}</div>
-            <div style={{ fontSize: 16, fontFamily: 'monospace', color: '#EB2466', marginTop: 2 }}>{studentData.numControl}</div>
+            <div style={{ fontSize: 18, fontWeight: 700, color: '#1C1819' }}>{studentData.nombreCompleto}</div>
+            <div style={{ fontSize: 16, fontFamily: 'monospace', color: '#EB2466', marginTop: 2 }}>{studentData.matricula}</div>
             <div style={{ fontSize: 13, color: '#5F5657', marginTop: 2 }}>Grupo: {studentData.grupo}</div>
           </div>
           {!isEditing ? (
@@ -151,7 +151,7 @@ export default function CredentialDetailPage() {
                 <input type="text" value={editName} onChange={(e) => setEditName(e.target.value)}
                   style={{ width: '100%', padding: '6px 10px', border: '1px solid #CAC6C7', borderRadius: 6, fontSize: 14, fontWeight: 500, marginTop: 4, fontFamily: 'var(--font-sans)' }} />
               ) : (
-                <FieldValue>{studentData.nombre}</FieldValue>
+                <FieldValue>{studentData.nombreCompleto}</FieldValue>
               )}
             </div>
             <div>
@@ -160,7 +160,7 @@ export default function CredentialDetailPage() {
                 <input type="text" value={editControl} onChange={(e) => setEditControl(e.target.value)}
                   style={{ width: '100%', padding: '6px 10px', border: '1px solid #CAC6C7', borderRadius: 6, fontSize: 14, fontWeight: 500, fontFamily: 'monospace', marginTop: 4 }} />
               ) : (
-                <FieldValue mono>{studentData.numControl}</FieldValue>
+                <FieldValue mono>{studentData.matricula}</FieldValue>
               )}
             </div>
             <div>
@@ -185,10 +185,10 @@ export default function CredentialDetailPage() {
               <div>
                 <span style={{
                   display: 'inline-block', padding: '2px 10px', borderRadius: 12, fontSize: 12, fontWeight: 600,
-                  background: studentData.estado === 'Activo' ? '#FEEBEE' : '#F0EFEF',
-                  color: studentData.estado === 'Activo' ? '#0F8122' : '#5F5657',
+                  background: studentData.activo ? '#FEEBEE' : '#F0EFEF',
+                  color: studentData.activo ? '#0F8122' : '#5F5657',
                 }}>
-                  {studentData.estado}
+                  {studentData.activo ? 'Activo' : 'Inactivo'}
                 </span>
               </div>
             </div>
@@ -202,15 +202,15 @@ export default function CredentialDetailPage() {
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px 24px', fontSize: 14 }}>
               <div>
                 <FieldLabel>ID Chip</FieldLabel>
-                <FieldValue mono color="#0F8122">{credentialData.chipId}</FieldValue>
+                <FieldValue mono color="#0F8122">{credentialData.uidNfc}</FieldValue>
               </div>
               <div>
                 <FieldLabel>Fecha asignacion</FieldLabel>
-                <FieldValue>{credentialData.fechaAsignacion}</FieldValue>
+                <FieldValue>{credentialData.fechaEmision}</FieldValue>
               </div>
               <div>
                 <FieldLabel>Estado</FieldLabel>
-                <div><span className={estadoBadgeClass[credentialData.estado]}>{credentialData.estado}</span></div>
+                <div><span className={credentialData.activa ? estadoBadgeClass['Activa'] : estadoBadgeClass['Inactiva']}>{credentialData.activa ? 'Activa' : 'Inactiva'}</span></div>
               </div>
               <div style={{ gridColumn: 'span 2', marginTop: 8 }}>
                 <button onClick={handleStartReassign} style={{
@@ -239,11 +239,11 @@ export default function CredentialDetailPage() {
             </div>
             <div>
               <FieldLabel>Tutor</FieldLabel>
-              <FieldValue>{studentData.tutor}</FieldValue>
+              <FieldValue>{studentData.tutorNombre}</FieldValue>
             </div>
             <div>
               <FieldLabel>Telefono tutor</FieldLabel>
-              <FieldValue mono>{studentData.telefonoTutor}</FieldValue>
+              <FieldValue mono>{studentData.tutorTelefono}</FieldValue>
             </div>
           </div>
         </div>
@@ -276,11 +276,11 @@ export default function CredentialDetailPage() {
                   <div style={{ padding: 16, background: '#F0EFEF', borderRadius: 8, fontSize: 14 }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
                       <span style={{ color: '#5F5657' }}>Alumno:</span>
-                      <span style={{ fontWeight: 600 }}>{studentData.nombre}</span>
+                      <span style={{ fontWeight: 600 }}>{studentData.nombreCompleto}</span>
                     </div>
                     <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
                       <span style={{ color: '#5F5657' }}>Chip actual:</span>
-                      <span style={{ fontFamily: 'monospace', fontWeight: 600, color: '#AB1748' }}>{credentialData?.chipId ?? '---'}</span>
+                      <span style={{ fontFamily: 'monospace', fontWeight: 600, color: '#AB1748' }}>{credentialData?.uidNfc ?? '---'}</span>
                     </div>
                     <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                       <span style={{ color: '#5F5657' }}>Accion:</span>
@@ -293,8 +293,8 @@ export default function CredentialDetailPage() {
               {reassignStep === 'write' && (
                 <div style={{ textAlign: 'center', padding: 16 }}>
                   <div style={{ marginBottom: 16, padding: 12, background: '#FEEBEE', borderRadius: 8 }}>
-                    <div style={{ fontWeight: 600, fontSize: 14 }}>{studentData.nombre}</div>
-                    <div style={{ fontSize: 13, color: '#5F5657' }}>No. Control: {studentData.numControl}</div>
+                    <div style={{ fontWeight: 600, fontSize: 14 }}>{studentData.nombreCompleto}</div>
+                    <div style={{ fontSize: 13, color: '#5F5657' }}>No. Control: {studentData.matricula}</div>
                   </div>
                   <div className={`nfc-zone ${writing ? 'scanning' : written ? '' : 'scanning'}`} style={{ margin: '0 auto 16px' }}>
                     <div className="nfc-zone-inner" style={{ background: written ? '#70FE7D' : undefined }}>

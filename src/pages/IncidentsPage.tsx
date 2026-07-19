@@ -1,12 +1,28 @@
 import { useState, useMemo } from 'react';
 import { Search, Plus, Eye, Check, AlertTriangle, Upload, X as XIcon } from 'lucide-react';
-import { incidents as mockIncidents, students, type Incident, type Student } from '../data/mockData';
+import { incidents as mockIncidents, alumnos, type Incident, type Alumno } from '../data/mockData';
+import type { UserRole } from '../App';
 
 const tipoOptions = ['Todas', 'Acceso sin credencial', 'Credencial danada', 'Acceso fuera de horario', 'Alumno no registrado', 'Intento no autorizado', 'Salida sin credencial', 'Otro'];
 const tipoOptionsSinTodas = tipoOptions.filter(t => t !== 'Todas');
 const gravedadOptions = ['Leve', 'Moderada', 'Grave'];
 
-export default function IncidentsPage() {
+interface IncidentsPageProps {
+  role: UserRole;
+}
+
+function getRegistradoPor(role: UserRole): string {
+  return role === 'Directivo' ? 'Directivo (Lic. Fabian Ocampo)' : 'Prefecto (Vigilancia)';
+}
+
+function getDefaultDateTime(): { fecha: string; hora: string } {
+  const now = new Date();
+  const fecha = now.toISOString().slice(0, 10);
+  const hora = now.toTimeString().slice(0, 5);
+  return { fecha, hora };
+}
+
+export default function IncidentsPage({ role }: IncidentsPageProps) {
   const [incidentsList, setIncidentsList] = useState<Incident[]>(mockIncidents);
   const [activeTab, setActiveTab] = useState('Todas');
   const [searchQuery, setSearchQuery] = useState('');
@@ -15,8 +31,10 @@ export default function IncidentsPage() {
   const perPage = 8;
 
   const [formTipo, setFormTipo] = useState('');
+  const [formFecha, setFormFecha] = useState('');
+  const [formHora, setFormHora] = useState('');
   const [formAlumnoQuery, setFormAlumnoQuery] = useState('');
-  const [formAlumnoSelected, setFormAlumnoSelected] = useState<Student | null>(null);
+  const [formAlumnoSelected, setFormAlumnoSelected] = useState<Alumno | null>(null);
   const [showAlumnoDropdown, setShowAlumnoDropdown] = useState(false);
   const [formDescripcion, setFormDescripcion] = useState('');
   const [formGravedad, setFormGravedad] = useState('');
@@ -24,18 +42,20 @@ export default function IncidentsPage() {
   const [formFoto, setFormFoto] = useState<File | null>(null);
   const [formErrors, setFormErrors] = useState<Record<string, string>>({});
 
+  const registradoPor = getRegistradoPor(role);
+
   const alumnoResults = useMemo(() => {
     if (!formAlumnoQuery || formAlumnoSelected) return [];
     const q = formAlumnoQuery.toLowerCase();
-    return students.filter(s =>
-      s.nombre.toLowerCase().includes(q) ||
-      s.numControl.toLowerCase().includes(q)
+    return alumnos.filter(s =>
+      s.nombreCompleto.toLowerCase().includes(q) ||
+      s.matricula.toLowerCase().includes(q)
     ).slice(0, 6);
   }, [formAlumnoQuery, formAlumnoSelected]);
 
   const filtered = incidentsList.filter((inc) => {
     const matchTab = activeTab === 'Todas' || inc.tipo === activeTab;
-    const alumnoName = inc.alumno?.nombre ?? '';
+    const alumnoName = inc.alumno?.nombreCompleto ?? '';
     const matchSearch = searchQuery === '' ||
       alumnoName.toLowerCase().includes(searchQuery.toLowerCase()) ||
       inc.descripcion.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -50,6 +70,9 @@ export default function IncidentsPage() {
 
   const resetForm = () => {
     setFormTipo('');
+    const defaults = getDefaultDateTime();
+    setFormFecha(defaults.fecha);
+    setFormHora(defaults.hora);
     setFormAlumnoQuery('');
     setFormAlumnoSelected(null);
     setShowAlumnoDropdown(false);
@@ -65,6 +88,8 @@ export default function IncidentsPage() {
   const validate = (): boolean => {
     const errors: Record<string, string> = {};
     if (!formTipo) errors.tipo = 'Selecciona un tipo de incidencia';
+    if (!formFecha) errors.fecha = 'Selecciona la fecha';
+    if (!formHora) errors.hora = 'Selecciona la hora';
     if (!formAlumnoSelected) errors.alumno = 'Selecciona un alumno del sistema';
     if (!formDescripcion.trim()) errors.descripcion = 'Escribe una descripcion';
     if (!formGravedad) errors.gravedad = 'Selecciona la gravedad';
@@ -76,11 +101,11 @@ export default function IncidentsPage() {
     if (!validate()) return;
     const newIncident: Incident = {
       id: Date.now(),
-      fecha: new Date().toLocaleString('es-MX'),
+      fecha: `${formFecha} ${formHora}`,
       tipo: formTipo,
       alumno: formAlumnoSelected!,
       descripcion: formDescripcion,
-      registradoPor: 'Sistema',
+      registradoPor,
       estado: 'Abierto',
       gravedad: formGravedad as Incident['gravedad'],
     };
@@ -88,9 +113,9 @@ export default function IncidentsPage() {
     handleCloseModal();
   };
 
-  const handleSelectAlumno = (student: Student) => {
-    setFormAlumnoSelected(student);
-    setFormAlumnoQuery(student.nombre);
+  const handleSelectAlumno = (alumno: Alumno) => {
+    setFormAlumnoSelected(alumno);
+    setFormAlumnoQuery(alumno.nombreCompleto);
     setShowAlumnoDropdown(false);
     setFormErrors(prev => ({ ...prev, alumno: '' }));
   };
@@ -165,7 +190,7 @@ export default function IncidentsPage() {
                 <td>{(page - 1) * perPage + idx + 1}</td>
                 <td>{inc.fecha}</td>
                 <td>{inc.tipo}</td>
-                <td style={{ fontWeight: 500 }}>{inc.alumno?.nombre ?? '---'}</td>
+                <td style={{ fontWeight: 500 }}>{inc.alumno?.nombreCompleto ?? '---'}</td>
                 <td style={{ maxWidth: 200, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{inc.descripcion}</td>
                 <td>{inc.registradoPor}</td>
                 <td><span className={getEstadoBadge(inc.estado)}>{inc.estado}</span></td>
@@ -206,6 +231,40 @@ export default function IncidentsPage() {
                   {tipoOptionsSinTodas.map((tipo) => (<option key={tipo} value={tipo}>{tipo}</option>))}
                 </select>
                 {formErrors.tipo && <span style={{ fontSize: 12, color: '#AB1748', marginTop: 4, display: 'block' }}>{formErrors.tipo}</span>}
+              </div>
+
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, marginBottom: 16 }}>
+                <div className="input-group">
+                  <label className="field-label">Fecha de la incidencia *</label>
+                  <input
+                    type="date"
+                    className={`input ${formErrors.fecha ? 'input--error' : ''}`}
+                    value={formFecha}
+                    onChange={(e) => { setFormFecha(e.target.value); setFormErrors(prev => ({ ...prev, fecha: '' })); }}
+                  />
+                  {formErrors.fecha && <span style={{ fontSize: 12, color: '#AB1748', marginTop: 4, display: 'block' }}>{formErrors.fecha}</span>}
+                </div>
+                <div className="input-group">
+                  <label className="field-label">Hora de la incidencia *</label>
+                  <input
+                    type="time"
+                    className={`input ${formErrors.hora ? 'input--error' : ''}`}
+                    value={formHora}
+                    onChange={(e) => { setFormHora(e.target.value); setFormErrors(prev => ({ ...prev, hora: '' })); }}
+                  />
+                  {formErrors.hora && <span style={{ fontSize: 12, color: '#AB1748', marginTop: 4, display: 'block' }}>{formErrors.hora}</span>}
+                </div>
+              </div>
+
+              <div className="input-group" style={{ marginBottom: 16 }}>
+                <label className="field-label">Registrado por</label>
+                <input
+                  type="text"
+                  className="input"
+                  value={registradoPor}
+                  readOnly
+                  style={{ background: '#F0EFEF', color: '#5F5657', cursor: 'not-allowed' }}
+                />
               </div>
 
               <div className="input-group" style={{ marginBottom: 16, position: 'relative' }}>
@@ -251,7 +310,7 @@ export default function IncidentsPage() {
                   }}>
                     {alumnoResults.map(s => (
                       <div
-                        key={s.id}
+                        key={s.idAlumno}
                         onClick={() => handleSelectAlumno(s)}
                         style={{
                           padding: '10px 14px',
@@ -262,8 +321,8 @@ export default function IncidentsPage() {
                         onMouseEnter={(e) => (e.currentTarget.style.background = '#f8f7f7')}
                         onMouseLeave={(e) => (e.currentTarget.style.background = '#fff')}
                       >
-                        <div style={{ fontWeight: 600, fontSize: 13, color: '#1C1819' }}>{s.nombre}</div>
-                        <div style={{ fontSize: 11, color: '#85787A' }}>{s.numControl} · Grupo {s.grupo}</div>
+                        <div style={{ fontWeight: 600, fontSize: 13, color: '#1C1819' }}>{s.nombreCompleto}</div>
+                        <div style={{ fontSize: 11, color: '#85787A' }}>{s.matricula} · Grupo {s.grupo}</div>
                       </div>
                     ))}
                   </div>
@@ -271,7 +330,7 @@ export default function IncidentsPage() {
                 {formAlumnoSelected && (
                   <div style={{ marginTop: 6, padding: '6px 10px', background: '#e8f5e9', borderRadius: 6, fontSize: 12, color: '#0F8122', fontWeight: 500, display: 'flex', alignItems: 'center', gap: 6 }}>
                     <Check size={14} />
-                    {formAlumnoSelected.nombre} ({formAlumnoSelected.numControl})
+                    {formAlumnoSelected.nombreCompleto} ({formAlumnoSelected.matricula})
                   </div>
                 )}
                 {formErrors.alumno && <span style={{ fontSize: 12, color: '#AB1748', marginTop: 4, display: 'block' }}>{formErrors.alumno}</span>}

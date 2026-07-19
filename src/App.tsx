@@ -44,8 +44,8 @@ export default function App() {
               <Route path="/grupos" element={<GruposPage />} />
               <Route path="/credenciales" element={<CredentialsPage />} />
               <Route path="/credenciales/:id" element={<CredentialDetailPage />} />
-              <Route path="/permisos" element={<PermissionsPage />} />
-              <Route path="/incidencias" element={<IncidentsPage />} />
+              <Route path="/permisos" element={<PermissionsPage role={userRole} />} />
+              <Route path="/incidencias" element={<IncidentsPage role={userRole} />} />
               <Route path="/reportes" element={<ReportsPage />} />
               <Route path="/configuracion" element={<ConfigPage />} />
               <Route path="*" element={<Navigate to="/dashboard" replace />} />
@@ -54,7 +54,7 @@ export default function App() {
             <>
               <Route path="/" element={<ScanPage />} />
               <Route path="/escaneo" element={<ScanPage />} />
-              <Route path="/incidencias" element={<IncidentsPage />} />
+              <Route path="/incidencias" element={<IncidentsPage role={userRole} />} />
               <Route path="*" element={<Navigate to="/escaneo" replace />} />
             </>
           )}

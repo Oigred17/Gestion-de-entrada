@@ -19,7 +19,7 @@ import {
   EyeOff,
   Copy,
 } from 'lucide-react';
-import { DEFAULT_CREDENTIAL_LAYOUT, type CredentialLayout } from '../utils/generateCredentialsPDF';
+import { DEFAULT_CREDENTIAL_LAYOUT, LAYOUT_VERSION, type CredentialLayout } from '../utils/generateCredentialsPDF';
 
 const TABS = [
   { id: 'general', label: 'General', icon: Settings },
@@ -144,9 +144,9 @@ export default function ConfigPage() {
     },
     {
       id: 3,
-      nombre: 'Retardo',
-      asunto: 'Retardo registrado - {nombre_alumno}',
-      cuerpo: 'El alumno {nombre_alumno} del grupo {grupo} presento retardo a las {hora}.',
+      nombre: 'Entrada fuera de horario',
+      asunto: 'Entrada fuera de horario registrada - {nombre_alumno}',
+      cuerpo: 'El alumno {nombre_alumno} del grupo {grupo} llego fuera del horario de clase a las {hora}.',
       variables: ['{nombre_alumno}', '{grupo}', '{hora}'],
     },
     {
@@ -189,11 +189,17 @@ export default function ConfigPage() {
     { id: 3, fecha: '2026-07-10 15:30', tamano: '14.9 MB', tipo: 'Manual', estado: 'Completado' },
   ]);
 
-  // Estado del layout de credencial (cargado de localStorage o defaults)
+  // Estado del layout de credencial (cargado de localStorage o defaults, con auto-reset por version)
   const [credLayout, setCredLayout] = useState<CredentialLayout>(() => {
     try {
+      const savedVersion = localStorage.getItem('credentialLayoutVersion');
       const saved = localStorage.getItem('credentialLayout');
-      if (saved) return { ...DEFAULT_CREDENTIAL_LAYOUT, ...JSON.parse(saved) };
+      if (saved && savedVersion === String(LAYOUT_VERSION)) {
+        return { ...DEFAULT_CREDENTIAL_LAYOUT, ...JSON.parse(saved) };
+      }
+      // Version mismatch - limpiar y usar defaults nuevos
+      localStorage.removeItem('credentialLayout');
+      localStorage.removeItem('credentialLayoutVersion');
     } catch { }
     return { ...DEFAULT_CREDENTIAL_LAYOUT };
   });
@@ -401,7 +407,7 @@ export default function ConfigPage() {
           </div>
         </div>
         <div style={s.field}>
-          <label style={s.label}>Minutos de tolerancia para retardo</label>
+          <label style={s.label}>Minutos de tolerancia para entrada fuera de horario</label>
           <input type="number" style={s.inputSm} value={toleranciaRetardo} onChange={e => setToleranciaRetardo(Number(e.target.value))} min={0} max={120} onFocus={handleInputFocus} onBlur={handleInputBlur} />
         </div>
       </div>
@@ -678,26 +684,68 @@ export default function ConfigPage() {
 
   const saveCredLayout = () => {
     localStorage.setItem('credentialLayout', JSON.stringify(credLayout));
+    localStorage.setItem('credentialLayoutVersion', String(LAYOUT_VERSION));
   };
 
   const resetCredLayout = () => {
     setCredLayout({ ...DEFAULT_CREDENTIAL_LAYOUT });
     localStorage.removeItem('credentialLayout');
+    localStorage.removeItem('credentialLayoutVersion');
   };
 
-  const updateCredField = (key: keyof CredentialLayout, field: 'y' | 'size', value: number) => {
+  const updateCredField = (key: string, field: 'y' | 'size' | 'xOffset' | 'label' | 'text', value: number | string) => {
     setCredLayout(prev => ({
       ...prev,
-      [key]: { ...prev[key], [field]: value },
+      [key]: { ...prev[key as keyof CredentialLayout], [field]: value },
     }));
   };
 
+  const [showAddField, setShowAddField] = useState(false);
+  const [newFieldLabel, setNewFieldLabel] = useState('');
+  const [newFieldSide, setNewFieldSide] = useState<'izq' | 'der'>('izq');
+
+  const addCustomField = () => {
+    if (!newFieldLabel.trim()) return;
+    const key = `custom_${newFieldLabel.toLowerCase().replace(/\s+/g, '_').replace(/[^a-z0-9_]/g, '')}`;
+    const campo = {
+      y: 50,
+      size: 7.5,
+      x: newFieldSide,
+      xOffset: 0,
+      label: newFieldLabel.trim(),
+    };
+    setCredLayout(prev => ({ ...prev, [key]: campo }));
+    setNewFieldLabel('');
+    setShowAddField(false);
+  };
+
+  const removeCredField = (key: string) => {
+    setCredLayout(prev => {
+      const next = { ...prev };
+      delete (next as Record<string, unknown>)[key];
+      return next;
+    });
+  };
+
+  const DEFAULT_KEYS = Object.keys(DEFAULT_CREDENTIAL_LAYOUT) as string[];
+
   const renderCredencialTab = () => {
     const MM = 2.835;
-    const BLOCK_HEIGHT = 182.1;
+    const BLOCK_HEIGHT = 65.8 * MM;
     const PREVIEW_SCALE = 0.62;
     const previewH = BLOCK_HEIGHT / PREVIEW_SCALE;
     const toPreview = (yPt: number) => yPt / PREVIEW_SCALE;
+
+    const fieldLabel = (key: string, campo: { label?: string; y: number; x: string }) => {
+      if (campo.label) return campo.label;
+      const map: Record<string, string> = {
+        nombre: 'Nombre', plantel: 'Plantel', no_control: 'No. Control',
+        domicilio1: 'Domicilio 1', domicilio2: 'Domicilio 2', domicilio3: 'Domicilio 3',
+        curp: 'CURP', tipo_sangre: 'Tipo Sangre', afiliacion: 'Afiliacion',
+        tutor: 'Tutor', tel_tutor: 'Tel. Tutor', firma: 'Firma',
+      };
+      return map[key] ?? key;
+    };
 
     const sampleTexts: Record<string, string> = {
       nombre: 'NOMBRE: JUAN PEREZ LOPEZ',
@@ -714,13 +762,13 @@ export default function ConfigPage() {
       firma: 'LIC. FABIAN OCAMPO GODINEZ',
     };
 
-    const groups: { title: string; color: string; accent: string; keys: (keyof CredentialLayout)[] }[] = [
-      { title: 'Izquierda', color: '#DBEAFE', accent: '#2563EB', keys: ['nombre', 'plantel', 'no_control'] },
-      { title: 'Derecha', color: '#DCFCE7', accent: '#16A34A', keys: ['domicilio1', 'domicilio2', 'domicilio3', 'curp', 'tipo_sangre', 'afiliacion', 'tutor', 'tel_tutor'] },
-      { title: 'Firma', color: '#FEE2E2', accent: '#DC2626', keys: ['firma'] },
-    ];
+    const sideColor: Record<string, { bg: string; border: string; text: string; accent: string }> = {
+      izq:  { bg: '#EFF6FF', border: '#BFDBFE', text: '#1E40AF', accent: '#2563EB' },
+      der:  { bg: '#F0FDF4', border: '#BBF7D0', text: '#166534', accent: '#16A34A' },
+      firma:{ bg: '#FEF2F2', border: '#FECACA', text: '#991B1B', accent: '#DC2626' },
+    };
 
-    const allSorted = groups.flatMap(g => g.keys).sort((a, b) => credLayout[a].y - credLayout[b].y);
+    const allFields = Object.entries(credLayout).sort(([, a], [, b]) => a.y - b.y);
 
     return (
       <div style={s.tabContent}>
@@ -735,7 +783,8 @@ export default function ConfigPage() {
 
           <div style={{ display: 'flex', gap: 24, alignItems: 'stretch' }}>
 
-            <div style={{ flex: '1 1 55%', minWidth: 0 }}>
+            {/* PREVIEW */}
+            <div style={{ flex: '0 0 44%', minWidth: 0 }}>
               <div style={{
                 background: '#fff', border: `1px solid ${colors.border}`, borderRadius: 10,
                 padding: 16, boxShadow: '0 1px 8px rgba(0,0,0,0.06)',
@@ -749,50 +798,40 @@ export default function ConfigPage() {
                   background: '#fff', border: `1px solid ${colors.border}`, borderRadius: 6,
                   overflow: 'hidden', boxShadow: 'inset 0 1px 3px rgba(0,0,0,0.04)',
                 }}>
-                  {/* Linea central divisoria */}
                   <div style={{ position: 'absolute', left: '49.5%', top: 0, bottom: 0, width: 1, background: `${colors.border}88`, borderLeft: '1px dashed #ccc' }} />
-
-                  {/* Label columnas */}
                   <div style={{ position: 'absolute', top: 3, left: 4, fontSize: 8, fontWeight: 700, color: '#93C5FD', textTransform: 'uppercase', letterSpacing: '0.1em' }}>IZQ</div>
                   <div style={{ position: 'absolute', top: 3, right: 4, fontSize: 8, fontWeight: 700, color: '#86EFAC', textTransform: 'uppercase', letterSpacing: '0.1em' }}>DER</div>
 
-                  {/* Todos los campos */}
-                  {allSorted.map(key => {
-                    const campo = credLayout[key];
+                  {allFields.map(([key, campo]) => {
                     const top = toPreview(campo.y);
-                    const isLeft = campo.x === 'izq';
+                    const side = sideColor[campo.x] ?? sideColor.izq;
+                    const text = campo.text ?? sampleTexts[key] ?? campo.label ?? key;
                     const isFirma = campo.x === 'firma';
-                    const group = groups.find(g => g.keys.includes(key))!;
-                    const text = sampleTexts[key] ?? key;
-
-                    const leftPos = isFirma ? '52%' : isLeft ? 6 : '50.5%';
-                    const rightPos = isFirma ? 6 : isLeft ? '50.5%' : 6;
+                    const xPct = ((campo.xOffset ?? 0) / 12) * 10;
+                    const leftPos = isFirma ? `${52 + xPct}%` : campo.x === 'izq' ? `${6 + xPct}%` : `${50.5 + xPct}%`;
+                    const rightPos = isFirma ? 6 : campo.x === 'izq' ? '50.5%' : 6;
 
                     return (
-                      <div key={key} style={{
-                        position: 'absolute', top, left: leftPos, right: rightPos,
-                      }}>
+                      <div key={key} style={{ position: 'absolute', top, left: leftPos, right: rightPos }}>
                         <div style={{
-                          background: group.color, border: `1px solid ${group.accent}30`,
+                          background: side.bg, border: `1px solid ${side.border}`,
                           borderRadius: 3, padding: '1px 5px',
                           fontSize: Math.max(campo.size * 0.7, 8),
-                          color: group.accent, fontWeight: 600, lineHeight: 1.5,
+                          color: side.text, fontWeight: 600, lineHeight: 1.5,
                           whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
                           position: 'relative',
                         }}>
                           {text}
-                          {/* Indicador de tamano de fuente */}
                           <span style={{
                             position: 'absolute', top: -1, right: 2,
-                            fontSize: 7, fontWeight: 700, color: `${group.accent}99`,
-                            background: `${group.accent}12`, borderRadius: 2, padding: '0 2px',
+                            fontSize: 7, fontWeight: 700, color: `${side.accent}99`,
+                            background: `${side.accent}12`, borderRadius: 2, padding: '0 2px',
                           }}>{campo.size}</span>
                         </div>
                       </div>
                     );
                   })}
 
-                  {/* Regla vertical con marcas de mm */}
                   <div style={{ position: 'absolute', top: 0, left: 0, bottom: 0, width: 14, background: '#f8f8f8', borderRight: `1px solid ${colors.border}` }}>
                     {Array.from({ length: 20 }, (_, i) => {
                       const yPt = i * (BLOCK_HEIGHT / 19);
@@ -809,18 +848,16 @@ export default function ConfigPage() {
                   </div>
                 </div>
 
-                {/* Leyenda */}
                 <div style={{ display: 'flex', gap: 16, marginTop: 10, justifyContent: 'center' }}>
-                  {groups.map(g => (
-                    <div key={g.title} style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 11, color: colors.textSecondary }}>
-                      <div style={{ width: 12, height: 8, borderRadius: 2, background: g.color, border: `1px solid ${g.accent}40` }} />
-                      {g.title}
+                  {Object.entries(sideColor).filter(([k]) => k !== 'firma' || allFields.some(([, c]) => c.x === 'firma')).map(([key, sc]) => (
+                    <div key={key} style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 11, color: colors.textSecondary }}>
+                      <div style={{ width: 12, height: 8, borderRadius: 2, background: sc.bg, border: `1px solid ${sc.border}` }} />
+                      {key === 'izq' ? 'Izquierda' : key === 'der' ? 'Derecha' : 'Firma'}
                     </div>
                   ))}
                 </div>
               </div>
 
-              {/* Dimensiones */}
               <div style={{ marginTop: 12, display: 'flex', gap: 10, flexWrap: 'wrap' }}>
                 {[
                   { l: 'Bloque', v: '182 pt' },
@@ -836,91 +873,226 @@ export default function ConfigPage() {
               </div>
             </div>
 
-            <div style={{ flex: '1 1 45%', minWidth: 0 }}>
+            {/* CONTROLS */}
+            <div style={{ flex: '1 1 56%', minWidth: 0 }}>
               <div style={{
                 background: colors.white, border: `1px solid ${colors.border}`, borderRadius: 10,
-                padding: 14, maxHeight: previewH + 160, overflowY: 'auto',
+                padding: 14, maxHeight: previewH + 200, overflowY: 'auto',
               }}>
-
-                {groups.map(group => (
-                  <div key={group.title} style={{ marginBottom: 14 }}>
-                    <div style={{
-                      display: 'flex', alignItems: 'center', gap: 6, marginBottom: 6,
-                      paddingBottom: 4, borderBottom: `2px solid ${group.accent}30`,
-                    }}>
-                      <div style={{ width: 10, height: 10, borderRadius: 3, background: group.accent }} />
-                      <span style={{ fontSize: 12, fontWeight: 700, color: colors.textPrimary }}>
-                        {group.title}
-                      </span>
-                      <span style={{ fontSize: 10, color: colors.textMuted, marginLeft: 'auto' }}>
-                        {group.keys.length} campos
-                      </span>
-                    </div>
-
-                    {group.keys.map(key => {
-                      const campo = credLayout[key];
-                      const yMm = (campo.y / MM).toFixed(1);
-                      return (
-                        <div key={key} style={{
-                          display: 'flex', alignItems: 'center', gap: 6,
-                          padding: '5px 0', borderBottom: `1px solid ${colors.border}40`,
+                {(['izq', 'der', 'firma'] as const).map(side => {
+                  const fields = allFields.filter(([, c]) => c.x === side);
+                  if (fields.length === 0) return null;
+                  const sc = sideColor[side];
+                  return (
+                    <div key={side} style={{ marginBottom: 16 }}>
+                      <div style={{
+                        display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8,
+                        paddingBottom: 6, borderBottom: `2px solid ${sc.border}`,
+                      }}>
+                        <div style={{ width: 10, height: 10, borderRadius: 3, background: sc.accent }} />
+                        <span style={{ fontSize: 13, fontWeight: 700, color: colors.textPrimary }}>
+                          {side === 'izq' ? 'Lado Izquierdo' : side === 'der' ? 'Lado Derecho' : 'Firma'}
+                        </span>
+                        <span style={{
+                          fontSize: 10, color: sc.accent, background: sc.bg,
+                          padding: '1px 8px', borderRadius: 10, fontWeight: 600,
                         }}>
-                          <div style={{
-                            width: 72, flexShrink: 0,
-                            fontSize: 11, fontWeight: 600, color: colors.textPrimary,
-                            whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
-                          }}>
-                            {key === 'no_control' ? 'No. Ctrl' :
-                             key === 'tipo_sangre' ? 'Sangre' :
-                             key === 'afiliacion' ? 'Afiliacion' :
-                             key === 'tel_tutor' ? 'Tel.Tutor' :
-                             key.charAt(0).toUpperCase() + key.slice(1).replace('_', '.')}
+                          {fields.length} campo{fields.length > 1 ? 's' : ''}
+                        </span>
+                      </div>
+
+                      {fields.map(([key, campo]) => (
+                        <div key={key} style={{
+                          display: 'flex', flexDirection: 'column', gap: 4,
+                          padding: '8px 10px', marginBottom: 6,
+                          background: sc.bg, border: `1px solid ${sc.border}`,
+                          borderRadius: 8,
+                        }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                            <span style={{
+                              fontSize: 12, fontWeight: 700, color: sc.text, flexShrink: 0,
+                              minWidth: 90,
+                            }}>
+                              {fieldLabel(key, campo)}
+                            </span>
+                            {sampleTexts[key] && (
+                              <span style={{
+                                fontSize: 9, color: sc.accent, opacity: 0.7,
+                                whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', flex: 1,
+                              }}>
+                                {sampleTexts[key]}
+                              </span>
+                            )}
+                            {!DEFAULT_KEYS.includes(key) && (
+                              <button
+                                onClick={() => removeCredField(key)}
+                                style={{
+                                  background: '#FEE2E2', border: '1px solid #FECACA', borderRadius: 4,
+                                  padding: '1px 6px', cursor: 'pointer', fontSize: 10, color: '#DC2626',
+                                  flexShrink: 0,
+                                }}
+                              >X</button>
+                            )}
                           </div>
 
-                          <input
-                            type="range"
-                            min={0}
-                            max={BLOCK_HEIGHT}
-                            step={0.5}
-                            value={campo.y}
-                            onChange={e => updateCredField(key, 'y', Number(e.target.value))}
-                            style={{
-                              flex: 1, height: 4, borderRadius: 2, outline: 'none', cursor: 'pointer',
-                              accentColor: group.accent,
-                            }}
-                          />
-
-                          {/* Valor Y mm */}
-                          <div style={{
-                            width: 36, textAlign: 'right', fontSize: 10,
-                            color: colors.textMuted, fontVariantNumeric: 'tabular-nums',
-                          }}>
-                            {yMm}
+                          {/* Y position */}
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                            <span style={{ fontSize: 9, color: colors.textMuted, width: 14, flexShrink: 0 }}>Y</span>
+                            <input
+                              type="range"
+                              min={0}
+                              max={BLOCK_HEIGHT}
+                              step={0.5}
+                              value={campo.y}
+                              onChange={e => updateCredField(key, 'y', Number(e.target.value))}
+                              style={{ flex: 1, height: 4, borderRadius: 2, outline: 'none', cursor: 'pointer', accentColor: sc.accent }}
+                            />
+                            <span style={{ fontSize: 9, color: colors.textMuted, width: 36, textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>
+                              {(campo.y / MM).toFixed(1)} mm
+                            </span>
                           </div>
 
-                          {/* Tamano de fuente */}
-                          <input
-                            type="number"
-                            min={5}
-                            max={14}
-                            step={0.5}
-                            value={campo.size}
-                            onChange={e => updateCredField(key, 'size', Number(e.target.value))}
-                            style={{
-                              width: 36, padding: '1px 3px', borderRadius: 3,
-                              border: `1px solid ${colors.border}`, fontSize: 10, textAlign: 'center',
-                              background: colors.bg, color: colors.textPrimary, flexShrink: 0,
-                            }}
-                          />
+                          {/* X offset */}
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                            <span style={{ fontSize: 9, color: colors.textMuted, width: 14, flexShrink: 0 }}>X</span>
+                            <input
+                              type="range"
+                              min={-20}
+                              max={20}
+                              step={0.5}
+                              value={campo.xOffset ?? 0}
+                              onChange={e => updateCredField(key, 'xOffset', Number(e.target.value))}
+                              style={{ flex: 1, height: 4, borderRadius: 2, outline: 'none', cursor: 'pointer', accentColor: sc.accent }}
+                            />
+                            <span style={{ fontSize: 9, color: colors.textMuted, width: 36, textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>
+                              {((campo.xOffset ?? 0) / MM).toFixed(1)} mm
+                            </span>
+                          </div>
+
+                          {/* Font size + label */}
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                            <span style={{ fontSize: 9, color: colors.textMuted, width: 14, flexShrink: 0 }}>F</span>
+                            <input
+                              type="number"
+                              min={5}
+                              max={14}
+                              step={0.5}
+                              value={campo.size}
+                              onChange={e => updateCredField(key, 'size', Number(e.target.value))}
+                              style={{
+                                width: 40, padding: '2px 4px', borderRadius: 4,
+                                border: `1px solid ${sc.border}`, fontSize: 10, textAlign: 'center',
+                                background: '#fff', color: sc.text,
+                              }}
+                            />
+                            <span style={{ fontSize: 9, color: colors.textMuted }}>pt</span>
+                            {!DEFAULT_KEYS.includes(key) && (
+                              <input
+                                type="text"
+                                value={campo.label ?? ''}
+                                onChange={e => updateCredField(key, 'label', e.target.value)}
+                                placeholder="Etiqueta..."
+                                style={{
+                                  flex: 1, padding: '2px 6px', borderRadius: 4,
+                                  border: `1px solid ${sc.border}`, fontSize: 10,
+                                  background: '#fff', color: sc.text,
+                                }}
+                              />
+                            )}
+                          </div>
+
+                          {campo.text !== undefined && (
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                              <span style={{ fontSize: 9, color: colors.textMuted, width: 14, flexShrink: 0 }}>Txt</span>
+                              <input
+                                type="text"
+                                value={campo.text ?? ''}
+                                onChange={e => updateCredField(key, 'text', e.target.value)}
+                                style={{
+                                  flex: 1, padding: '3px 6px', borderRadius: 4,
+                                  border: `1px solid ${sc.border}`, fontSize: 10,
+                                  background: '#fff', color: sc.text,
+                                }}
+                              />
+                            </div>
+                          )}
                         </div>
-                      );
-                    })}
-                  </div>
-                ))}
+                      ))}
+                    </div>
+                  );
+                })}
 
-                <div style={{ marginTop: 8, padding: '6px 10px', background: colors.bg, borderRadius: 6, fontSize: 10, color: colors.textMuted, lineHeight: 1.5 }}>
-                  Arrastra las barras para mover los campos verticalmente.
-                  El numero a la derecha es el tamano de fuente (pt).
+                {/* Agregar campo */}
+                {!showAddField ? (
+                  <button
+                    onClick={() => setShowAddField(true)}
+                    style={{
+                      width: '100%', padding: '10px 0', border: `2px dashed ${colors.border}`,
+                      borderRadius: 8, background: 'transparent', cursor: 'pointer',
+                      display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
+                      fontSize: 12, fontWeight: 600, color: colors.textMuted,
+                      transition: 'all 0.2s',
+                    }}
+                  >
+                    <Plus size={16} /> Agregar campo personalizado
+                  </button>
+                ) : (
+                  <div style={{
+                    padding: 12, border: `2px solid ${colors.primary}40`,
+                    borderRadius: 8, background: colors.lightPink + '33',
+                  }}>
+                    <div style={{ fontSize: 12, fontWeight: 700, color: colors.primary, marginBottom: 8 }}>
+                      Nuevo Campo
+                    </div>
+                    <div style={{ display: 'flex', gap: 8, marginBottom: 8 }}>
+                      <input
+                        type="text"
+                        value={newFieldLabel}
+                        onChange={e => setNewFieldLabel(e.target.value)}
+                        placeholder="Nombre del campo..."
+                        autoFocus
+                        style={{
+                          flex: 1, padding: '6px 10px', borderRadius: 6,
+                          border: `1px solid ${colors.border}`, fontSize: 12,
+                          outline: 'none',
+                        }}
+                        onKeyDown={e => e.key === 'Enter' && addCustomField()}
+                      />
+                    </div>
+                    <div style={{ display: 'flex', gap: 8, marginBottom: 10 }}>
+                      <span style={{ fontSize: 11, color: colors.textSecondary, alignSelf: 'center' }}>Lado:</span>
+                      <button
+                        onClick={() => setNewFieldSide('izq')}
+                        style={{
+                          padding: '4px 14px', borderRadius: 6, border: 'none', fontSize: 11, fontWeight: 600, cursor: 'pointer',
+                          background: newFieldSide === 'izq' ? sideColor.izq.accent : sideColor.izq.bg,
+                          color: newFieldSide === 'izq' ? '#fff' : sideColor.izq.text,
+                        }}
+                      >Izquierda</button>
+                      <button
+                        onClick={() => setNewFieldSide('der')}
+                        style={{
+                          padding: '4px 14px', borderRadius: 6, border: 'none', fontSize: 11, fontWeight: 600, cursor: 'pointer',
+                          background: newFieldSide === 'der' ? sideColor.der.accent : sideColor.der.bg,
+                          color: newFieldSide === 'der' ? '#fff' : sideColor.der.text,
+                        }}
+                      >Derecha</button>
+                    </div>
+                    <div style={{ display: 'flex', gap: 6 }}>
+                      <button style={{ ...s.btnPrimary, flex: 1, fontSize: 11, padding: '6px 0' }} onClick={addCustomField}>
+                        <Plus size={14} /> Agregar
+                      </button>
+                      <button style={{ ...s.btnSecondary, flex: 1, fontSize: 11, padding: '6px 0' }} onClick={() => { setShowAddField(false); setNewFieldLabel(''); }}>
+                        Cancelar
+                      </button>
+                    </div>
+                  </div>
+                )}
+
+                <div style={{ marginTop: 10, padding: '8px 12px', background: colors.bg, borderRadius: 6, fontSize: 10, color: colors.textMuted, lineHeight: 1.6 }}>
+                  <strong>Y</strong> — Posicion vertical (arriba/abajo) &nbsp;|&nbsp;
+                  <strong>X</strong> — Offset horizontal (izq/der) &nbsp;|&nbsp;
+                  <strong>F</strong> — Tamano de fuente (pt)
                 </div>
               </div>
             </div>

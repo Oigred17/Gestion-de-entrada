@@ -1,8 +1,8 @@
 import { useState, useEffect, useMemo } from 'react';
 import { ArrowDown, ArrowUp, CheckCircle, XCircle, AlertTriangle, Edit, Nfc, Lock, Search, LogOut, X as XIcon } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
-import { recentRecords, students } from '../data/mockData';
-import type { ScanRecord, Student } from '../data/mockData';
+import { registrosAcceso, alumnos, retardos, getAlumnoByCredencialId, getAlumnoById, credenciales } from '../data/mockData';
+import type { RegistroAcceso, Alumno, Retardo } from '../data/mockData';
 
 const months = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'];
 
@@ -20,7 +20,7 @@ type ScanResultType = 'entry' | 'exit' | 'late' | 'denied';
 
 type ScanResult = {
   type: ScanResultType;
-  student: typeof students[0];
+  student: Alumno;
   time: string;
 } | null;
 
@@ -33,20 +33,20 @@ export default function ScanPage() {
   const [activeTab, setActiveTab] = useState<'entrada' | 'salida'>('entrada');
   const [isScanning, setIsScanning] = useState(false);
   const [scanResult, setScanResult] = useState<ScanResult>(null);
-  const [records, setRecords] = useState<ScanRecord[]>(recentRecords);
+  const [records, setRecords] = useState<RegistroAcceso[]>(registrosAcceso);
   const [viewMode, setViewMode] = useState<ViewMode>('scan');
 
   const [manualQuery, setManualQuery] = useState('');
-  const [manualSelected, setManualSelected] = useState<Student | null>(null);
+  const [manualSelected, setManualSelected] = useState<Alumno | null>(null);
   const [showManualDropdown, setShowManualDropdown] = useState(false);
   const [manualSaving, setManualSaving] = useState(false);
 
   const manualResults = useMemo(() => {
     if (!manualQuery || manualSelected) return [];
     const q = manualQuery.toLowerCase();
-    return students.filter(s =>
-      s.nombre.toLowerCase().includes(q) ||
-      s.numControl.toLowerCase().includes(q)
+    return alumnos.filter(s =>
+      s.nombreCompleto.toLowerCase().includes(q) ||
+      s.matricula.toLowerCase().includes(q)
     ).slice(0, 6);
   }, [manualQuery, manualSelected]);
 
@@ -61,27 +61,31 @@ export default function ScanPage() {
     setScanResult(null);
 
     setTimeout(() => {
-      const student = students[Math.floor(Math.random() * students.length)];
+      const randomCred = credenciales[Math.floor(Math.random() * credenciales.length)];
+      const alumno = getAlumnoByCredencialId(randomCred.idCredencial);
       const time = now.toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
 
-      let type: ScanResultType;
-      if (activeTab === 'entrada') {
-        const outcomes: ScanResultType[] = ['entry', 'late', 'denied'];
-        type = outcomes[Math.floor(Math.random() * outcomes.length)];
-      } else {
-        const outcomes: ScanResultType[] = ['exit', 'denied'];
-        type = outcomes[Math.floor(Math.random() * outcomes.length)];
+      if (!randomCred.activa || !alumno) {
+        const fallbackStudent = alumno || alumnos[0];
+        setScanResult({ type: 'denied', student: fallbackStudent, time });
+        setIsScanning(false);
+        return;
       }
 
-      setScanResult({ type, student, time });
+      const type: ScanResultType = activeTab === 'entrada' ? 'entry' : 'exit';
+
+      setScanResult({ type, student: alumno, time });
       setIsScanning(false);
 
-      if (type !== 'denied') {
-        setRecords((prev) => [
-          { id: Date.now(), alumno: student, tipo: (type === 'entry' ? 'entrada' : type === 'exit' ? 'salida' : type === 'late' ? 'retardo' : 'denegado') as ScanRecord['tipo'], hora: time, fecha: '2026-07-10' },
-          ...prev,
-        ].slice(0, 20));
-      }
+      const nowISO = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}T${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}:${String(now.getSeconds()).padStart(2, '0')}`;
+      const tipoEvento = type === 'entry' ? 'ENTRADA' : 'SALIDA';
+      const newRecord: RegistroAcceso = {
+        idRegistro: Date.now(),
+        idCredencial: randomCred.idCredencial,
+        fechaHora: nowISO,
+        tipoEvento,
+      };
+      setRecords(prev => [newRecord, ...prev].slice(0, 20));
     }, 2000);
   };
 
@@ -90,12 +94,13 @@ export default function ScanPage() {
     setManualSaving(true);
     setTimeout(() => {
       const time = now.toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
-      const newRecord: ScanRecord = {
-        id: Date.now(),
-        alumno: manualSelected,
-        tipo: 'salida',
-        hora: time,
-        fecha: '2026-07-10',
+      const nowISO = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}T${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}:${String(now.getSeconds()).padStart(2, '0')}`;
+      const cred = credenciales.find(c => c.idAlumno === manualSelected.idAlumno);
+      const newRecord: RegistroAcceso = {
+        idRegistro: Date.now(),
+        idCredencial: cred?.idCredencial ?? 0,
+        fechaHora: nowISO,
+        tipoEvento: 'SALIDA',
       };
       setRecords(prev => [newRecord, ...prev].slice(0, 20));
       setScanResult({ type: 'exit', student: manualSelected, time });
@@ -110,19 +115,45 @@ export default function ScanPage() {
     switch (type) {
       case 'entry': return { label: 'ENTRADA REGISTRADA', color: '#0F8122', icon: <CheckCircle size={18} color="#0F8122" /> };
       case 'exit': return { label: 'SALIDA REGISTRADA', color: '#1792AB', icon: <CheckCircle size={18} color="#1792AB" /> };
-      case 'late': return { label: 'RETARDO', color: '#1792AB', icon: <AlertTriangle size={18} color="#1792AB" /> };
+      case 'late': return { label: 'FUERA DE HORARIO', color: '#1792AB', icon: <AlertTriangle size={18} color="#1792AB" /> };
       case 'denied': return { label: 'ACCESO DENEGADO', color: '#AB1748', icon: <XCircle size={18} color="#AB1748" /> };
     }
   };
 
   const getRecordTypeLabel = (tipo: string) => {
     switch (tipo) {
-      case 'entrada': return 'Entrada';
-      case 'salida': return 'Salida';
-      case 'retardo': return 'Retardo';
+      case 'ENTRADA': return 'Entrada';
+      case 'SALIDA': return 'Salida';
+      case 'RETARDO': return 'Fuera de horario';
       default: return 'Denegado';
     }
   };
+
+  const displayRecords = useMemo(() => {
+    const accessItems = records.map(r => {
+      const alumno = getAlumnoByCredencialId(r.idCredencial);
+      return {
+        id: r.idRegistro,
+        tipo: r.tipoEvento,
+        time: r.fechaHora.split('T')[1] ?? '',
+        alumnoNombre: alumno?.nombreCompleto ?? 'Desconocido',
+        alumnoGrupo: alumno?.grupo ?? '---',
+      };
+    });
+
+    const retardoItems = retardos.map(ret => {
+      const alumno = getAlumnoById(ret.idAlumno);
+      return {
+        id: ret.idRetardo + 100000,
+        tipo: 'RETARDO' as const,
+        time: `-${ret.minutosRetardo}min`,
+        alumnoNombre: alumno?.nombreCompleto ?? 'Desconocido',
+        alumnoGrupo: alumno?.grupo ?? '---',
+      };
+    });
+
+    return [...accessItems, ...retardoItems].slice(0, 20);
+  }, [records]);
 
   return (
     <div className="scan-page">
@@ -222,14 +253,14 @@ export default function ScanPage() {
               }}>
                 {manualResults.map(s => (
                   <div
-                    key={s.id}
-                    onClick={() => { setManualSelected(s); setManualQuery(s.nombre); setShowManualDropdown(false); }}
+                    key={s.idAlumno}
+                    onClick={() => { setManualSelected(s); setManualQuery(s.nombreCompleto); setShowManualDropdown(false); }}
                     style={{ padding: '10px 14px', cursor: 'pointer', borderBottom: '1px solid #f0efef', transition: 'background 0.1s' }}
                     onMouseEnter={(e) => (e.currentTarget.style.background = '#f8f7f7')}
                     onMouseLeave={(e) => (e.currentTarget.style.background = '#fff')}
                   >
-                    <div style={{ fontWeight: 600, fontSize: 13, color: '#1C1819' }}>{s.nombre}</div>
-                    <div style={{ fontSize: 11, color: '#85787A' }}>{s.numControl} · Grupo {s.grupo} · {s.turno}</div>
+                    <div style={{ fontWeight: 600, fontSize: 13, color: '#1C1819' }}>{s.nombreCompleto}</div>
+                    <div style={{ fontSize: 11, color: '#85787A' }}>{s.matricula} · Grupo {s.grupo} · {s.turno}</div>
                   </div>
                 ))}
               </div>
@@ -238,8 +269,8 @@ export default function ScanPage() {
               <div style={{ marginTop: 8, padding: '10px 12px', background: '#e8f5e9', borderRadius: 8, fontSize: 13, color: '#0F8122', fontWeight: 500, display: 'flex', alignItems: 'center', gap: 8 }}>
                 <CheckCircle size={16} />
                 <div>
-                  <div style={{ fontWeight: 600 }}>{manualSelected.nombre}</div>
-                  <div style={{ fontSize: 11, opacity: 0.8 }}>{manualSelected.numControl} · Grupo {manualSelected.grupo} · {manualSelected.turno}</div>
+                  <div style={{ fontWeight: 600 }}>{manualSelected.nombreCompleto}</div>
+                  <div style={{ fontSize: 11, opacity: 0.8 }}>{manualSelected.matricula} · Grupo {manualSelected.grupo} · {manualSelected.turno}</div>
                 </div>
               </div>
             )}
@@ -270,8 +301,8 @@ export default function ScanPage() {
               </div>
             </div>
             <div className="scan-result-info">
-              <div className="scan-result-name">{scanResult.student.nombre}</div>
-              <div className="scan-result-control">{scanResult.student.numControl}</div>
+              <div className="scan-result-name">{scanResult.student.nombreCompleto}</div>
+              <div className="scan-result-control">{scanResult.student.matricula}</div>
               <div className="scan-result-group">
                 Grupo {scanResult.student.grupo}
                 <span className="badge badge--info">{scanResult.student.capacitacion}</span>
@@ -289,7 +320,7 @@ export default function ScanPage() {
           {scanResult.type === 'late' && (
             <div className="alert alert--warning" style={{ marginTop: 12 }}>
               <AlertTriangle size={16} />
-              <span>Entrada fuera de horario. Se registrara como retardo.</span>
+              <span>Entrada fuera del horario de clase.</span>
             </div>
           )}
           {scanResult.type === 'denied' && (
@@ -310,13 +341,13 @@ export default function ScanPage() {
       <div className="scan-recent">
         <div className="scan-recent-title">Ultimos registros</div>
         <div className="scan-recent-list">
-          {records.map((record) => (
+          {displayRecords.map((record) => (
             <div key={record.id} className="scan-recent-item">
-              <div className={`scan-recent-dot ${record.tipo === 'entrada' ? 'entry' : record.tipo === 'salida' ? 'exit' : record.tipo === 'retardo' ? 'late' : 'denied'}`} />
-              <span className="scan-recent-time">{record.hora}</span>
-              <span className="scan-recent-name">{record.alumno.nombre}</span>
-              <span className="scan-recent-group">{record.alumno.grupo}</span>
-              <span className={`scan-recent-type ${record.tipo}`}>{getRecordTypeLabel(record.tipo)}</span>
+              <div className={`scan-recent-dot ${record.tipo === 'ENTRADA' ? 'entry' : record.tipo === 'SALIDA' ? 'exit' : record.tipo === 'RETARDO' ? 'late' : 'denied'}`} />
+              <span className="scan-recent-time">{record.time}</span>
+              <span className="scan-recent-name">{record.alumnoNombre}</span>
+              <span className="scan-recent-group">{record.alumnoGrupo}</span>
+              <span className={`scan-recent-type ${record.tipo.toLowerCase()}`}>{getRecordTypeLabel(record.tipo)}</span>
             </div>
           ))}
         </div>

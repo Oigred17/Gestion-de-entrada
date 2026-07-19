@@ -1,24 +1,20 @@
 import { useState, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Search, Plus, Eye, Lock, Trash2, RefreshCw, Nfc, Check, X, AlertTriangle, Shield, Download, Loader2, User } from 'lucide-react';
-import { credentials as initialCredentials, students } from '../data/mockData';
+import { Search, Plus, Eye, Trash2, RefreshCw, Nfc, Check, X, AlertTriangle, Shield, Download, Loader2, User } from 'lucide-react';
+import { credenciales as initialCredenciales, alumnos } from '../data/mockData';
 import { generateCredentialsPDF } from '../utils/generateCredentialsPDF';
 
-type CredentialEstado = 'Activa' | 'Inactiva' | 'Bloqueada' | 'Pendiente';
+type CredencialEstado = 'Activa' | 'Inactiva';
 
-const estadoBadgeClass: Record<CredentialEstado, string> = {
+const estadoBadgeClass: Record<CredencialEstado, string> = {
   Activa: 'badge badge--active',
   Inactiva: 'badge badge--inactive',
-  Bloqueada: 'badge badge--alert',
-  Pendiente: 'badge badge--pending',
 };
 
-const tabFilters: { label: string; key: CredentialEstado | 'Todas' }[] = [
+const tabFilters: { label: string; key: CredencialEstado | 'Todas' }[] = [
   { label: 'Todas', key: 'Todas' },
   { label: 'Activas', key: 'Activa' },
   { label: 'Inactivas', key: 'Inactiva' },
-  { label: 'Bloqueadas', key: 'Bloqueada' },
-  { label: 'Pendientes', key: 'Pendiente' },
 ];
 
 interface Reposition {
@@ -35,7 +31,7 @@ const repositionsData: Reposition[] = [
 ];
 
 type ConfirmType = 'simple' | 'password';
-type ConfirmAction = 'bloquear' | 'desbloquear' | 'desactivar' | 'reasignar' | 'escanear' | null;
+type ConfirmAction = 'activar' | 'desactivar' | 'reasignar' | 'escanear' | null;
 
 interface ConfirmState {
   open: boolean;
@@ -48,7 +44,7 @@ interface ConfirmState {
 
 interface BatchResult {
   studentId: number;
-  chipId: string;
+  uidNfc: string;
   success: boolean;
 }
 
@@ -59,10 +55,10 @@ function generateChipId(): string {
 
 export default function CredentialsPage() {
   const navigate = useNavigate();
-  const [localStudents, setLocalStudents] = useState(students);
-  const [creds, setCreds] = useState(initialCredentials);
+  const [localStudents, setLocalStudents] = useState(alumnos);
+  const [creds, setCreds] = useState(initialCredenciales);
   const [search, setSearch] = useState('');
-  const [activeTab, setActiveTab] = useState<CredentialEstado | 'Todas'>('Todas');
+  const [activeTab, setActiveTab] = useState<CredencialEstado | 'Todas'>('Todas');
   const [showAssignModal, setShowAssignModal] = useState(false);
   const [studentQuery, setStudentQuery] = useState('');
   const [selectedStudentId, setSelectedStudentId] = useState<number | null>(null);
@@ -112,19 +108,19 @@ export default function CredentialsPage() {
     setTimeout(() => setToast(null), 3000);
   };
 
-  const getStudent = (id: number) => localStudents.find((s) => s.id === id);
-  const getStudentName = (id: number) => getStudent(id)?.nombre ?? 'Desconocido';
-  const getStudentControl = (id: number) => getStudent(id)?.numControl ?? '---';
+  const getStudent = (id: number) => localStudents.find((s) => s.idAlumno === id);
+  const getStudentName = (id: number) => getStudent(id)?.nombreCompleto ?? 'Desconocido';
+  const getStudentControl = (id: number) => getStudent(id)?.matricula ?? '---';
   const getStudentGroup = (id: number) => getStudent(id)?.grupo ?? '---';
 
   const filtered = creds.filter((c) => {
-    const matchTab = activeTab === 'Todas' || c.estado === activeTab;
-    const name = getStudentName(c.alumnoId).toLowerCase();
-    const matchSearch = search === '' || name.includes(search.toLowerCase()) || c.chipId.toLowerCase().includes(search.toLowerCase()) || String(c.alumnoId).includes(search);
+    const matchTab = activeTab === 'Todas' || (activeTab === 'Activa' ? c.activa : !c.activa);
+    const name = getStudentName(c.idAlumno).toLowerCase();
+    const matchSearch = search === '' || name.includes(search.toLowerCase()) || c.uidNfc.toLowerCase().includes(search.toLowerCase()) || String(c.idAlumno).includes(search);
     return matchTab && matchSearch;
   });
 
-  const countByEstado = (estado: CredentialEstado) => creds.filter((c) => c.estado === estado).length;
+  const countByEstado = (estado: CredencialEstado) => creds.filter((c) => (estado === 'Activa' ? c.activa : !c.activa)).length;
 
   const handleSimulateScan = () => {
     setConfirm({
@@ -141,28 +137,6 @@ export default function CredentialsPage() {
     setPanelMode('view');
   };
 
-  const handleBlock = (credId: number) => {
-    setConfirm({
-      open: true,
-      type: 'password',
-      action: 'bloquear',
-      title: 'Bloquear credencial',
-      message: 'Esta accion bloqueara la credencial NFC y el alumno no podra acceder al plantel. Ingrese la contraseña del sistema para confirmar.',
-      credId,
-    });
-  };
-
-  const handleDesbloquear = (credId: number) => {
-    setConfirm({
-      open: true,
-      type: 'password',
-      action: 'desbloquear',
-      title: 'Desbloquear credencial',
-      message: 'Esta accion desbloqueara la credencial NFC y el alumno podra acceder al plantel nuevamente. Ingrese la contraseña del sistema para confirmar.',
-      credId,
-    });
-  };
-
   const handleDeactivate = (credId: number) => {
     setConfirm({
       open: true,
@@ -170,6 +144,17 @@ export default function CredentialsPage() {
       action: 'desactivar',
       title: 'Desactivar credencial',
       message: 'Esta accion desactivara permanentemente la credencial. Ingrese la contraseña del sistema para confirmar.',
+      credId,
+    });
+  };
+
+  const handleActivate = (credId: number) => {
+    setConfirm({
+      open: true,
+      type: 'password',
+      action: 'activar',
+      title: 'Activar credencial',
+      message: 'Esta accion activara la credencial NFC y el alumno podra acceder al plantel. Ingrese la contraseña del sistema para confirmar.',
       credId,
     });
   };
@@ -189,18 +174,15 @@ export default function CredentialsPage() {
       return;
     }
 
-    if (confirm.action === 'bloquear' && confirm.credId) {
-      setCreds(prev => prev.map(c => c.id === confirm.credId ? { ...c, estado: 'Bloqueada' as const } : c));
-      showToast('Credencial bloqueada correctamente');
-    } else if (confirm.action === 'desbloquear' && confirm.credId) {
-      setCreds(prev => prev.map(c => c.id === confirm.credId ? { ...c, estado: 'Activa' as const } : c));
-      showToast('Credencial desbloqueada correctamente');
+    if (confirm.action === 'activar' && confirm.credId) {
+      setCreds(prev => prev.map(c => c.id === confirm.credId ? { ...c, activa: true } : c));
+      showToast('Credencial activada correctamente');
     } else if (confirm.action === 'desactivar' && confirm.credId) {
-      setCreds(prev => prev.map(c => c.id === confirm.credId ? { ...c, estado: 'Inactiva' as const } : c));
+      setCreds(prev => prev.map(c => c.id === confirm.credId ? { ...c, activa: false } : c));
       showToast('Credencial desactivada');
     } else if (confirm.action === 'reasignar' && confirm.credId) {
       const newChip = generateChipId();
-      setCreds(prev => prev.map(c => c.id === confirm.credId ? { ...c, chipId: newChip, estado: 'Activa' as const } : c));
+      setCreds(prev => prev.map(c => c.id === confirm.credId ? { ...c, uidNfc: newChip, activa: true } : c));
       showToast(`Credencial reasignada. Nuevo chip: ${newChip}`);
     } else if (confirm.action === 'escanear') {
       const scannedChip = generateChipId();
@@ -280,19 +262,19 @@ export default function CredentialsPage() {
 
   const handleExportPDF = () => {
     if (exportMode === 'alumno' && exportStudentId !== 'none') {
-      const student = localStudents.find(s => s.id === Number(exportStudentId));
+      const student = localStudents.find(s => s.idAlumno === Number(exportStudentId));
       if (student) {
         generateCredentialsPDF({
           students: [student],
-          groupName: `alumno_${student.numControl}`,
+          groupName: `alumno_${student.matricula}`,
           reposicion: isReposicion,
         });
-        showToast(`PDF generado: ${isReposicion ? 'reposicion' : 'credenciales'}_alumno_${student.numControl}.pdf`);
+        showToast(`PDF generado: ${isReposicion ? 'reposicion' : 'credenciales'}_alumno_${student.matricula}.pdf`);
       }
     } else {
       const toExport = exportGroupId === 'all'
-        ? localStudents.filter(s => s.estado === 'Activo')
-        : localStudents.filter(s => s.grupo === exportGroupId && s.estado === 'Activo');
+        ? localStudents.filter(s => s.activo)
+        : localStudents.filter(s => s.grupo === exportGroupId && s.activo);
       const label = exportGroupId === 'all' ? 'general' : `grupo_${exportGroupId}`;
       generateCredentialsPDF({
         students: toExport,
@@ -305,9 +287,9 @@ export default function CredentialsPage() {
   };
 
   const filteredExportStudents = exportStudentQuery
-    ? localStudents.filter(s => s.estado === 'Activo' && (
-        s.nombre.toLowerCase().includes(exportStudentQuery.toLowerCase()) ||
-        s.numControl.toLowerCase().includes(exportStudentQuery.toLowerCase()) ||
+    ? localStudents.filter(s => s.activo && (
+        s.nombreCompleto.toLowerCase().includes(exportStudentQuery.toLowerCase()) ||
+        s.matricula.toLowerCase().includes(exportStudentQuery.toLowerCase()) ||
         s.grupo.toLowerCase().includes(exportStudentQuery.toLowerCase())
       ))
     : [];
@@ -315,17 +297,17 @@ export default function CredentialsPage() {
   const filteredStudents = localStudents.filter((s) => {
     if (!studentQuery) return false;
     const q = studentQuery.toLowerCase();
-    return s.nombre.toLowerCase().includes(q) || s.numControl.toLowerCase().includes(q) || s.grupo.toLowerCase().includes(q);
+    return s.nombreCompleto.toLowerCase().includes(q) || s.matricula.toLowerCase().includes(q) || s.grupo.toLowerCase().includes(q);
   });
 
-  const canStartGroup = assignGroupId !== '' && localStudents.filter(s => s.grupo === assignGroupId && s.estado === 'Activo').length > 0;
+  const canStartGroup = assignGroupId !== '' && localStudents.filter(s => s.grupo === assignGroupId && s.activo).length > 0;
   const currentBatchStudent = batchStudents[batchIndex];
   const batchComplete = batchIndex >= batchStudents.length;
 
   const startBatchProcess = () => {
     const groupStudents = localStudents
-      .filter(s => s.grupo === assignGroupId && s.estado === 'Activo')
-      .map(s => s.id);
+      .filter(s => s.grupo === assignGroupId && s.activo)
+      .map(s => s.idAlumno);
     setBatchStudents(groupStudents);
     setBatchIndex(0);
     setBatchResults([]);
@@ -389,7 +371,7 @@ export default function CredentialsPage() {
         <div className="toolbar-center">
           <div className="input-wrapper">
             <Search size={18} className="input-icon" />
-            <input type="text" className="input input--search" placeholder="Buscar por alumno, chip ID..." value={search} onChange={(e) => setSearch(e.target.value)} />
+            <input type="text" className="input input--search" placeholder="Buscar por alumno, UID NFC..." value={search} onChange={(e) => setSearch(e.target.value)} />
           </div>
         </div>
         <div className="toolbar-right">
@@ -420,28 +402,25 @@ export default function CredentialsPage() {
         <table className="table">
           <thead>
             <tr>
-              <th>#</th><th>Alumno</th><th>No. Control</th><th>ID Chip NFC</th><th>Fecha Asignacion</th><th>Estado</th><th>Acciones</th>
+              <th>#</th><th>Alumno</th><th>Matricula</th><th>UID NFC</th><th>Fecha Emision</th><th>Estado</th><th>Acciones</th>
             </tr>
           </thead>
           <tbody>
             {filtered.map((cred, index) => (
               <tr key={cred.id}>
                 <td>{index + 1}</td>
-                <td style={{ fontWeight: 500 }}>{getStudentName(cred.alumnoId)}</td>
-                <td style={{ fontFamily: 'var(--font-mono)' }}>{getStudentControl(cred.alumnoId)}</td>
-                <td style={{ fontFamily: 'var(--font-mono)', fontSize: 13 }}>{cred.chipId}</td>
-                <td>{cred.fechaAsignacion}</td>
-                <td><span className={estadoBadgeClass[cred.estado as CredentialEstado]}>{cred.estado}</span></td>
+                <td style={{ fontWeight: 500 }}>{getStudentName(cred.idAlumno)}</td>
+                <td style={{ fontFamily: 'var(--font-mono)' }}>{getStudentControl(cred.idAlumno)}</td>
+                <td style={{ fontFamily: 'var(--font-mono)', fontSize: 13 }}>{cred.uidNfc}</td>
+                <td>{cred.fechaEmision}</td>
+                <td><span className={estadoBadgeClass[cred.activa ? 'Activa' : 'Inactiva']}>{cred.activa ? 'Activa' : 'Inactiva'}</span></td>
                 <td>
                   <div style={{ display: 'flex', gap: 4 }}>
                     <button className="table-action" title="Ver detalle" onClick={() => handleView(cred.id)}><Eye size={18} /></button>
-                    {cred.estado === 'Bloqueada' ? (
-                      <button className="table-action" title="Desbloquear" style={{ color: '#0F8122' }} onClick={() => handleDesbloquear(cred.id)}><RefreshCw size={18} /></button>
-                    ) : cred.estado !== 'Inactiva' ? (
-                      <button className="table-action" title="Bloquear" onClick={() => handleBlock(cred.id)}><Lock size={18} /></button>
-                    ) : null}
-                    {cred.estado !== 'Inactiva' && (
+                    {cred.activa ? (
                       <button className="table-action" title="Desactivar" onClick={() => handleDeactivate(cred.id)}><Trash2 size={18} /></button>
+                    ) : (
+                      <button className="table-action" title="Activar" style={{ color: '#0F8122' }} onClick={() => handleActivate(cred.id)}><RefreshCw size={18} /></button>
                     )}
                     <button className="table-action" title="Reasignar chip" onClick={() => handleReassign(cred.id)}><RefreshCw size={18} /></button>
                   </div>
@@ -511,15 +490,15 @@ export default function CredentialsPage() {
                       <div className="input-group" style={{ marginBottom: 16 }}>
                         <div className="input-wrapper">
                           <Search size={18} className="input-icon" />
-                          <input type="text" className="input input--search" placeholder="Buscar por nombre, grupo o numero de control..." value={studentQuery} onChange={(e) => setStudentQuery(e.target.value)} />
+                          <input type="text" className="input input--search" placeholder="Buscar por nombre, grupo o matricula..." value={studentQuery} onChange={(e) => setStudentQuery(e.target.value)} />
                         </div>
                       </div>
                       {studentQuery && filteredStudents.length > 0 && (
                         <div style={{ border: '1px solid #CAC6C7', borderRadius: 8, maxHeight: 200, overflowY: 'auto' }}>
                           {filteredStudents.map((s) => (
-                            <div key={s.id} style={{ padding: '10px 16px', cursor: 'pointer', background: selectedStudentId === s.id ? '#FEEBEE' : '#fff', borderBottom: '1px solid #F0EFEF' }} onClick={() => { setSelectedStudentId(s.id); setStudentQuery(s.nombre); }}>
-                              <div style={{ fontWeight: 600, fontSize: 14 }}>{s.nombre}</div>
-                              <div style={{ fontSize: 13, color: '#5F5657' }}>Grupo: {s.grupo} &mdash; No. Control: {s.numControl}</div>
+                            <div key={s.idAlumno} style={{ padding: '10px 16px', cursor: 'pointer', background: selectedStudentId === s.idAlumno ? '#FEEBEE' : '#fff', borderBottom: '1px solid #F0EFEF' }} onClick={() => { setSelectedStudentId(s.idAlumno); setStudentQuery(s.nombreCompleto); }}>
+                              <div style={{ fontWeight: 600, fontSize: 14 }}>{s.nombreCompleto}</div>
+                              <div style={{ fontSize: 13, color: '#5F5657' }}>Grupo: {s.grupo} &mdash; Matricula: {s.matricula}</div>
                             </div>
                           ))}
                         </div>
@@ -528,7 +507,7 @@ export default function CredentialsPage() {
                         <div style={{ marginTop: 16, padding: 16, background: '#F0EFEF', borderRadius: 8 }}>
                           <div style={{ fontSize: 12, color: '#5F5657', marginBottom: 4 }}>Alumno seleccionado</div>
                           <div style={{ fontWeight: 700, fontSize: 16 }}>{getStudentName(selectedStudentId)}</div>
-                          <div style={{ fontSize: 14, color: '#5F5657' }}>No. Control: {getStudentControl(selectedStudentId)} &mdash; Grupo: {getStudentGroup(selectedStudentId)}</div>
+                          <div style={{ fontSize: 14, color: '#5F5657' }}>Matricula: {getStudentControl(selectedStudentId)} &mdash; Grupo: {getStudentGroup(selectedStudentId)}</div>
                         </div>
                       )}
                     </div>
@@ -541,7 +520,7 @@ export default function CredentialsPage() {
                         <select className="select" value={assignGroupId} onChange={(e) => setAssignGroupId(e.target.value)}>
                           <option value="">Elegir un grupo</option>
                           {uniqueGroups.map((g) => {
-                            const count = localStudents.filter((s) => s.grupo === g && s.estado === 'Activo').length;
+                            const count = localStudents.filter((s) => s.grupo === g && s.activo).length;
                             return <option key={g} value={g}>Grupo {g} ({count} alumnos)</option>;
                           })}
                         </select>
@@ -550,7 +529,7 @@ export default function CredentialsPage() {
                         <div style={{ padding: 16, background: '#F0EFEF', borderRadius: 8 }}>
                           <div style={{ fontSize: 12, color: '#5F5657', marginBottom: 4 }}>Alumnos del grupo</div>
                           <div style={{ fontWeight: 700, fontSize: 16 }}>
-                            {localStudents.filter(s => s.grupo === assignGroupId && s.estado === 'Activo').length} alumnos activos
+                            {localStudents.filter(s => s.grupo === assignGroupId && s.activo).length} alumnos activos
                           </div>
                           <div style={{ fontSize: 13, color: '#5F5657', marginTop: 4 }}>
                             Se escribiran y verificaran los chips NFC uno por uno
@@ -567,7 +546,7 @@ export default function CredentialsPage() {
                 <div style={{ textAlign: 'center', padding: 24 }}>
                   <div style={{ marginBottom: 16, padding: 12, background: '#FEEBEE', borderRadius: 8 }}>
                     <div style={{ fontWeight: 600, fontSize: 14 }}>{getStudentName(selectedStudentId!)}</div>
-                    <div style={{ fontSize: 13, color: '#5F5657' }}>No. Control: {getStudentControl(selectedStudentId!)}</div>
+                    <div style={{ fontSize: 13, color: '#5F5657' }}>Matricula: {getStudentControl(selectedStudentId!)}</div>
                   </div>
                   <NfcZone state={writing ? 'writing' : written ? 'written' : 'idle'} />
                   <p style={{ fontSize: 16, color: '#5F5657', marginBottom: 16 }}>
@@ -603,7 +582,7 @@ export default function CredentialsPage() {
                           <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 12px', background: result.success ? '#F0FDF4' : '#FEF2F2', borderRadius: 6 }}>
                             {result.success ? <Check size={16} color="#0F8122" /> : <X size={16} color="#AB1748" />}
                             <span style={{ fontSize: 13, fontWeight: 500 }}>{getStudentName(result.studentId)}</span>
-                            <span style={{ fontSize: 12, color: '#5F5657', marginLeft: 'auto', fontFamily: 'var(--font-mono)' }}>{result.chipId}</span>
+                            <span style={{ fontSize: 12, color: '#5F5657', marginLeft: 'auto', fontFamily: 'var(--font-mono)' }}>{result.uidNfc}</span>
                           </div>
                         ))}
                       </div>
@@ -618,7 +597,7 @@ export default function CredentialsPage() {
                       </div>
                       <div style={{ marginBottom: 16, padding: 12, background: '#FEEBEE', borderRadius: 8 }}>
                         <div style={{ fontWeight: 600, fontSize: 14 }}>{getStudentName(currentBatchStudent)}</div>
-                        <div style={{ fontSize: 13, color: '#5F5657' }}>No. Control: {getStudentControl(currentBatchStudent)}</div>
+                        <div style={{ fontSize: 13, color: '#5F5657' }}>Matricula: {getStudentControl(currentBatchStudent)}</div>
                       </div>
                       <NfcZone state={batchWriting ? 'writing' : batchWritten ? 'written' : 'idle'} />
                       <p style={{ fontSize: 16, color: '#5F5657', marginBottom: 16 }}>
@@ -645,7 +624,7 @@ export default function CredentialsPage() {
                 <div style={{ textAlign: 'center', padding: 24 }}>
                   <div style={{ marginBottom: 16, padding: 12, background: '#FEEBEE', borderRadius: 8 }}>
                     <div style={{ fontWeight: 600, fontSize: 14 }}>{getStudentName(selectedStudentId!)}</div>
-                    <div style={{ fontSize: 13, color: '#5F5657' }}>No. Control: {getStudentControl(selectedStudentId!)}</div>
+                    <div style={{ fontSize: 13, color: '#5F5657' }}>Matricula: {getStudentControl(selectedStudentId!)}</div>
                   </div>
                   <NfcZone state={verifying ? 'verifying' : verified ? 'verified' : 'idle'} />
                   <p style={{ fontSize: 16, color: '#5F5657', marginBottom: 16 }}>
@@ -691,7 +670,7 @@ export default function CredentialsPage() {
                           <div style={{ fontSize: 13, fontWeight: 600 }}>{getStudentName(result.studentId)}</div>
                           <div style={{ fontSize: 12, color: '#5F5657' }}>Control: {getStudentControl(result.studentId)}</div>
                         </div>
-                        <span style={{ fontSize: 12, fontFamily: 'var(--font-mono)', fontWeight: 700, color: '#0F8122' }}>{result.chipId}</span>
+                        <span style={{ fontSize: 12, fontFamily: 'var(--font-mono)', fontWeight: 700, color: '#0F8122' }}>{result.uidNfc}</span>
                       </div>
                     ))}
                   </div>
@@ -726,7 +705,7 @@ export default function CredentialsPage() {
               )}
               {assignStep === 2 && assignMode === 'grupo' && !batchComplete && batchVerified && (
                 <button className="btn btn--primary" onClick={() => {
-                  setBatchResults(prev => [...prev, { studentId: currentBatchStudent, chipId: batchChipId, success: true }]);
+                  setBatchResults(prev => [...prev, { studentId: currentBatchStudent, uidNfc: batchChipId, success: true }]);
                   setBatchWriting(false);
                   setBatchWritten(false);
                   setBatchVerifying(false);
@@ -750,10 +729,10 @@ export default function CredentialsPage() {
                     const newId = Math.max(0, ...creds.map(c => c.id)) + 1;
                     setCreds(prev => [...prev, {
                       id: newId,
-                      alumnoId: selectedStudentId!,
-                      chipId: chipId,
-                      fechaAsignacion: new Date().toISOString().split('T')[0],
-                      estado: 'Activa' as const,
+                      idAlumno: selectedStudentId!,
+                      uidNfc: chipId,
+                      fechaEmision: new Date().toISOString().split('T')[0],
+                      activa: true,
                     }]);
                     showToast(`Credencial asignada a ${getStudentName(selectedStudentId!)}`);
                     handleCloseAssignModal();
@@ -770,10 +749,10 @@ export default function CredentialsPage() {
                     batchResults.forEach((result, i) => {
                       setCreds(prev => [...prev, {
                         id: baseId + i,
-                        alumnoId: result.studentId,
-                        chipId: result.chipId,
-                        fechaAsignacion: new Date().toISOString().split('T')[0],
-                        estado: 'Activa' as const,
+                        idAlumno: result.studentId,
+                        uidNfc: result.uidNfc,
+                        fechaEmision: new Date().toISOString().split('T')[0],
+                        activa: true,
                       }]);
                     });
                     showToast(`${batchResults.filter(r => r.success).length} credenciales asignadas correctamente`);
@@ -829,8 +808,7 @@ export default function CredentialsPage() {
                 onClick={handleConfirmAction}
                 disabled={confirm.type === 'password' && !passwordInput}
               >
-                {confirm.action === 'bloquear' && <><Lock size={16} /> Bloquear</>}
-                {confirm.action === 'desbloquear' && <><RefreshCw size={16} /> Desbloquear</>}
+                {confirm.action === 'activar' && <><RefreshCw size={16} /> Activar</>}
                 {confirm.action === 'desactivar' && <><Trash2 size={16} /> Desactivar</>}
                 {confirm.action === 'reasignar' && <><RefreshCw size={16} /> Reasignar</>}
                 {confirm.action === 'escanear' && <><Nfc size={16} /> Escanear</>}
@@ -875,7 +853,7 @@ export default function CredentialsPage() {
 
               {exportMode === 'alumno' && (
                 <div className="input-group" style={{ marginBottom: 16 }}>
-                  <label className="field-label" style={{ marginBottom: 8, display: 'block' }}>Buscar alumno por nombre, No. Control o grupo</label>
+                  <label className="field-label" style={{ marginBottom: 8, display: 'block' }}>Buscar alumno por nombre, Matricula o grupo</label>
                   <div className="input-wrapper">
                     <Search size={18} className="input-icon" />
                     <input
@@ -890,12 +868,12 @@ export default function CredentialsPage() {
                     <div style={{ border: '1px solid #CAC6C7', borderRadius: 8, maxHeight: 200, overflowY: 'auto', marginTop: 8 }}>
                       {filteredExportStudents.map((s) => (
                         <div
-                          key={s.id}
-                          style={{ padding: '10px 16px', cursor: 'pointer', background: exportStudentId === String(s.id) ? '#FEEBEE' : '#fff', borderBottom: '1px solid #F0EFEF' }}
-                          onClick={() => { setExportStudentId(String(s.id)); setExportStudentQuery(s.nombre); }}
+                          key={s.idAlumno}
+                          style={{ padding: '10px 16px', cursor: 'pointer', background: exportStudentId === String(s.idAlumno) ? '#FEEBEE' : '#fff', borderBottom: '1px solid #F0EFEF' }}
+                          onClick={() => { setExportStudentId(String(s.idAlumno)); setExportStudentQuery(s.nombreCompleto); }}
                         >
-                          <div style={{ fontWeight: 600, fontSize: 14 }}>{s.nombre}</div>
-                          <div style={{ fontSize: 13, color: '#5F5657' }}>No. Control: {s.numControl} &mdash; Grupo: {s.grupo}</div>
+                          <div style={{ fontWeight: 600, fontSize: 14 }}>{s.nombreCompleto}</div>
+                          <div style={{ fontSize: 13, color: '#5F5657' }}>Matricula: {s.matricula} &mdash; Grupo: {s.grupo}</div>
                         </div>
                       ))}
                     </div>
@@ -908,8 +886,8 @@ export default function CredentialsPage() {
                   {exportStudentId !== 'none' && (
                     <div style={{ marginTop: 8, padding: 12, background: '#FEEBEE', borderRadius: 8 }}>
                       <div style={{ fontSize: 12, color: '#5F5657', marginBottom: 2 }}>Alumno seleccionado</div>
-                      <div style={{ fontWeight: 700, fontSize: 14 }}>{localStudents.find(s => s.id === Number(exportStudentId))?.nombre}</div>
-                      <div style={{ fontSize: 13, color: '#5F5657' }}>No. Control: {localStudents.find(s => s.id === Number(exportStudentId))?.numControl}</div>
+                      <div style={{ fontWeight: 700, fontSize: 14 }}>{localStudents.find(s => s.idAlumno === Number(exportStudentId))?.nombreCompleto}</div>
+                      <div style={{ fontSize: 13, color: '#5F5657' }}>Matricula: {localStudents.find(s => s.idAlumno === Number(exportStudentId))?.matricula}</div>
                     </div>
                   )}
                 </div>
@@ -923,9 +901,9 @@ export default function CredentialsPage() {
                     value={exportGroupId}
                     onChange={(e) => setExportGroupId(e.target.value)}
                   >
-                    <option value="all">Todos los alumnos activos ({localStudents.filter(s => s.estado === 'Activo').length})</option>
+                    <option value="all">Todos los alumnos activos ({localStudents.filter(s => s.activo).length})</option>
                     {uniqueGroups.map((g) => {
-                      const count = localStudents.filter((s) => s.grupo === g && s.estado === 'Activo').length;
+                      const count = localStudents.filter((s) => s.grupo === g && s.activo).length;
                       return (
                         <option key={g} value={g}>
                           Grupo {g} ({count} alumnos)
@@ -981,14 +959,12 @@ export default function CredentialsPage() {
       {selectedCredentialId !== null && (() => {
         const cred = creds.find(c => c.id === selectedCredentialId);
         if (!cred) return null;
-        const student = getStudent(cred.alumnoId);
+        const student = getStudent(cred.idAlumno);
         if (!student) return null;
 
         const estadoBadge: Record<string, string> = {
           Activa: 'badge badge--active',
           Inactiva: 'badge badge--inactive',
-          Bloqueada: 'badge badge--alert',
-          Pendiente: 'badge badge--pending',
         };
 
         const closePanel = () => { setSelectedCredentialId(null); setPanelMode('view'); };
@@ -1004,7 +980,7 @@ export default function CredentialsPage() {
         };
 
         const handleConfirmReassign = () => {
-          setCreds(prev => prev.map(c => c.id === cred.id ? { ...c, chipId: newChipId, estado: 'Activa' as const } : c));
+          setCreds(prev => prev.map(c => c.id === cred.id ? { ...c, uidNfc: newChipId, activa: true } : c));
           showToast(`Chip reasignado correctamente. Nuevo ID: ${newChipId}`);
           closePanel();
         };
@@ -1031,8 +1007,8 @@ export default function CredentialsPage() {
                   <User size={36} color="#85787A" />
                 </div>
                 <div style={{ flex: 1 }}>
-                  <div style={{ fontSize: 18, fontWeight: 700, color: '#1C1819' }}>{student.nombre}</div>
-                  <div style={{ fontSize: 16, fontFamily: 'monospace', color: '#EB2466', marginTop: 2 }}>{student.numControl}</div>
+                  <div style={{ fontSize: 18, fontWeight: 700, color: '#1C1819' }}>{student.nombreCompleto}</div>
+                  <div style={{ fontSize: 16, fontFamily: 'monospace', color: '#EB2466', marginTop: 2 }}>{student.matricula}</div>
                   <div style={{ fontSize: 13, color: '#5F5657', marginTop: 2 }}>Grupo: {student.grupo}</div>
                 </div>
               </div>
@@ -1043,20 +1019,20 @@ export default function CredentialsPage() {
                   <div style={{ padding: '0 32px', marginBottom: 24 }}>
                     <h3 style={{ fontSize: 14, fontWeight: 600, color: '#EB2466', textTransform: 'uppercase', marginBottom: 12, letterSpacing: 0.5 }}>Informacion general</h3>
                     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px 24px', fontSize: 14 }}>
-                      <div><span style={{ color: '#5F5657', fontSize: 12 }}>Nombre</span><div style={{ fontWeight: 500 }}>{student.nombre}</div></div>
-                      <div><span style={{ color: '#5F5657', fontSize: 12 }}>No. Control</span><div style={{ fontWeight: 500, fontFamily: 'monospace' }}>{student.numControl}</div></div>
+                      <div><span style={{ color: '#5F5657', fontSize: 12 }}>Nombre</span><div style={{ fontWeight: 500 }}>{student.nombreCompleto}</div></div>
+                      <div><span style={{ color: '#5F5657', fontSize: 12 }}>Matricula</span><div style={{ fontWeight: 500, fontFamily: 'monospace' }}>{student.matricula}</div></div>
                       <div><span style={{ color: '#5F5657', fontSize: 12 }}>Grupo</span><div style={{ fontWeight: 500 }}>{student.grupo}</div></div>
                       <div><span style={{ color: '#5F5657', fontSize: 12 }}>Capacitacion</span><div style={{ fontWeight: 500 }}>{student.capacitacion}</div></div>
                       <div><span style={{ color: '#5F5657', fontSize: 12 }}>Turno</span><div style={{ fontWeight: 500 }}>{student.turno}</div></div>
-                      <div><span style={{ color: '#5F5657', fontSize: 12 }}>Estado</span><div><span style={{ display: 'inline-block', padding: '2px 10px', borderRadius: 12, fontSize: 12, fontWeight: 600, background: student.estado === 'Activo' ? '#FEEBEE' : '#F0EFEF', color: student.estado === 'Activo' ? '#0F8122' : '#5F5657' }}>{student.estado}</span></div></div>
+                      <div><span style={{ color: '#5F5657', fontSize: 12 }}>Estado</span><div><span style={{ display: 'inline-block', padding: '2px 10px', borderRadius: 12, fontSize: 12, fontWeight: 600, background: student.activo ? '#FEEBEE' : '#F0EFEF', color: student.activo ? '#0F8122' : '#5F5657' }}>{student.activo ? 'Activo' : 'Inactivo'}</span></div></div>
                     </div>
                   </div>
                   <div style={{ padding: '0 32px', marginBottom: 24 }}>
                     <h3 style={{ fontSize: 14, fontWeight: 600, color: '#EB2466', textTransform: 'uppercase', marginBottom: 12, letterSpacing: 0.5 }}>Credencial NFC</h3>
                     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px 24px', fontSize: 14 }}>
-                      <div><span style={{ color: '#5F5657', fontSize: 12 }}>ID Chip</span><div style={{ fontWeight: 500, fontFamily: 'monospace', color: '#0F8122' }}>{cred.chipId}</div></div>
-                      <div><span style={{ color: '#5F5657', fontSize: 12 }}>Fecha asignacion</span><div style={{ fontWeight: 500 }}>{cred.fechaAsignacion}</div></div>
-                      <div><span style={{ color: '#5F5657', fontSize: 12 }}>Estado</span><div><span className={estadoBadge[cred.estado]}>{cred.estado}</span></div></div>
+                      <div><span style={{ color: '#5F5657', fontSize: 12 }}>UID NFC</span><div style={{ fontWeight: 500, fontFamily: 'monospace', color: '#0F8122' }}>{cred.uidNfc}</div></div>
+                      <div><span style={{ color: '#5F5657', fontSize: 12 }}>Fecha emision</span><div style={{ fontWeight: 500 }}>{cred.fechaEmision}</div></div>
+                      <div><span style={{ color: '#5F5657', fontSize: 12 }}>Estado</span><div><span className={estadoBadge[cred.activa ? 'Activa' : 'Inactiva']}>{cred.activa ? 'Activa' : 'Inactiva'}</span></div></div>
                     </div>
                   </div>
                   <div style={{ padding: '0 32px', marginBottom: 32 }}>
@@ -1088,11 +1064,11 @@ export default function CredentialsPage() {
                       <div style={{ padding: 16, background: '#F0EFEF', borderRadius: 8, fontSize: 14 }}>
                         <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
                           <span style={{ color: '#5F5657' }}>Alumno:</span>
-                          <span style={{ fontWeight: 600 }}>{student.nombre}</span>
+                          <span style={{ fontWeight: 600 }}>{student.nombreCompleto}</span>
                         </div>
                         <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
                           <span style={{ color: '#5F5657' }}>Chip actual:</span>
-                          <span style={{ fontFamily: 'monospace', fontWeight: 600, color: '#AB1748' }}>{cred.chipId}</span>
+                          <span style={{ fontFamily: 'monospace', fontWeight: 600, color: '#AB1748' }}>{cred.uidNfc}</span>
                         </div>
                         <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                           <span style={{ color: '#5F5657' }}>Accion:</span>
@@ -1111,8 +1087,8 @@ export default function CredentialsPage() {
                   {reassignStep === 'write' && (
                     <div style={{ textAlign: 'center' }}>
                       <div style={{ marginBottom: 16, padding: 12, background: '#FEEBEE', borderRadius: 8 }}>
-                        <div style={{ fontWeight: 600, fontSize: 14 }}>{student.nombre}</div>
-                        <div style={{ fontSize: 13, color: '#5F5657' }}>No. Control: {student.numControl}</div>
+                        <div style={{ fontWeight: 600, fontSize: 14 }}>{student.nombreCompleto}</div>
+                        <div style={{ fontSize: 13, color: '#5F5657' }}>Matricula: {student.matricula}</div>
                       </div>
                       <div className={`nfc-zone ${reassignWriting ? 'scanning' : reassignWritten ? '' : 'scanning'}`} style={{ margin: '0 auto 16px' }}>
                         <div className="nfc-zone-inner" style={{ background: reassignWritten ? '#70FE7D' : undefined }}>

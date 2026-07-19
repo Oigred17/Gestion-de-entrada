@@ -16,7 +16,7 @@ import {
   FileSpreadsheet,
 } from "lucide-react";
 import * as XLSX from "xlsx";
-import { students, type Student } from "../data/mockData";
+import { alumnos, type Alumno } from "../data/mockData";
 import { generateStudentListPDF } from "../utils/generateStudentListPDF";
 
 const ROWS_PER_PAGE_OPTIONS = [10, 25, 50, 100];
@@ -39,7 +39,7 @@ export default function StudentsPage() {
   ]);
   const [currentPage, setCurrentPage] = useState(1);
   const [rowsPerPage, setRowsPerPage] = useState(10);
-  const [selectedStudent, setSelectedStudent] = useState<Student | null>(
+  const [selectedStudent, setSelectedStudent] = useState<Alumno | null>(
     null
   );
   const [panelMode, setPanelMode] = useState<"view" | "edit">("view");
@@ -79,23 +79,23 @@ export default function StudentsPage() {
   const [uploadError, setUploadError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const filteredStudents = students.filter((s) => {
+  const filteredStudents = alumnos.filter((s) => {
     if (!search) return true;
     const q = search.toLowerCase();
     return (
-      s.nombre.toLowerCase().includes(q) ||
-      s.numControl.toLowerCase().includes(q) ||
+      s.nombreCompleto.toLowerCase().includes(q) ||
+      s.matricula.toLowerCase().includes(q) ||
       s.grupo.toLowerCase().includes(q)
     );
   });
 
-  const uniqueGroups = Array.from(new Set(students.map((s) => s.grupo))).sort();
+  const uniqueGroups = Array.from(new Set(alumnos.map((s) => s.grupo))).sort();
 
   const handleExportPDF = () => {
     const toExport =
       exportGroupId === "all"
         ? filteredStudents
-        : students.filter((s) => s.grupo === exportGroupId);
+        : alumnos.filter((s) => s.grupo === exportGroupId);
     const label = exportGroupId === "all" ? "general" : `grupo_${exportGroupId}`;
     generateStudentListPDF({
       students: toExport,
@@ -119,18 +119,18 @@ export default function StudentsPage() {
     setTimeout(() => setToast(null), 3000);
   };
 
-  const handleEdit = (student: Student) => {
-    setEditName(student.nombre);
-    setEditControl(student.numControl);
+  const handleEdit = (student: Alumno) => {
+    setEditName(student.nombreCompleto);
+    setEditControl(student.matricula);
     setEditGrupo(student.grupo);
     setEditCapacitacion(student.capacitacion);
     setEditTurno(student.turno);
     setEditCurp(student.curp || "GARC080315HDFRRL09");
-    setEditFechaNacimiento(student.fechaNacimiento || "15/03/2008");
+    setEditFechaNacimiento(student.fechaRegistro || "");
     setEditTipoSangre(student.tipoSangre || "O+");
     setEditDomicilio(student.domicilio || "Av. Insurgentes Sur 1234, Col. Del Valle, CDMX");
-    setEditTelefonoTutor(student.telefonoTutor);
-    setEditCorreoTutor(student.tutor + "@email.com");
+    setEditTelefonoTutor(student.tutorTelefono);
+    setEditCorreoTutor(student.tutorNombre + "@email.com");
     setSelectedStudent(student);
     setShowConfirmEdit(true);
   };
@@ -197,23 +197,22 @@ export default function StudentsPage() {
       showToast("Nombre, numero de control y grupo son obligatorios", "error");
       return;
     }
-    const newId = Math.max(...students.map((s) => s.id), 0) + 1;
-    students.push({
-      id: newId,
-      nombre: newName.trim(),
-      numControl: newControl.trim(),
+    const newId = Math.max(...alumnos.map((s) => s.idAlumno), 0) + 1;
+    alumnos.push({
+      idAlumno: newId,
+      nombreCompleto: newName.trim(),
+      matricula: newControl.trim(),
       grupo: newGrupo.trim(),
       capacitacion: newCapacitacion.trim(),
       cohorte: newCohorte.trim(),
-      tutor: newTutor.trim(),
-      telefonoTutor: newTelefonoTutor.trim(),
+      tutorNombre: newTutor.trim(),
+      tutorTelefono: newTelefonoTutor.trim(),
       curp: newCurp.trim(),
-      fechaNacimiento: newFechaNacimiento.trim(),
+      fechaRegistro: newFechaNacimiento.trim(),
       tipoSangre: newTipoSangre.trim(),
-      numAfiliacion: newNumAfiliacion.trim(),
+      nss: newNumAfiliacion.trim(),
       domicilio: newDomicilio.trim(),
-      estado: "Activo",
-      foto: "",
+      activo: true,
       turno: newTurno,
     });
     setShowNewStudentModal(false);
@@ -274,56 +273,55 @@ export default function StudentsPage() {
 
   const handleConfirmUpload = () => {
     if (!uploadPreview) return;
-    const headerMap: Record<string, keyof Student> = {};
+    const headerMap: Record<string, keyof Alumno> = {};
     const requiredFields = ["Nombre", "No. Control", "Grupo"];
     uploadPreview.headers.forEach((h, i) => {
       const normalized = h.toLowerCase().trim();
-      if (normalized.includes("nombre")) headerMap[i] = "nombre";
-      else if (normalized.includes("control")) headerMap[i] = "numControl";
+      if (normalized.includes("nombre")) headerMap[i] = "nombreCompleto";
+      else if (normalized.includes("control")) headerMap[i] = "matricula";
       else if (normalized.includes("grupo")) headerMap[i] = "grupo";
       else if (normalized.includes("capacitacion")) headerMap[i] = "capacitacion";
       else if (normalized.includes("cohorte")) headerMap[i] = "cohorte";
       else if (normalized.includes("turno")) headerMap[i] = "turno";
       else if (normalized.includes("curp")) headerMap[i] = "curp";
-      else if (normalized.includes("nacimiento")) headerMap[i] = "fechaNacimiento";
+      else if (normalized.includes("nacimiento")) headerMap[i] = "fechaRegistro";
       else if (normalized.includes("sangre")) headerMap[i] = "tipoSangre";
-      else if (normalized.includes("afiliacion")) headerMap[i] = "numAfiliacion";
+      else if (normalized.includes("afiliacion")) headerMap[i] = "nss";
       else if (normalized.includes("domicilio")) headerMap[i] = "domicilio";
-      else if (normalized.includes("tutor") && !normalized.includes("telefono")) headerMap[i] = "tutor";
-      else if (normalized.includes("telefono")) headerMap[i] = "telefonoTutor";
+      else if (normalized.includes("tutor") && !normalized.includes("telefono")) headerMap[i] = "tutorNombre";
+      else if (normalized.includes("telefono")) headerMap[i] = "tutorTelefono";
     });
-    const missingHeaders = requiredFields.filter((f) => !Object.values(headerMap).includes(f as keyof Student));
+    const missingHeaders = requiredFields.filter((f) => !Object.values(headerMap).includes(f as keyof Alumno));
     if (missingHeaders.length > 0) {
       showToast(`Faltan columnas requeridas: ${missingHeaders.join(", ")}`, "error");
       return;
     }
     let added = 0;
-    const baseId = Math.max(...students.map((s) => s.id), 0);
+    const baseId = Math.max(...alumnos.map((s) => s.idAlumno), 0);
     uploadPreview.rows.forEach((row, idx) => {
-      const nombre = row[Object.keys(headerMap).find((k) => headerMap[Number(k)] === "nombre") as unknown as number] || "";
-      const numControl = row[Object.keys(headerMap).find((k) => headerMap[Number(k)] === "numControl") as unknown as number] || "";
+      const nombreCompleto = row[Object.keys(headerMap).find((k) => headerMap[Number(k)] === "nombreCompleto") as unknown as number] || "";
+      const matricula = row[Object.keys(headerMap).find((k) => headerMap[Number(k)] === "matricula") as unknown as number] || "";
       const grupo = row[Object.keys(headerMap).find((k) => headerMap[Number(k)] === "grupo") as unknown as number] || "";
-      if (!nombre || !numControl || !grupo) return;
-      const getField = (field: keyof Student): string => {
+      if (!nombreCompleto || !matricula || !grupo) return;
+      const getField = (field: keyof Alumno): string => {
         const idx = Object.keys(headerMap).find((k) => headerMap[Number(k)] === field);
         return idx !== undefined ? String(row[Number(idx)] || "") : "";
       };
-      students.push({
-        id: baseId + idx + 1,
-        nombre: String(nombre),
-        numControl: String(numControl),
+      alumnos.push({
+        idAlumno: baseId + idx + 1,
+        nombreCompleto: String(nombreCompleto),
+        matricula: String(matricula),
         grupo: String(grupo),
         capacitacion: getField("capacitacion"),
         cohorte: getField("cohorte"),
-        tutor: getField("tutor"),
-        telefonoTutor: getField("telefonoTutor"),
+        tutorNombre: getField("tutorNombre"),
+        tutorTelefono: getField("tutorTelefono"),
         curp: getField("curp"),
-        fechaNacimiento: getField("fechaNacimiento"),
+        fechaRegistro: getField("fechaRegistro"),
         tipoSangre: getField("tipoSangre"),
-        numAfiliacion: getField("numAfiliacion"),
+        nss: getField("nss"),
         domicilio: getField("domicilio"),
-        estado: "Activo",
-        foto: "",
+        activo: true,
         turno: (getField("turno") as "Matutino" | "Vespertino") || "Matutino",
       });
       added++;
@@ -520,7 +518,7 @@ export default function StudentsPage() {
               const rowIdx = (currentPage - 1) * rowsPerPage + idx;
               return (
                 <tr
-                  key={student.id}
+                  key={student.idAlumno}
                   style={{
                     background: rowIdx % 2 === 0 ? "#fff" : "#F0EFEF",
                     transition: "background 0.15s",
@@ -535,7 +533,7 @@ export default function StudentsPage() {
                 >
                   <td style={{ padding: "12px" }}>{rowIdx + 1}</td>
                   <td style={{ padding: "12px", fontWeight: 500 }}>
-                    {student.nombre}
+                    {student.nombreCompleto}
                   </td>
                   <td
                     style={{
@@ -544,12 +542,12 @@ export default function StudentsPage() {
                       color: "#EB2466",
                     }}
                   >
-                    {student.numControl}
+                    {student.matricula}
                   </td>
                   <td style={{ padding: "12px" }}>{student.grupo}</td>
                   <td style={{ padding: "12px" }}>{student.capacitacion}</td>
-                  <td style={{ padding: "12px" }}>{student.tutor}</td>
-                  <td style={{ padding: "12px" }}>{student.telefonoTutor}</td>
+                  <td style={{ padding: "12px" }}>                    {student.tutorNombre}</td>
+                  <td style={{ padding: "12px" }}>                    {student.tutorTelefono}</td>
                   <td style={{ padding: "12px" }}>
                     <span
                       style={{
@@ -559,12 +557,12 @@ export default function StudentsPage() {
                         fontSize: 12,
                         fontWeight: 600,
                         background:
-                          student.estado === "Activo" ? "#FEEBEE" : "#F0EFEF",
+                          student.activo ? "#FEEBEE" : "#F0EFEF",
                         color:
-                          student.estado === "Activo" ? "#0F8122" : "#5F5657",
+                          student.activo ? "#0F8122" : "#5F5657",
                       }}
                     >
-                      {student.estado}
+                      {student.activo ? 'Activo' : 'De baja'}
                     </span>
                   </td>
                   <td style={{ padding: "12px" }}>
@@ -790,14 +788,14 @@ export default function StudentsPage() {
                 <User size={36} color="#85787A" />
               </div>
               <div style={{ flex: 1 }}>
-                <div style={{ fontSize: 18, fontWeight: 700, color: "#1C1819" }}>{selectedStudent.nombre}</div>
-                <div style={{ fontSize: 16, fontFamily: "monospace", color: "#EB2466", marginTop: 2 }}>{selectedStudent.numControl}</div>
+                <div style={{ fontSize: 18, fontWeight: 700, color: "#1C1819" }}>{selectedStudent.nombreCompleto}</div>
+                <div style={{ fontSize: 16, fontFamily: "monospace", color: "#EB2466", marginTop: 2 }}>{selectedStudent.matricula}</div>
                 <div style={{ fontSize: 13, color: "#5F5657", marginTop: 2 }}>Grupo: {selectedStudent.grupo}</div>
               </div>
               {panelMode === "view" && (
                 <button onClick={() => {
-                  setEditName(selectedStudent.nombre);
-                  setEditControl(selectedStudent.numControl);
+                  setEditName(selectedStudent.nombreCompleto);
+                  setEditControl(selectedStudent.matricula);
                   setEditGrupo(selectedStudent.grupo);
                   setPanelMode("edit");
                 }} style={{ display: "flex", alignItems: "center", gap: 6, padding: "8px 14px", border: "none", borderRadius: 8, background: "#AB1748", color: "#fff", fontSize: 13, fontWeight: 500, cursor: "pointer" }}>
@@ -825,14 +823,14 @@ export default function StudentsPage() {
                     <div><span style={{ color: "#5F5657", fontSize: 12 }}>Grupo</span><div style={{ fontWeight: 500 }}>{selectedStudent.grupo}</div></div>
                     <div><span style={{ color: "#5F5657", fontSize: 12 }}>Capacitacion</span><div style={{ fontWeight: 500 }}>{selectedStudent.capacitacion}</div></div>
                     <div><span style={{ color: "#5F5657", fontSize: 12 }}>Turno</span><div style={{ fontWeight: 500 }}>{selectedStudent.turno}</div></div>
-                    <div><span style={{ color: "#5F5657", fontSize: 12 }}>Estado</span><div><span style={{ display: "inline-block", padding: "2px 10px", borderRadius: 12, fontSize: 12, fontWeight: 600, background: selectedStudent.estado === "Activo" ? "#FEEBEE" : "#F0EFEF", color: selectedStudent.estado === "Activo" ? "#0F8122" : "#5F5657" }}>{selectedStudent.estado}</span></div></div>
+                    <div><span style={{ color: "#5F5657", fontSize: 12 }}>Estado</span><div><span style={{ display: "inline-block", padding: "2px 10px", borderRadius: 12, fontSize: 12, fontWeight: 600, background: selectedStudent.activo ? "#FEEBEE" : "#F0EFEF", color: selectedStudent.activo ? "#0F8122" : "#5F5657" }}>{selectedStudent.activo ? 'Activo' : 'De baja'}</span></div></div>
                   </div>
                 </div>
                 <div style={{ padding: "0 32px", marginBottom: 24 }}>
                   <h3 style={{ fontSize: 14, fontWeight: 600, color: "#EB2466", textTransform: "uppercase", marginBottom: 12, letterSpacing: 0.5 }}>Informacion personal</h3>
                   <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "8px 24px", fontSize: 14 }}>
                     <div style={{ gridColumn: "span 2" }}><span style={{ color: "#5F5657", fontSize: 12 }}>CURP</span><div style={{ fontWeight: 500, fontFamily: "monospace" }}>{selectedStudent.curp || "GARC080315HDFRRL09"}</div></div>
-                    <div><span style={{ color: "#5F5657", fontSize: 12 }}>Fecha de nacimiento</span><div style={{ fontWeight: 500 }}>{selectedStudent.fechaNacimiento || "15/03/2008"}</div></div>
+                    <div><span style={{ color: "#5F5657", fontSize: 12 }}>Fecha de registro</span><div style={{ fontWeight: 500 }}>{selectedStudent.fechaRegistro || ""}</div></div>
                     <div><span style={{ color: "#5F5657", fontSize: 12 }}>Tipo de sangre</span><div style={{ fontWeight: 500 }}>{selectedStudent.tipoSangre || "O+"}</div></div>
                   </div>
                 </div>
@@ -840,14 +838,14 @@ export default function StudentsPage() {
                   <h3 style={{ fontSize: 14, fontWeight: 600, color: "#EB2466", textTransform: "uppercase", marginBottom: 12, letterSpacing: 0.5 }}>Contacto</h3>
                   <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "8px 24px", fontSize: 14 }}>
                     <div style={{ gridColumn: "span 2" }}><span style={{ color: "#5F5657", fontSize: 12 }}>Domicilio</span><div style={{ fontWeight: 500 }}>{selectedStudent.domicilio || "Av. Insurgentes Sur 1234, Col. Del Valle, CDMX"}</div></div>
-                    <div><span style={{ color: "#5F5657", fontSize: 12 }}>Telefono tutor</span><div style={{ fontWeight: 500 }}>{selectedStudent.telefonoTutor}</div></div>
-                    <div><span style={{ color: "#5F5657", fontSize: 12 }}>Correo tutor</span><div style={{ fontWeight: 500 }}>{selectedStudent.tutor + "@email.com"}</div></div>
+                    <div><span style={{ color: "#5F5657", fontSize: 12 }}>Telefono tutor</span><div style={{ fontWeight: 500 }}>{selectedStudent.tutorTelefono}</div></div>
+                    <div><span style={{ color: "#5F5657", fontSize: 12 }}>Correo tutor</span><div style={{ fontWeight: 500 }}>{selectedStudent.tutorNombre + "@email.com"}</div></div>
                   </div>
                 </div>
                 <div style={{ padding: "0 32px", marginBottom: 24 }}>
                   <h3 style={{ fontSize: 14, fontWeight: 600, color: "#EB2466", textTransform: "uppercase", marginBottom: 12, letterSpacing: 0.5 }}>Credencial NFC</h3>
                   <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "8px 24px", fontSize: 14 }}>
-                    <div><span style={{ color: "#5F5657", fontSize: 12 }}>Chip ID</span><div style={{ fontWeight: 500, fontFamily: "monospace" }}>{`NFC-${String(selectedStudent.id).padStart(4, "0")}`}</div></div>
+                    <div><span style={{ color: "#5F5657", fontSize: 12 }}>Chip ID</span><div style={{ fontWeight: 500, fontFamily: "monospace" }}>{`NFC-${String(selectedStudent.idAlumno).padStart(4, "0")}`}</div></div>
                     <div><span style={{ color: "#5F5657", fontSize: 12 }}>Fecha asignacion</span><div style={{ fontWeight: 500 }}>{"01/09/2025"}</div></div>
                     <div><span style={{ color: "#5F5657", fontSize: 12 }}>Estado</span><div><span style={{ display: "inline-block", padding: "2px 10px", borderRadius: 12, fontSize: 12, fontWeight: 600, background: "#FEEBEE", color: "#0F8122" }}>{"Activo"}</span></div></div>
                   </div>
@@ -1008,7 +1006,7 @@ export default function StudentsPage() {
               >
                 <option value="all">Todos los alumnos ({filteredStudents.length})</option>
                 {uniqueGroups.map((g) => {
-                  const count = students.filter((s) => s.grupo === g).length;
+                  const count = alumnos.filter((s) => s.grupo === g).length;
                   return (
                     <option key={g} value={g}>
                       Grupo {g} ({count} alumnos)
@@ -1181,7 +1179,7 @@ export default function StudentsPage() {
               </button>
             </div>
             <p style={{ fontSize: 14, color: "#5F5657", lineHeight: 1.6, marginBottom: 24 }}>
-              Desea editar los datos del alumno <strong style={{ color: "#1C1819" }}>{selectedStudent.nombre}</strong>?
+              Desea editar los datos del alumno <strong style={{ color: "#1C1819" }}>{selectedStudent.nombreCompleto}</strong>?
             </p>
             <div style={{ display: "flex", gap: 12, justifyContent: "flex-end" }}>
               <button

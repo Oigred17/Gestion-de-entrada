@@ -1,5 +1,5 @@
 import { jsPDF } from 'jspdf';
-import type { Student } from '../data/mockData';
+import type { Alumno } from '../data/mockData';
 
 /**
  * Genera un PDF con la lista de alumnos (nomina/roster).
@@ -8,12 +8,12 @@ import type { Student } from '../data/mockData';
  */
 
 interface GenerateListOptions {
-  students: Student[];
+  alumnos: Alumno[];
   groupName: string;
 }
 
 export function generateStudentListPDF(options: GenerateListOptions) {
-  const { students, groupName } = options;
+  const { alumnos, groupName } = options;
   const doc = new jsPDF({ orientation: 'portrait', unit: 'pt', format: 'letter' });
 
   const pageW = doc.internal.pageSize.getWidth();
@@ -57,13 +57,13 @@ export function generateStudentListPDF(options: GenerateListOptions) {
   doc.setFontSize(11);
   doc.setTextColor(95, 86, 87);
   const labelGrupo = groupName === 'general' ? 'Todos los grupos' : `Grupo ${groupName}`;
-  doc.text(`${labelGrupo}  |  Total: ${students.length} alumnos  |  Fecha: ${new Date().toLocaleDateString('es-MX')}`, marginX, 46);
+  doc.text(`${labelGrupo}  |  Total: ${alumnos.length} alumnos  |  Fecha: ${new Date().toLocaleDateString('es-MX')}`, marginX, 46);
 
   currentY = marginTop;
   drawHeader();
 
   // Filas
-  students.forEach((s, idx) => {
+  alumnos.forEach((s, idx) => {
     if (currentY + rowH > pageH - 40) {
       doc.addPage('letter', 'portrait');
       currentY = marginTop;
@@ -82,12 +82,12 @@ export function generateStudentListPDF(options: GenerateListOptions) {
 
     const rowData = [
       String(idx + 1),
-      s.nombre,
-      s.numControl,
+      s.nombreCompleto,
+      s.matricula,
       s.grupo,
       s.turno,
       s.capacitacion,
-      s.estado,
+      s.activo ? 'Activo' : 'De baja',
     ];
 
     columns.forEach((col, i) => {

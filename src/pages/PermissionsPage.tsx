@@ -7,12 +7,17 @@ import {
   X as XIcon,
   Clock,
   FileText,
+  Calendar,
+  Repeat,
 } from "lucide-react";
-import { permissions, students, type Permission } from "../data/mockData";
+import { permissions, alumnos, type Permission, type DiaSemana } from "../data/mockData";
+import type { UserRole } from "../App";
 
 const ROWS_PER_PAGE_OPTIONS = [10, 25, 50, 100];
 const TABS = ["Todos", "Pendientes", "Aprobados", "Rechazados", "Vencidos"] as const;
 type TabType = (typeof TABS)[number];
+
+const DIAS_SEMANA: DiaSemana[] = ['Lunes', 'Martes', 'Miercoles', 'Jueves', 'Viernes', 'Sabado'];
 
 function generateCode(): string {
   const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
@@ -23,7 +28,15 @@ function generateCode(): string {
   return code;
 }
 
-export default function PermissionsPage() {
+function getSolicitadoPor(role: UserRole): string {
+  return role === 'Directivo' ? 'Directivo (Lic. Fabian Ocampo)' : 'Prefecto (Vigilancia)';
+}
+
+interface PermissionsPageProps {
+  role: UserRole;
+}
+
+export default function PermissionsPage({ role }: PermissionsPageProps) {
   const [search, setSearch] = useState("");
   const [activeTab, setActiveTab] = useState<TabType>("Todos");
   const [currentPage, setCurrentPage] = useState(1);
@@ -33,17 +46,20 @@ export default function PermissionsPage() {
 
   const [newAlumnoSearch, setNewAlumnoSearch] = useState("");
   const [newAlumno, setNewAlumno] = useState<string>("");
+  const [newEsVariosDias, setNewEsVariosDias] = useState(false);
   const [newFecha, setNewFecha] = useState("");
+  const [newDiasSemana, setNewDiasSemana] = useState<DiaSemana[]>([]);
   const [newHora, setNewHora] = useState("");
   const [newMotivo, setNewMotivo] = useState("");
-  const [newAutoriza, setNewAutoriza] = useState("Director");
   const [newNotificar, setNewNotificar] = useState(false);
+
+  const solicitadoPor = getSolicitadoPor(role);
 
   const filteredPermissions = permissions.filter((p) => {
     const matchesSearch =
       !search ||
-      p.alumno.nombre.toLowerCase().includes(search.toLowerCase()) ||
-      p.alumno.numControl.toLowerCase().includes(search.toLowerCase()) ||
+      p.alumno.nombreCompleto.toLowerCase().includes(search.toLowerCase()) ||
+      p.alumno.matricula.toLowerCase().includes(search.toLowerCase()) ||
       p.alumno.grupo.toLowerCase().includes(search.toLowerCase());
 
     const matchesTab =
@@ -73,11 +89,11 @@ export default function PermissionsPage() {
     return permissions.filter((p) => p.estado === map[tab]).length;
   };
 
-  const filteredAlumnos = students.filter(
+  const filteredAlumnos = alumnos.filter(
     (s) =>
-      s.estado === "Activo" &&
-      (s.nombre.toLowerCase().includes(newAlumnoSearch.toLowerCase()) ||
-        s.numControl.toLowerCase().includes(newAlumnoSearch.toLowerCase()))
+      s.activo &&
+      (s.nombreCompleto.toLowerCase().includes(newAlumnoSearch.toLowerCase()) ||
+        s.matricula.toLowerCase().includes(newAlumnoSearch.toLowerCase()))
   );
 
   const estadoBadge = (estado: Permission["estado"]) => {
@@ -111,26 +127,36 @@ export default function PermissionsPage() {
     setSelectedPermission(updated);
   };
 
+  const toggleDia = (dia: DiaSemana) => {
+    setNewDiasSemana(prev =>
+      prev.includes(dia) ? prev.filter(d => d !== dia) : [...prev, dia]
+    );
+  };
+
   const handleSaveNew = () => {
-    if (!newAlumno || !newFecha || !newHora || !newMotivo) return;
-    const foundStudent = students.find(s => s.nombre === newAlumno) ?? students[0];
+    if (!newAlumno || !newHora || !newMotivo) return;
+    if (!newEsVariosDias && !newFecha) return;
+    if (newEsVariosDias && newDiasSemana.length === 0) return;
+    const foundStudent = alumnos.find(s => s.nombreCompleto === newAlumno) ?? alumnos[0];
     const newPermission: Permission = {
       id: Date.now(),
       alumno: foundStudent,
-      fecha: newFecha,
+      fecha: newEsVariosDias ? `Se repite: ${newDiasSemana.join(', ')}` : newFecha,
+      ...(newEsVariosDias && { esVariosDias: true, diasSemana: newDiasSemana }),
       horaSalida: newHora,
       motivo: newMotivo,
-      solicitadoPor: newAutoriza,
+      solicitadoPor,
       estado: "Pendiente",
     };
     permissions.push(newPermission);
     setShowNewModal(false);
     setNewAlumno("");
     setNewAlumnoSearch("");
+    setNewEsVariosDias(false);
     setNewFecha("");
+    setNewDiasSemana([]);
     setNewHora("");
     setNewMotivo("");
-    setNewAutoriza("Director");
     setNewNotificar(false);
   };
 
@@ -210,7 +236,7 @@ export default function PermissionsPage() {
           <table className="table">
             <thead>
               <tr>
-                {["#", "Alumno", "Grupo", "Fecha", "Hora Salida", "Motivo", "Solicitado por", "Estado", "Acciones"].map(
+                {["#", "Alumno", "Grupo", "Fecha / Dias", "Hora Salida", "Motivo", "Solicitado por", "Estado", "Acciones"].map(
                   (col) => (
                     <th key={col}>{col}</th>
                   )
@@ -223,9 +249,21 @@ export default function PermissionsPage() {
                 return (
                   <tr key={perm.id}>
                     <td>{rowIdx + 1}</td>
-                    <td style={{ fontWeight: 500 }}>{perm.alumno.nombre}</td>
+                    <td style={{ fontWeight: 500 }}>{perm.alumno.nombreCompleto}</td>
                     <td>{perm.alumno.grupo}</td>
-                    <td>{perm.fecha}</td>
+                    <td>
+                      {perm.esVariosDias && perm.diasSemana ? (
+                        <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                          <Repeat size={14} color="#EB2466" />
+                          <span>{perm.diasSemana.join(', ')}</span>
+                        </span>
+                      ) : (
+                        <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                          <Calendar size={14} color="#85787A" />
+                          {perm.fecha}
+                        </span>
+                      )}
+                    </td>
                     <td style={{ fontFamily: "monospace", color: "#EB2466" }}>
                       {perm.horaSalida}
                     </td>
@@ -468,12 +506,12 @@ export default function PermissionsPage() {
               <div style={{ fontSize: 14, display: "grid", gridTemplateColumns: "1fr 1fr", gap: "8px 24px" }}>
                 <div style={{ gridColumn: "span 2" }}>
                   <span style={{ color: "#5F5657" }}>Nombre</span>
-                  <div style={{ fontWeight: 500 }}>{selectedPermission.alumno.nombre}</div>
+                  <div style={{ fontWeight: 500 }}>{selectedPermission.alumno.nombreCompleto}</div>
                 </div>
                 <div>
                   <span style={{ color: "#5F5657" }}>No. Control</span>
                   <div style={{ fontWeight: 500, fontFamily: "monospace", color: "#EB2466" }}>
-                    {selectedPermission.alumno.numControl}
+                    {selectedPermission.alumno.matricula}
                   </div>
                 </div>
                 <div>
@@ -505,10 +543,31 @@ export default function PermissionsPage() {
                 Datos del permiso
               </h3>
               <div style={{ fontSize: 14, display: "grid", gridTemplateColumns: "1fr 1fr", gap: "8px 24px" }}>
-                <div>
-                  <span style={{ color: "#5F5657" }}>Fecha</span>
-                  <div style={{ fontWeight: 500 }}>{selectedPermission.fecha}</div>
-                </div>
+                {selectedPermission.esVariosDias && selectedPermission.diasSemana ? (
+                  <div style={{ gridColumn: "span 2" }}>
+                    <span style={{ color: "#5F5657" }}>Dias que se repite</span>
+                    <div style={{ fontWeight: 500, display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 4 }}>
+                      {selectedPermission.diasSemana.map(dia => (
+                        <span key={dia} style={{
+                          display: 'inline-block',
+                          padding: '4px 10px',
+                          borderRadius: 8,
+                          fontSize: 12,
+                          fontWeight: 600,
+                          background: '#FEEBEE',
+                          color: '#EB2466',
+                        }}>
+                          {dia}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                ) : (
+                  <div>
+                    <span style={{ color: "#5F5657" }}>Fecha</span>
+                    <div style={{ fontWeight: 500 }}>{selectedPermission.fecha}</div>
+                  </div>
+                )}
                 <div>
                   <span style={{ color: "#5F5657" }}>Hora salida</span>
                   <div style={{ fontWeight: 500, fontFamily: "monospace", color: "#EB2466" }}>
@@ -519,7 +578,7 @@ export default function PermissionsPage() {
                   <span style={{ color: "#5F5657" }}>Motivo</span>
                   <div style={{ fontWeight: 500 }}>{selectedPermission.motivo}</div>
                 </div>
-                <div>
+                <div style={{ gridColumn: "span 2" }}>
                   <span style={{ color: "#5F5657" }}>Solicitado por</span>
                   <div style={{ fontWeight: 500 }}>{selectedPermission.solicitadoPor}</div>
                 </div>
@@ -567,7 +626,10 @@ export default function PermissionsPage() {
                   <div style={{ marginTop: 8 }}>
                     <Clock size={14} style={{ display: "inline", verticalAlign: "middle", marginRight: 4 }} />
                     <span style={{ fontSize: 12, color: "#5F5657" }}>
-                      Valido solo para la fecha {selectedPermission.fecha}
+                      {selectedPermission.esVariosDias && selectedPermission.diasSemana
+                        ? `Valido los dias: ${selectedPermission.diasSemana.join(', ')}`
+                        : `Valido solo para la fecha ${selectedPermission.fecha}`
+                      }
                     </span>
                   </div>
                 </div>
@@ -590,11 +652,11 @@ export default function PermissionsPage() {
               <div style={{ fontSize: 14, display: "grid", gridTemplateColumns: "1fr 1fr", gap: "8px 24px" }}>
                 <div>
                   <span style={{ color: "#5F5657" }}>Tutor</span>
-                  <div style={{ fontWeight: 500 }}>{selectedPermission.alumno.tutor}</div>
+                  <div style={{ fontWeight: 500 }}>{selectedPermission.alumno.tutorNombre}</div>
                 </div>
                 <div>
                   <span style={{ color: "#5F5657" }}>Telefono</span>
-                  <div style={{ fontWeight: 500 }}>{selectedPermission.alumno.telefonoTutor}</div>
+                  <div style={{ fontWeight: 500 }}>{selectedPermission.alumno.tutorTelefono}</div>
                 </div>
               </div>
             </div>
@@ -664,10 +726,10 @@ export default function PermissionsPage() {
                       >
                         {filteredAlumnos.map((s) => (
                           <div
-                            key={s.id}
+                            key={s.idAlumno}
                             onClick={() => {
-                              setNewAlumno(s.nombre);
-                              setNewAlumnoSearch(`${s.nombre} - ${s.numControl}`);
+                              setNewAlumno(s.nombreCompleto);
+                              setNewAlumnoSearch(`${s.nombreCompleto} - ${s.matricula}`);
                             }}
                             style={{
                               padding: "10px 14px",
@@ -682,9 +744,9 @@ export default function PermissionsPage() {
                               (e.currentTarget.style.background = "#fff")
                             }
                           >
-                            <div style={{ fontWeight: 500 }}>{s.nombre}</div>
+                            <div style={{ fontWeight: 500 }}>{s.nombreCompleto}</div>
                             <div style={{ fontSize: 12, color: "#5F5657", fontFamily: "monospace" }}>
-                              {s.numControl} | Grupo {s.grupo}
+                              {s.matricula} | Grupo {s.grupo}
                             </div>
                           </div>
                         ))}
@@ -693,26 +755,128 @@ export default function PermissionsPage() {
                   </div>
                 </div>
 
-                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16, marginBottom: 16 }}>
-                  <div className="input-group">
-                    <label>Fecha</label>
-                    <input
-                      type="date"
-                      className="input"
-                      value={newFecha}
-                      onChange={(e) => setNewFecha(e.target.value)}
-                    />
-                  </div>
-                  <div className="input-group">
-                    <label>Hora de salida</label>
-                    <input
-                      type="time"
-                      className="input"
-                      value={newHora}
-                      onChange={(e) => setNewHora(e.target.value)}
-                    />
+                <div className="input-group" style={{ marginBottom: 16 }}>
+                  <label className="field-label">Tipo de permiso</label>
+                  <div style={{ display: 'flex', gap: 10 }}>
+                    <button
+                      type="button"
+                      onClick={() => { setNewEsVariosDias(false); setNewDiasSemana([]); }}
+                      style={{
+                        flex: 1,
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        gap: 6,
+                        padding: '10px 14px',
+                        borderRadius: 10,
+                        border: !newEsVariosDias ? '2px solid #EB2466' : '2px solid #CAC6C7',
+                        background: !newEsVariosDias ? '#FEEBEE' : '#F0EFEF',
+                        cursor: 'pointer',
+                        fontWeight: !newEsVariosDias ? 600 : 400,
+                        fontSize: 14,
+                        color: '#1C1819',
+                        fontFamily: 'var(--font-sans)',
+                        transition: 'all 150ms',
+                      }}
+                    >
+                      <Calendar size={16} color={!newEsVariosDias ? '#EB2466' : '#85787A'} />
+                      Por dia
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => { setNewEsVariosDias(true); setNewFecha(""); }}
+                      style={{
+                        flex: 1,
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        gap: 6,
+                        padding: '10px 14px',
+                        borderRadius: 10,
+                        border: newEsVariosDias ? '2px solid #EB2466' : '2px solid #CAC6C7',
+                        background: newEsVariosDias ? '#FEEBEE' : '#F0EFEF',
+                        cursor: 'pointer',
+                        fontWeight: newEsVariosDias ? 600 : 400,
+                        fontSize: 14,
+                        color: '#1C1819',
+                        fontFamily: 'var(--font-sans)',
+                        transition: 'all 150ms',
+                      }}
+                    >
+                      <Repeat size={16} color={newEsVariosDias ? '#EB2466' : '#85787A'} />
+                      Varios dias
+                    </button>
                   </div>
                 </div>
+
+                {!newEsVariosDias ? (
+                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16, marginBottom: 16 }}>
+                    <div className="input-group">
+                      <label>Fecha</label>
+                      <input
+                        type="date"
+                        className="input"
+                        value={newFecha}
+                        onChange={(e) => setNewFecha(e.target.value)}
+                      />
+                    </div>
+                    <div className="input-group">
+                      <label>Hora de salida</label>
+                      <input
+                        type="time"
+                        className="input"
+                        value={newHora}
+                        onChange={(e) => setNewHora(e.target.value)}
+                      />
+                    </div>
+                  </div>
+                ) : (
+                  <div style={{ marginBottom: 16 }}>
+                    <div className="input-group" style={{ marginBottom: 12 }}>
+                      <label>Selecciona los dias que se repite el permiso</label>
+                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 8, marginTop: 8 }}>
+                        {DIAS_SEMANA.map(dia => {
+                          const selected = newDiasSemana.includes(dia);
+                          return (
+                            <button
+                              key={dia}
+                              type="button"
+                              onClick={() => toggleDia(dia)}
+                              style={{
+                                padding: '10px 8px',
+                                borderRadius: 8,
+                                border: selected ? '2px solid #EB2466' : '1.5px solid #CAC6C7',
+                                background: selected ? '#FEEBEE' : '#fff',
+                                color: selected ? '#EB2466' : '#5F5657',
+                                fontWeight: selected ? 600 : 400,
+                                fontSize: 13,
+                                cursor: 'pointer',
+                                transition: 'all 150ms',
+                                fontFamily: 'var(--font-sans)',
+                              }}
+                            >
+                              {dia}
+                            </button>
+                          );
+                        })}
+                      </div>
+                      {newEsVariosDias && newDiasSemana.length === 0 && (
+                        <span style={{ fontSize: 12, color: '#AB1748', marginTop: 4, display: 'block' }}>
+                          Selecciona al menos un dia
+                        </span>
+                      )}
+                    </div>
+                    <div className="input-group">
+                      <label>Hora de salida</label>
+                      <input
+                        type="time"
+                        className="input"
+                        value={newHora}
+                        onChange={(e) => setNewHora(e.target.value)}
+                      />
+                    </div>
+                  </div>
+                )}
 
                 <div className="input-group" style={{ marginBottom: 16 }}>
                   <label>Motivo</label>
@@ -726,15 +890,14 @@ export default function PermissionsPage() {
                 </div>
 
                 <div className="input-group" style={{ marginBottom: 16 }}>
-                  <label>Autoriza</label>
-                  <select
-                    className="select"
-                    value={newAutoriza}
-                    onChange={(e) => setNewAutoriza(e.target.value)}
-                  >
-                    <option value="Director">Director</option>
-                    <option value="Subdirector">Subdirector</option>
-                  </select>
+                  <label>Solicitado por</label>
+                  <input
+                    type="text"
+                    className="input"
+                    value={solicitadoPor}
+                    readOnly
+                    style={{ background: '#F0EFEF', color: '#5F5657', cursor: 'not-allowed' }}
+                  />
                 </div>
 
                 <label className="checkbox-group" style={{ marginBottom: 8 }}>
@@ -757,7 +920,7 @@ export default function PermissionsPage() {
                 <button
                   className="btn btn--primary btn--sm"
                   onClick={handleSaveNew}
-                  disabled={!newAlumno || !newFecha || !newHora || !newMotivo}
+                  disabled={!newAlumno || !newHora || !newMotivo || (!newEsVariosDias && !newFecha) || (newEsVariosDias && newDiasSemana.length === 0)}
                 >
                   <Check size={16} />
                   Guardar permiso

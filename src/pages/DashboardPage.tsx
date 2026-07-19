@@ -4,12 +4,12 @@ import {
   UserCheck, Clock, AlertTriangle, LogOut, TrendingUp,
   Activity, ChevronRight, Bell, ScanLine,
 } from 'lucide-react';
-import { students, recentRecords, incidents, dashboardStats } from '../data/mockData';
+import { registrosAcceso, retardos, alumnos, incidents, dashboardStats, getAlumnoByCredencialId, getAlumnoById } from '../data/mockData';
 
 const tipoConfig: Record<string, { label: string; color: string; bg: string; icon: string }> = {
-  entrada: { label: 'Entrada', color: '#0F8122', bg: '#E8F5E9', icon: '✓' },
-  retardo: { label: 'Retardo', color: '#EB2466', bg: '#FEEBEE', icon: '⏰' },
-  salida: { label: 'Salida', color: '#1792AB', bg: '#DCF5FF', icon: '→' },
+  ENTRADA: { label: 'Entrada', color: '#0F8122', bg: '#E8F5E9', icon: '✓' },
+  retardo: { label: 'Entrada fuera de horario', color: '#EB2466', bg: '#FEEBEE', icon: '⏰' },
+  SALIDA: { label: 'Salida', color: '#1792AB', bg: '#DCF5FF', icon: '→' },
   denegado: { label: 'Denegado', color: '#AB1748', bg: '#FEEBEE', icon: '✗' },
 };
 
@@ -24,20 +24,44 @@ export default function DashboardPage() {
 
   const stats = [
     { label: 'Presentes', value: dashboardStats.presentes, total: dashboardStats.total, color: '#0F8122', bg: '#E8F5E9', icon: UserCheck },
-    { label: 'Retardos', value: dashboardStats.retardos, total: dashboardStats.total, color: '#1792AB', bg: '#DCF5FF', icon: Clock },
+    { label: 'Fuera de horario', value: dashboardStats.retardos, total: dashboardStats.total, color: '#1792AB', bg: '#DCF5FF', icon: Clock },
     { label: 'Faltas', value: dashboardStats.faltas, total: dashboardStats.total, color: '#EB2466', bg: '#FEEBEE', icon: AlertTriangle },
     { label: 'Salidas', value: dashboardStats.salidas, total: dashboardStats.total, color: '#5F5657', bg: '#F0EFEF', icon: LogOut },
     { label: 'Incidencias', value: dashboardStats.incidencias, total: dashboardStats.total, color: '#AB1748', bg: '#FEEBEE', icon: AlertTriangle },
   ];
 
-  const attendanceByGroup = Array.from(new Set(students.map(s => s.grupo))).map(group => {
-    const groupStudents = students.filter(s => s.grupo === group);
-    const groupRecords = recentRecords.filter(r => r.alumno.grupo === group);
+  const recentActivity = [
+    ...registrosAcceso.map(r => ({
+      key: `reg-${r.idRegistro}`,
+      tipo: r.tipoEvento,
+      hora: r.fechaHora.split('T')[1],
+      fecha: r.fechaHora.split('T')[0],
+      alumno: getAlumnoByCredencialId(r.idCredencial),
+    })),
+    ...retardos.map(r => ({
+      key: `ret-${r.idRetardo}`,
+      tipo: 'retardo' as const,
+      hora: `${r.minutosRetardo} min tarde`,
+      fecha: r.fecha,
+      alumno: getAlumnoById(r.idAlumno),
+    })),
+  ].sort((a, b) => b.fecha.localeCompare(a.fecha) || b.hora.localeCompare(a.hora));
+
+  const attendanceByGroup = Array.from(new Set(alumnos.map(s => s.grupo))).map(group => {
+    const groupStudents = alumnos.filter(s => s.grupo === group);
+    const groupRegistros = registrosAcceso.filter(r => {
+      const alumno = getAlumnoByCredencialId(r.idCredencial);
+      return alumno?.grupo === group;
+    });
+    const groupRetardos = retardos.filter(r => {
+      const alumno = getAlumnoById(r.idAlumno);
+      return alumno?.grupo === group;
+    });
     return {
       group,
       total: groupStudents.length,
-      presentes: groupRecords.filter(r => r.tipo === 'entrada').length,
-      retardos: groupRecords.filter(r => r.tipo === 'retardo').length,
+      presentes: groupRegistros.filter(r => r.tipoEvento === 'ENTRADA').length,
+      retardos: groupRetardos.length,
     };
   });
 
@@ -120,11 +144,11 @@ export default function DashboardPage() {
                 </tr>
               </thead>
               <tbody>
-                {recentRecords.map((record, idx) => {
+                {recentActivity.map((record, idx) => {
                   const cfg = tipoConfig[record.tipo] ?? { label: record.tipo, color: '#5F5657', bg: '#F0EFEF', icon: '?' };
                   return (
                     <tr
-                      key={record.id}
+                      key={record.key}
                       style={{
                         borderBottom: '1px solid #F0EFEF',
                         background: idx % 2 === 0 ? '#fff' : '#FAFAFA',
@@ -137,16 +161,16 @@ export default function DashboardPage() {
                         {record.hora}
                       </td>
                       <td style={{ padding: '12px 16px', fontSize: 14, fontWeight: 600, color: '#1C1819' }}>
-                        {record.alumno.nombre}
+                        {record.alumno?.nombreCompleto ?? 'Desconocido'}
                       </td>
                       <td style={{ padding: '12px 16px', fontSize: 13, fontFamily: 'var(--font-mono)', color: '#5F5657' }}>
-                        {record.alumno.numControl}
+                        {record.alumno?.matricula ?? '---'}
                       </td>
                       <td style={{ padding: '12px 16px', fontSize: 14, color: '#5F5657' }}>
-                        {record.alumno.grupo}
+                        {record.alumno?.grupo ?? '---'}
                       </td>
                       <td style={{ padding: '12px 16px', fontSize: 13, color: '#85787A' }}>
-                        {record.alumno.capacitacion}
+                        {record.alumno?.capacitacion ?? '---'}
                       </td>
                       <td style={{ padding: '12px 16px' }}>
                         <span style={{
@@ -196,7 +220,7 @@ export default function DashboardPage() {
               <span style={{ width: 10, height: 10, borderRadius: 2, background: '#0F8122' }} /> Presentes
             </span>
             <span style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: '#5F5657' }}>
-              <span style={{ width: 10, height: 10, borderRadius: 2, background: '#1792AB' }} /> Retardos
+              <span style={{ width: 10, height: 10, borderRadius: 2, background: '#1792AB' }} /> Fuera de horario
             </span>
           </div>
         </div>
@@ -253,7 +277,7 @@ export default function DashboardPage() {
                         {incident.tipo}
                       </div>
                       <div style={{ fontSize: 12, color: '#85787A' }}>
-                        {incident.alumno?.nombre} &mdash; {incident.fecha}
+                        {incident.alumno?.nombreCompleto} &mdash; {incident.fecha}
                       </div>
                     </div>
                     <span style={{

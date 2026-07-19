@@ -15,7 +15,7 @@ import {
   Users,
   Filter,
 } from 'lucide-react';
-import { students, recentRecords, type ScanRecord } from '../data/mockData';
+import { alumnos, registrosAcceso, retardos, type Alumno, type RegistroAcceso, type Retardo, getAlumnoByCredencialId, getAlumnoById } from '../data/mockData';
 
 const COLORS = {
   primary: '#EB2466',
@@ -41,7 +41,7 @@ const reportTypes = [
 
 const mockScheduledReports = [
   { id: 1, nombre: 'Asistencia Diaria', frecuencia: 'Diaria', ultimaGeneracion: '2026-07-12', proximaGeneracion: '2026-07-13', destinatarios: 'admin@escuela.mx', activo: true },
-  { id: 2, nombre: 'Retardos Semanales', frecuencia: 'Semanal', ultimaGeneracion: '2026-07-07', proximaGeneracion: '2026-07-14', destinatarios: 'direccion@escuela.mx', activo: true },
+  { id: 2, nombre: 'Entradas fuera de horario semanales', frecuencia: 'Semanal', ultimaGeneracion: '2026-07-07', proximaGeneracion: '2026-07-14', destinatarios: 'direccion@escuela.mx', activo: true },
   { id: 3, nombre: 'Resumen Mensual', frecuencia: 'Mensual', ultimaGeneracion: '2026-06-30', proximaGeneracion: '2026-07-31', destinatarios: 'admin@escuela.mx', activo: false },
 ];
 
@@ -61,44 +61,71 @@ export default function ReportsPage() {
   const [showStudentDropdown, setShowStudentDropdown] = useState(false);
   const [showGroupDropdown, setShowGroupDropdown] = useState(false);
 
-  const allGroups = ['Todos', ...Array.from(new Set(students.map(s => s.grupo)))];
+  const allGroups = ['Todos', ...Array.from(new Set(alumnos.map(s => s.grupo)))];
 
-  const filteredStudents = students.filter(s =>
-    s.nombre.toLowerCase().includes(searchStudent.toLowerCase()) ||
-    s.numControl.toLowerCase().includes(searchStudent.toLowerCase())
+  const filteredStudents = alumnos.filter(s =>
+    s.nombreCompleto.toLowerCase().includes(searchStudent.toLowerCase()) ||
+    s.matricula.toLowerCase().includes(searchStudent.toLowerCase())
   );
 
-  const selectedStudent = students.find(s => s.id === selectedStudentId) ?? null;
+  const selectedStudent = alumnos.find(s => s.idAlumno === selectedStudentId) ?? null;
 
-  const filteredRecords: ScanRecord[] = recentRecords.filter(r => {
+  const filterByStudent = (alumnoId: number): boolean => {
     if (reportMode === 'individual' && selectedStudentId !== null) {
-      if (r.alumno.id !== selectedStudentId) return false;
+      return alumnoId === selectedStudentId;
     }
     if (reportMode === 'grupo' && selectedGroup !== 'Todos') {
-      if (r.alumno.grupo !== selectedGroup) return false;
+      const alumno = alumnos.find(a => a.idAlumno === alumnoId);
+      if (alumno && alumno.grupo !== selectedGroup) return false;
     }
-    if (startDate && r.fecha < startDate) return false;
-    if (endDate && r.fecha > endDate) return false;
     return true;
-  });
+  };
+
+  const filterByDate = (fechaHora: string): boolean => {
+    const datePart = fechaHora.split('T')[0];
+    if (startDate && datePart < startDate) return false;
+    if (endDate && datePart > endDate) return false;
+    return true;
+  };
+
+  const filteredRecords: { id: number; fechaHora: string; tipo: string }[] = [
+    ...registrosAcceso
+      .filter(r => {
+        const alumno = getAlumnoByCredencialId(r.idCredencial);
+        return alumno && filterByStudent(alumno.idAlumno) && filterByDate(r.fechaHora);
+      })
+      .map(r => ({ id: r.idRegistro, fechaHora: r.fechaHora, tipo: r.tipoEvento })),
+    ...retardos
+      .filter(r => {
+        const alumno = getAlumnoById(r.idAlumno);
+        return alumno && filterByStudent(alumno.idAlumno) && filterByDate(r.fecha);
+      })
+      .map(r => ({ id: r.idRetardo, fechaHora: r.fecha, tipo: 'retardo' })),
+  ];
 
   const studentStats = reportMode === 'individual' && selectedStudent ? {
-    nombre: selectedStudent.nombre,
+    nombre: selectedStudent.nombreCompleto,
     grupo: selectedStudent.grupo,
     totalRegistros: filteredRecords.length,
-    entradas: filteredRecords.filter(r => r.tipo === 'entrada').length,
+    entradas: filteredRecords.filter(r => r.tipo === 'ENTRADA').length,
     retardos: filteredRecords.filter(r => r.tipo === 'retardo').length,
-    salidas: filteredRecords.filter(r => r.tipo === 'salida').length,
+    salidas: filteredRecords.filter(r => r.tipo === 'SALIDA').length,
   } : null;
 
   const groupStats = allGroups.filter(g => g !== 'Todos').map(group => {
-    const groupRecords = recentRecords.filter(r => r.alumno.grupo === group);
-    return {
-      group,
-      asistencias: groupRecords.filter(r => r.tipo === 'entrada').length,
-      retardos: groupRecords.filter(r => r.tipo === 'retardo').length,
-      salidas: groupRecords.filter(r => r.tipo === 'salida').length,
-    };
+    const asistencias = registrosAcceso.filter(r => {
+      const alumno = getAlumnoByCredencialId(r.idCredencial);
+      return alumno?.grupo === group && r.tipoEvento === 'ENTRADA';
+    }).length;
+    const retardosCount = retardos.filter(r => {
+      const alumno = getAlumnoById(r.idAlumno);
+      return alumno?.grupo === group;
+    }).length;
+    const salidas = registrosAcceso.filter(r => {
+      const alumno = getAlumnoByCredencialId(r.idCredencial);
+      return alumno?.grupo === group && r.tipoEvento === 'SALIDA';
+    }).length;
+    return { group, asistencias, retardos: retardosCount, salidas };
   });
 
   const maxBarValue = Math.max(1, ...groupStats.map(d => Math.max(d.asistencias, d.retardos, d.salidas)));
@@ -127,10 +154,10 @@ export default function ReportsPage() {
 
   const tipoBadge = (tipo: string) => {
     const map: Record<string, { bg: string; color: string; label: string }> = {
-      entrada: { bg: COLORS.lightGreen, color: COLORS.success, label: 'Entrada' },
-      retardo: { bg: COLORS.lightPink, color: COLORS.primary, label: 'Retardo' },
-      salida: { bg: COLORS.bg, color: COLORS.textSec, label: 'Salida' },
-      denegado: { bg: COLORS.lightPink, color: COLORS.primaryDark, label: 'Denegado' },
+      ENTRADA: { bg: COLORS.lightGreen, color: COLORS.success, label: 'Entrada' },
+      retardo: { bg: COLORS.lightPink, color: COLORS.primary, label: 'Fuera de horario' },
+      SALIDA: { bg: COLORS.bg, color: COLORS.textSec, label: 'Salida' },
+      DENEGADO: { bg: COLORS.lightPink, color: COLORS.primaryDark, label: 'Denegado' },
     };
     const b = map[tipo] ?? { bg: COLORS.bg, color: COLORS.textSec, label: tipo };
     return (
@@ -320,10 +347,10 @@ export default function ReportsPage() {
                 }}>
                   {filteredStudents.slice(0, 10).map(s => (
                     <button
-                      key={s.id}
+                      key={s.idAlumno}
                       onClick={() => {
-                        setSelectedStudentId(s.id);
-                        setSearchStudent(s.nombre);
+                        setSelectedStudentId(s.idAlumno);
+                        setSearchStudent(s.nombreCompleto);
                         setShowStudentDropdown(false);
                         setReportGenerated(false);
                       }}
@@ -335,16 +362,16 @@ export default function ReportsPage() {
                         padding: '10px 14px',
                         border: 'none',
                         borderBottom: `1px solid ${COLORS.bg}`,
-                        background: selectedStudentId === s.id ? COLORS.lightPink : COLORS.white,
+                        background: selectedStudentId === s.idAlumno ? COLORS.lightPink : COLORS.white,
                         color: COLORS.text,
                         fontSize: 14,
                         cursor: 'pointer',
                         textAlign: 'left',
                       }}
                     >
-                      <strong>{s.nombre}</strong>
+                      <strong>{s.nombreCompleto}</strong>
                       <span style={{ fontSize: 12, color: COLORS.textMuted, marginLeft: 8 }}>
-                        {s.numControl} - {s.grupo}
+                        {s.matricula} - {s.grupo}
                       </span>
                     </button>
                   ))}
@@ -362,8 +389,8 @@ export default function ReportsPage() {
                   fontSize: 13,
                 }}>
                   <User size={16} color={COLORS.primary} />
-                  <strong style={{ color: COLORS.text }}>{selectedStudent.nombre}</strong>
-                  <span style={{ color: COLORS.textSec }}>- {selectedStudent.grupo} - {selectedStudent.numControl}</span>
+                  <strong style={{ color: COLORS.text }}>{selectedStudent.nombreCompleto}</strong>
+                  <span style={{ color: COLORS.textSec }}>- {selectedStudent.grupo} - {selectedStudent.matricula}</span>
                   <button
                     onClick={() => { setSelectedStudentId(null); setSearchStudent(''); setReportGenerated(false); }}
                     style={{
@@ -487,7 +514,7 @@ export default function ReportsPage() {
           <h2 style={sectionTitle}>
             <FileText size={20} />
             {reportMode === 'individual'
-              ? `Reporte de ${selectedStudent?.nombre}`
+              ? `Reporte de ${selectedStudent?.nombreCompleto}`
               : `Reporte del grupo ${selectedGroup}`
             }
           </h2>
@@ -503,7 +530,7 @@ export default function ReportsPage() {
                 {[
                   { label: 'Total', value: studentStats.totalRegistros, bg: COLORS.bg, color: COLORS.text },
                   { label: 'Entradas', value: studentStats.entradas, bg: COLORS.lightGreen, color: COLORS.success },
-                  { label: 'Retardos', value: studentStats.retardos, bg: COLORS.lightPink, color: COLORS.primary },
+                  { label: 'Fuera de horario', value: studentStats.retardos, bg: COLORS.lightPink, color: COLORS.primary },
                   { label: 'Salidas', value: studentStats.salidas, bg: COLORS.bg, color: COLORS.textSec },
                 ].map(stat => (
                   <div key={stat.label} style={{
@@ -538,8 +565,8 @@ export default function ReportsPage() {
                     ) : (
                       filteredRecords.map(record => (
                         <tr key={record.id}>
-                          <td style={tdStyle}>{record.fecha}</td>
-                          <td style={{ ...tdStyle, fontFamily: 'monospace', fontWeight: 500 }}>{record.hora}</td>
+                          <td style={tdStyle}>{record.fechaHora.split('T')[0]}</td>
+                          <td style={{ ...tdStyle, fontFamily: 'monospace', fontWeight: 500 }}>{record.fechaHora.split('T')[1]?.slice(0, 5)}</td>
                           <td style={tdStyle}>{tipoBadge(record.tipo)}</td>
                         </tr>
                       ))
@@ -558,7 +585,7 @@ export default function ReportsPage() {
                     <tr>
                       <th style={thStyle}>Grupo</th>
                       <th style={thStyle}>Entradas</th>
-                      <th style={thStyle}>Retardos</th>
+                      <th style={thStyle}>Fuera de horario</th>
                       <th style={thStyle}>Salidas</th>
                       <th style={thStyle}>Total</th>
                     </tr>
@@ -619,7 +646,7 @@ export default function ReportsPage() {
                             background: COLORS.primary,
                             height: `${(data.retardos / maxBarValue) * 160}px`,
                           }}
-                          title={`Retardos: ${data.retardos}`}
+                           title={`Fuera de horario: ${data.retardos}`}
                         />
                         <div
                           style={{
@@ -638,7 +665,7 @@ export default function ReportsPage() {
                 <div style={{ display: 'flex', gap: 20, marginTop: 14, justifyContent: 'center' }}>
                   {[
                     { label: 'Entradas', color: COLORS.success },
-                    { label: 'Retardos', color: COLORS.primary },
+                    { label: 'Fuera de horario', color: COLORS.primary },
                     { label: 'Salidas', color: COLORS.info },
                   ].map(item => (
                     <span key={item.label} style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, color: COLORS.textSec }}>
