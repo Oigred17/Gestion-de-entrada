@@ -739,10 +739,9 @@ h3 { font-size: 20px; font-weight: 600; line-height: 1.4; }
   display: flex;
   flex-direction: column;
   align-items: center;
-  max-width: 800px;
-  margin: 0 auto;
+  width: 100%;
   padding: 24px;
-  min-height: calc(100vh - var(--topbar-height));
+  padding-bottom: 100px;
 }
 .scan-topbar {
   width: 100%;
@@ -816,22 +815,22 @@ h3 { font-size: 20px; font-weight: 600; line-height: 1.4; }
 
 /* NFC Zone */
 .nfc-zone {
-  width: 280px;
-  height: 280px;
+  width: 200px;
+  height: 200px;
   border-radius: 50%;
   border: 3px dashed var(--color-magenta);
   display: flex;
   align-items: center;
   justify-content: center;
   position: relative;
-  margin-bottom: 24px;
+  margin-bottom: 16px;
 }
 .nfc-zone.scanning {
   animation: spin-slow 3s linear infinite;
 }
 .nfc-zone-inner {
-  width: 180px;
-  height: 180px;
+  width: 130px;
+  height: 130px;
   border-radius: 50%;
   background: var(--color-rosa-palido);
   display: flex;
@@ -855,6 +854,7 @@ h3 { font-size: 20px; font-weight: 600; line-height: 1.4; }
 /* Scan Result Panel */
 .scan-result {
   width: 100%;
+  max-width: 700px;
   background: var(--color-white);
   border-radius: 12px;
   border: 1px solid var(--color-gris-plata);
@@ -929,6 +929,7 @@ h3 { font-size: 20px; font-weight: 600; line-height: 1.4; }
 /* Recent Records */
 .scan-recent {
   width: 100%;
+  max-width: 700px;
 }
 .scan-recent-title {
   font-size: 16px;
@@ -992,7 +993,7 @@ h3 { font-size: 20px; font-weight: 600; line-height: 1.4; }
 
 /* Scan Bottom Bar */
 .scan-bottom-bar {
-  position: fixed;
+  position: sticky;
   bottom: 0;
   left: 0;
   right: 0;
@@ -1004,6 +1005,8 @@ h3 { font-size: 20px; font-weight: 600; line-height: 1.4; }
   padding: 12px;
   gap: 8px;
   z-index: 50;
+  margin: 24px -24px -24px -24px;
+  border-radius: 0 0 12px 12px;
 }
 .scan-action-btn {
   flex: 1;
@@ -2184,7 +2187,7 @@ h3 { font-size: 20px; font-weight: 600; line-height: 1.4; }
   .toolbar-center .input { width: 100%; }
   .config-row { grid-template-columns: 1fr; }
   .scan-result-header { flex-direction: column; align-items: center; text-align: center; }
-  .scan-bottom-bar { flex-wrap: wrap; height: auto; padding: 8px; }
+  .scan-bottom-bar { flex-wrap: wrap; height: auto; padding: 8px; margin: 16px -16px -16px -16px; }
   .scan-action-btn { min-height: 48px; }
   .credential-preview { width: 100%; }
   .notification-panel { width: calc(100vw - 32px); right: 16px; }

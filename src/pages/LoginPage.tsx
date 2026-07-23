@@ -1,20 +1,28 @@
 import { useState } from 'react';
 import { Eye, EyeOff } from 'lucide-react';
+import { useAuth } from '../context/AuthContext';
 
-interface LoginPageProps {
-  onLogin: (role: 'Directivo' | 'Prefectura') => void;
-}
-
-export default function LoginPage({ onLogin }: LoginPageProps) {
+export default function LoginPage() {
+  const { login } = useAuth();
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [remember, setRemember] = useState(false);
-  const [role, setRole] = useState<'Directivo' | 'Prefectura'>('Directivo');
+  const [error, setError] = useState('');
+  const [isLoading, setIsLoading] = useState(false);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    onLogin(role);
+    setError('');
+    setIsLoading(true);
+    
+    try {
+      await login({ username, password });
+    } catch (err) {
+      setError('Credenciales incorrectas. Intenta de nuevo.');
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   return (
@@ -365,57 +373,19 @@ export default function LoginPage({ onLogin }: LoginPageProps) {
               </div>
             </div>
 
-            {/* Selector de rol */}
-            <div style={{ marginBottom: 20 }}>
-              <label
-                style={{
-                  display: 'block',
-                  fontSize: 13,
-                  fontWeight: 600,
-                  color: '#5F5657',
-                  marginBottom: 8,
-                }}
-              >
-                Selecciona tu rol
-              </label>
-              <div style={{ display: 'flex', gap: 10 }}>
-                {(['Directivo', 'Prefectura'] as const).map((r) => (
-                  <label
-                    key={r}
-                    style={{
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: 8,
-                      cursor: 'pointer',
-                      padding: '10px 14px',
-                      borderRadius: 10,
-                      border: role === r ? '2px solid #EB2466' : '2px solid #CAC6C7',
-                      backgroundColor: role === r ? '#FEEBEE' : '#F0EFEF',
-                      flex: 1,
-                      transition: 'all 150ms',
-                    }}
-                  >
-                    <input
-                      type="radio"
-                      name="role"
-                      value={r}
-                      checked={role === r}
-                      onChange={() => setRole(r)}
-                      style={{ accentColor: '#EB2466', width: 16, height: 16 }}
-                    />
-                    <span
-                      style={{
-                        fontSize: 14,
-                        fontWeight: role === r ? 600 : 400,
-                        color: '#1C1819',
-                      }}
-                    >
-                      {r}
-                    </span>
-                  </label>
-                ))}
+            {error && (
+              <div style={{
+                padding: '12px',
+                borderRadius: 10,
+                background: '#FEEBEE',
+                color: '#EB2466',
+                fontSize: 14,
+                marginBottom: 18,
+                border: '1px solid #EB2466',
+              }}>
+                {error}
               </div>
-            </div>
+            )}
 
             {/* Recordar + Olvidaste */}
             <div
@@ -459,23 +429,24 @@ export default function LoginPage({ onLogin }: LoginPageProps) {
 
             <button
               type="submit"
+              disabled={isLoading}
               style={{
                 width: '100%',
                 padding: '14px 0',
                 borderRadius: 10,
                 border: 'none',
-                background: '#EB2466',
+                background: isLoading ? '#CAC6C7' : '#EB2466',
                 color: '#fff',
                 fontSize: 16,
                 fontWeight: 700,
-                cursor: 'pointer',
+                cursor: isLoading ? 'not-allowed' : 'pointer',
                 transition: 'background 200ms',
                 fontFamily: 'var(--font-sans)',
               }}
-              onMouseEnter={(e) => (e.currentTarget.style.background = '#AB1748')}
-              onMouseLeave={(e) => (e.currentTarget.style.background = '#EB2466')}
+              onMouseEnter={(e) => !isLoading && (e.currentTarget.style.background = '#AB1748')}
+              onMouseLeave={(e) => !isLoading && (e.currentTarget.style.background = '#EB2466')}
             >
-              Iniciar sesion
+              {isLoading ? 'Iniciando sesion...' : 'Iniciar sesion'}
             </button>
           </form>
 

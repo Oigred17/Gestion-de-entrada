@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import {
   Search,
   Plus,
@@ -10,8 +10,35 @@ import {
   Calendar,
   Repeat,
 } from "lucide-react";
-import { permissions, alumnos, type Permission, type DiaSemana } from "../data/mockData";
+import { alumnosApi } from "../api";
 import type { UserRole } from "../App";
+
+type DiaSemana = 'Lunes' | 'Martes' | 'Miercoles' | 'Jueves' | 'Viernes' | 'Sabado';
+
+interface AlumnoData {
+  id: number;
+  matricula: string;
+  nombreCompleto: string;
+  grupo: string;
+  activo: boolean;
+  tutorNombre: string;
+  tutorTelefono: string;
+  capacitacion: string;
+  turno: string;
+}
+
+interface Permission {
+  id: number;
+  alumno: AlumnoData;
+  fecha: string;
+  esVariosDias?: boolean;
+  diasSemana?: DiaSemana[];
+  horaSalida: string;
+  motivo: string;
+  solicitadoPor: string;
+  estado: 'Pendiente' | 'Aprobado' | 'Rechazado' | 'Vencido';
+  codigo?: string;
+}
 
 const ROWS_PER_PAGE_OPTIONS = [10, 25, 50, 100];
 const TABS = ["Todos", "Pendientes", "Aprobados", "Rechazados", "Vencidos"] as const;
@@ -52,6 +79,32 @@ export default function PermissionsPage({ role }: PermissionsPageProps) {
   const [newHora, setNewHora] = useState("");
   const [newMotivo, setNewMotivo] = useState("");
   const [newNotificar, setNewNotificar] = useState(false);
+
+  const [alumnos, setAlumnos] = useState<AlumnoData[]>([]);
+  const [permissions, setPermissions] = useState<Permission[]>([]);
+
+  useEffect(() => {
+    const fetchAlumnos = async () => {
+      try {
+        const data = await alumnosApi.getAll();
+        const mapped: AlumnoData[] = data.map(a => ({
+          id: a.id,
+          matricula: a.matricula,
+          nombreCompleto: `${a.nombre} ${a.apellido_paterno} ${a.apellido_materno}`,
+          grupo: a.grupo_id ? `Grupo ${a.grupo_id}` : 'Sin grupo',
+          activo: a.estatus === 'activo',
+          tutorNombre: 'No disponible',
+          tutorTelefono: 'No disponible',
+          capacitacion: 'No disponible',
+          turno: 'No disponible',
+        }));
+        setAlumnos(mapped);
+      } catch (error) {
+        console.error('Error fetching alumnos:', error);
+      }
+    };
+    fetchAlumnos();
+  }, []);
 
   const solicitadoPor = getSolicitadoPor(role);
 
@@ -148,7 +201,7 @@ export default function PermissionsPage({ role }: PermissionsPageProps) {
       solicitadoPor,
       estado: "Pendiente",
     };
-    permissions.push(newPermission);
+    setPermissions(prev => [...prev, newPermission]);
     setShowNewModal(false);
     setNewAlumno("");
     setNewAlumnoSearch("");
@@ -726,7 +779,7 @@ export default function PermissionsPage({ role }: PermissionsPageProps) {
                       >
                         {filteredAlumnos.map((s) => (
                           <div
-                            key={s.idAlumno}
+                            key={s.id}
                             onClick={() => {
                               setNewAlumno(s.nombreCompleto);
                               setNewAlumnoSearch(`${s.nombreCompleto} - ${s.matricula}`);

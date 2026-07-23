@@ -1,15 +1,20 @@
 {
-  "name": "cobao-nfc-react",
+  "name": "cobao-nfc",
   "private": true,
-  "version": "0.0.0",
+  "version": "1.0.0",
   "type": "module",
   "scripts": {
     "dev": "vite",
+    "dev:full": "concurrently \"cd Backend_Proy_Cobao && uvicorn app.main:app --reload --port 8000\" \"vite\"",
     "build": "tsc -b && vite build",
     "lint": "oxlint",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "db:up": "docker compose up -d db",
+    "db:down": "docker compose down",
+    "api:dev": "cd Backend_Proy_Cobao && uvicorn app.main:app --reload --port 8000"
   },
   "dependencies": {
+    "axios": "^1.18.1",
     "jspdf": "^4.2.1",
     "lucide-react": "^1.24.0",
     "react": "^19.2.7",

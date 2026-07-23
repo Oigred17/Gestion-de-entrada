@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import {
   FileText,
   Calendar,
@@ -9,13 +9,13 @@ import {
   Play,
   Edit,
   Trash2,
-  BarChart3,
   ChevronDown,
   User,
   Users,
   Filter,
 } from 'lucide-react';
-import { alumnos, registrosAcceso, retardos, type Alumno, type RegistroAcceso, type Retardo, getAlumnoByCredencialId, getAlumnoById } from '../data/mockData';
+import { alumnosApi, registrosApi, retardosApi, gruposApi } from '../api';
+import type { Alumno, RegistroAcceso, Retardo, Grupo } from '../types';
 
 const COLORS = {
   primary: '#EB2466',
@@ -45,7 +45,16 @@ const mockScheduledReports = [
   { id: 3, nombre: 'Resumen Mensual', frecuencia: 'Mensual', ultimaGeneracion: '2026-06-30', proximaGeneracion: '2026-07-31', destinatarios: 'admin@escuela.mx', activo: false },
 ];
 
+const getNombreCompleto = (a: Alumno): string =>
+  `${a.apellido_paterno} ${a.apellido_materno} ${a.nombre}`;
+
 export default function ReportsPage() {
+  const [alumnosData, setAlumnosData] = useState<Alumno[]>([]);
+  const [registrosData, setRegistrosData] = useState<RegistroAcceso[]>([]);
+  const [retardosData, setRetardosData] = useState<Retardo[]>([]);
+  const [gruposData, setGruposData] = useState<Grupo[]>([]);
+  const [loading, setLoading] = useState(true);
+
   const [reportType, setReportType] = useState('asistencia');
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
@@ -61,22 +70,51 @@ export default function ReportsPage() {
   const [showStudentDropdown, setShowStudentDropdown] = useState(false);
   const [showGroupDropdown, setShowGroupDropdown] = useState(false);
 
-  const allGroups = ['Todos', ...Array.from(new Set(alumnos.map(s => s.grupo)))];
+  const alumnoMap = Object.fromEntries(alumnosData.map(a => [a.id, a]));
 
-  const filteredStudents = alumnos.filter(s =>
-    s.nombreCompleto.toLowerCase().includes(searchStudent.toLowerCase()) ||
+  useEffect(() => {
+    const fetchData = async () => {
+      try {
+        const [alumnosRes, registrosRes, retardosRes, gruposRes] = await Promise.all([
+          alumnosApi.getAll(),
+          registrosApi.getAll(),
+          retardosApi.getAll(),
+          gruposApi.getAll(),
+        ]);
+        setAlumnosData(alumnosRes);
+        setRegistrosData(registrosRes);
+        setRetardosData(retardosRes);
+        setGruposData(gruposRes);
+      } catch (err) {
+        console.error('Error fetching report data:', err);
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchData();
+  }, []);
+
+  const getGrupoNombre = (grupoId?: number): string => {
+    if (!grupoId) return 'Sin grupo';
+    return gruposData.find(g => g.id === grupoId)?.nombre ?? 'Sin grupo';
+  };
+
+  const allGroups = ['Todos', ...Array.from(new Set(gruposData.map(g => g.nombre)))];
+
+  const filteredStudents = alumnosData.filter(s =>
+    getNombreCompleto(s).toLowerCase().includes(searchStudent.toLowerCase()) ||
     s.matricula.toLowerCase().includes(searchStudent.toLowerCase())
   );
 
-  const selectedStudent = alumnos.find(s => s.idAlumno === selectedStudentId) ?? null;
+  const selectedStudent = alumnosData.find(s => s.id === selectedStudentId) ?? null;
 
   const filterByStudent = (alumnoId: number): boolean => {
     if (reportMode === 'individual' && selectedStudentId !== null) {
       return alumnoId === selectedStudentId;
     }
     if (reportMode === 'grupo' && selectedGroup !== 'Todos') {
-      const alumno = alumnos.find(a => a.idAlumno === alumnoId);
-      if (alumno && alumno.grupo !== selectedGroup) return false;
+      const alumno = alumnosData.find(a => a.id === alumnoId);
+      if (alumno && getGrupoNombre(alumno.grupo_id) !== selectedGroup) return false;
     }
     return true;
   };
@@ -89,23 +127,22 @@ export default function ReportsPage() {
   };
 
   const filteredRecords: { id: number; fechaHora: string; tipo: string }[] = [
-    ...registrosAcceso
+    ...registrosData
       .filter(r => {
-        const alumno = getAlumnoByCredencialId(r.idCredencial);
-        return alumno && filterByStudent(alumno.idAlumno) && filterByDate(r.fechaHora);
+        const alumno = r.alumno || alumnoMap[r.alumno_id];
+        return alumno && filterByStudent(alumno.id) && filterByDate(r.fecha_hora);
       })
-      .map(r => ({ id: r.idRegistro, fechaHora: r.fechaHora, tipo: r.tipoEvento })),
-    ...retardos
+      .map(r => ({ id: r.id, fechaHora: r.fecha_hora, tipo: r.tipo_acceso })),
+    ...retardosData
       .filter(r => {
-        const alumno = getAlumnoById(r.idAlumno);
-        return alumno && filterByStudent(alumno.idAlumno) && filterByDate(r.fecha);
+        return r.alumno && filterByStudent(r.alumno.id) && filterByDate(r.fecha);
       })
-      .map(r => ({ id: r.idRetardo, fechaHora: r.fecha, tipo: 'retardo' })),
+      .map(r => ({ id: r.id, fechaHora: r.fecha, tipo: 'retardo' })),
   ];
 
   const studentStats = reportMode === 'individual' && selectedStudent ? {
-    nombre: selectedStudent.nombreCompleto,
-    grupo: selectedStudent.grupo,
+    nombre: getNombreCompleto(selectedStudent),
+    grupo: getGrupoNombre(selectedStudent.grupo_id),
     totalRegistros: filteredRecords.length,
     entradas: filteredRecords.filter(r => r.tipo === 'ENTRADA').length,
     retardos: filteredRecords.filter(r => r.tipo === 'retardo').length,
@@ -113,17 +150,16 @@ export default function ReportsPage() {
   } : null;
 
   const groupStats = allGroups.filter(g => g !== 'Todos').map(group => {
-    const asistencias = registrosAcceso.filter(r => {
-      const alumno = getAlumnoByCredencialId(r.idCredencial);
-      return alumno?.grupo === group && r.tipoEvento === 'ENTRADA';
+    const asistencias = registrosData.filter(r => {
+      const alumno = r.alumno || alumnoMap[r.alumno_id];
+      return alumno && getGrupoNombre(alumno.grupo_id) === group && r.tipo_acceso === 'ENTRADA';
     }).length;
-    const retardosCount = retardos.filter(r => {
-      const alumno = getAlumnoById(r.idAlumno);
-      return alumno?.grupo === group;
+    const retardosCount = retardosData.filter(r => {
+      return r.alumno && getGrupoNombre(r.alumno.grupo_id) === group;
     }).length;
-    const salidas = registrosAcceso.filter(r => {
-      const alumno = getAlumnoByCredencialId(r.idCredencial);
-      return alumno?.grupo === group && r.tipoEvento === 'SALIDA';
+    const salidas = registrosData.filter(r => {
+      const alumno = r.alumno || alumnoMap[r.alumno_id];
+      return alumno && getGrupoNombre(alumno.grupo_id) === group && r.tipo_acceso === 'SALIDA';
     }).length;
     return { group, asistencias, retardos: retardosCount, salidas };
   });
@@ -281,6 +317,14 @@ export default function ReportsPage() {
     color: COLORS.text,
   };
 
+  if (loading) {
+    return (
+      <div style={{ padding: '24px 32px', background: COLORS.bg, minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+        <span style={{ fontSize: 16, color: COLORS.textSec }}>Cargando datos...</span>
+      </div>
+    );
+  }
+
   return (
     <div style={{ padding: '24px 32px', background: COLORS.bg, minHeight: '100vh' }}>
 
@@ -347,10 +391,10 @@ export default function ReportsPage() {
                 }}>
                   {filteredStudents.slice(0, 10).map(s => (
                     <button
-                      key={s.idAlumno}
+                      key={s.id}
                       onClick={() => {
-                        setSelectedStudentId(s.idAlumno);
-                        setSearchStudent(s.nombreCompleto);
+                        setSelectedStudentId(s.id);
+                        setSearchStudent(getNombreCompleto(s));
                         setShowStudentDropdown(false);
                         setReportGenerated(false);
                       }}
@@ -362,16 +406,16 @@ export default function ReportsPage() {
                         padding: '10px 14px',
                         border: 'none',
                         borderBottom: `1px solid ${COLORS.bg}`,
-                        background: selectedStudentId === s.idAlumno ? COLORS.lightPink : COLORS.white,
+                        background: selectedStudentId === s.id ? COLORS.lightPink : COLORS.white,
                         color: COLORS.text,
                         fontSize: 14,
                         cursor: 'pointer',
                         textAlign: 'left',
                       }}
                     >
-                      <strong>{s.nombreCompleto}</strong>
+                      <strong>{getNombreCompleto(s)}</strong>
                       <span style={{ fontSize: 12, color: COLORS.textMuted, marginLeft: 8 }}>
-                        {s.matricula} - {s.grupo}
+                        {s.matricula} - {getGrupoNombre(s.grupo_id)}
                       </span>
                     </button>
                   ))}
@@ -389,8 +433,8 @@ export default function ReportsPage() {
                   fontSize: 13,
                 }}>
                   <User size={16} color={COLORS.primary} />
-                  <strong style={{ color: COLORS.text }}>{selectedStudent.nombreCompleto}</strong>
-                  <span style={{ color: COLORS.textSec }}>- {selectedStudent.grupo} - {selectedStudent.matricula}</span>
+                  <strong style={{ color: COLORS.text }}>{getNombreCompleto(selectedStudent)}</strong>
+                  <span style={{ color: COLORS.textSec }}>- {getGrupoNombre(selectedStudent.grupo_id)} - {selectedStudent.matricula}</span>
                   <button
                     onClick={() => { setSelectedStudentId(null); setSearchStudent(''); setReportGenerated(false); }}
                     style={{
@@ -514,7 +558,7 @@ export default function ReportsPage() {
           <h2 style={sectionTitle}>
             <FileText size={20} />
             {reportMode === 'individual'
-              ? `Reporte de ${selectedStudent?.nombreCompleto}`
+              ? `Reporte de ${selectedStudent ? getNombreCompleto(selectedStudent) : ''}`
               : `Reporte del grupo ${selectedGroup}`
             }
           </h2>

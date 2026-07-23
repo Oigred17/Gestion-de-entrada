@@ -1,7 +1,8 @@
-import { useState, useCallback } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useState, useCallback, useEffect, useRef } from 'react';
 import { Search, Plus, Eye, Trash2, RefreshCw, Nfc, Check, X, AlertTriangle, Shield, Download, Loader2, User } from 'lucide-react';
-import { credenciales as initialCredenciales, alumnos } from '../data/mockData';
+import { credencialesApi, alumnosApi, gruposApi } from '../api';
+import { nfcApi } from '../api/nfc';
+import type { Credencial, CredencialCreate, Alumno, Grupo } from '../types';
 import { generateCredentialsPDF } from '../utils/generateCredentialsPDF';
 
 type CredencialEstado = 'Activa' | 'Inactiva';
@@ -48,15 +49,10 @@ interface BatchResult {
   success: boolean;
 }
 
-function generateChipId(): string {
-  const hex = () => Math.floor(Math.random() * 256).toString(16).toUpperCase().padStart(2, '0');
-  return `NFC-${hex()}-${hex()}-${hex()}-${hex()}`;
-}
-
 export default function CredentialsPage() {
-  const navigate = useNavigate();
-  const [localStudents, setLocalStudents] = useState(alumnos);
-  const [creds, setCreds] = useState(initialCredenciales);
+  const [localStudents, setLocalStudents] = useState<Alumno[]>([]);
+  const [creds, setCreds] = useState<Credencial[]>([]);
+  const [grupos, setGrupos] = useState<Grupo[]>([]);
   const [search, setSearch] = useState('');
   const [activeTab, setActiveTab] = useState<CredencialEstado | 'Todas'>('Todas');
   const [showAssignModal, setShowAssignModal] = useState(false);
@@ -77,7 +73,7 @@ export default function CredentialsPage() {
   const [batchResults, setBatchResults] = useState<BatchResult[]>([]);
   const [batchWriting, setBatchWriting] = useState(false);
   const [batchWritten, setBatchWritten] = useState(false);
-  const [batchVerifying, setBatchVerifying] = useState(false);
+  const [_batchVerifying, setBatchVerifying] = useState(false);
   const [batchVerified, setBatchVerified] = useState(false);
   const [batchChipId, setBatchChipId] = useState('');
 
@@ -99,37 +95,153 @@ export default function CredentialsPage() {
   const [reassignWriting, setReassignWriting] = useState(false);
   const [reassignWritten, setReassignWritten] = useState(false);
 
-  const uniqueGroups = Array.from(new Set(localStudents.map((s) => s.grupo))).sort();
+  const [scanModalOpen, setScanModalOpen] = useState(false);
+  const [scanState, setScanState] = useState<'scanning' | 'found' | 'not-found'>('scanning');
+  const [scannedChipId, setScannedChipId] = useState('');
+  const [scannedCredential, setScannedCredential] = useState<Credencial | null>(null);
+  const [scannedStudent, setScannedStudent] = useState<Alumno | null>(null);
+  const [nfcStatus, setNfcStatus] = useState<'idle' | 'connecting' | 'waiting' | 'captured'>('idle');
+
+  const captureTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const uniqueGroups = Array.from(new Set(grupos.map((g) => g.nombre))).sort();
 
   const SYSTEM_PASSWORD = 'admin123';
+
+  useEffect(() => {
+    const fetchData = async () => {
+      try {
+        const [alumnosData, credencialesData, gruposData] = await Promise.all([
+          alumnosApi.getAll(),
+          credencialesApi.getAll(),
+          gruposApi.getAll(),
+        ]);
+        setLocalStudents(alumnosData);
+        setCreds(credencialesData);
+        setGrupos(gruposData);
+      } catch (error) {
+        console.error('Error fetching data:', error);
+      }
+    };
+    fetchData();
+    return () => { cleanupWs(); };
+  }, []);
+
+  const connectNfcWs = useCallback((onCapture: (uid: string) => void, timeoutMs = 30000): Promise<string> => {
+    return new Promise(async (resolve, reject) => {
+      if (captureTimeoutRef.current) clearTimeout(captureTimeoutRef.current);
+
+      setNfcStatus('connecting');
+
+      try {
+        await nfcApi.startCapture();
+      } catch {
+        setNfcStatus('idle');
+        reject(new Error('No se pudo activar el modo captura.'));
+        return;
+      }
+
+      setNfcStatus('waiting');
+
+      let stopped = false;
+      const pollInterval = setInterval(async () => {
+        if (stopped) return;
+        try {
+          const result = await nfcApi.pollCapture();
+          if (result.status === 'captured' && result.uid_nfc) {
+            stopped = true;
+            clearInterval(pollInterval);
+            if (captureTimeoutRef.current) clearTimeout(captureTimeoutRef.current);
+            setNfcStatus('captured');
+            onCapture(result.uid_nfc);
+            resolve(result.uid_nfc);
+          }
+        } catch {
+        }
+      }, 500);
+
+      captureTimeoutRef.current = setTimeout(() => {
+        stopped = true;
+        clearInterval(pollInterval);
+        setNfcStatus('idle');
+        nfcApi.stopCapture().catch(() => {});
+        reject(new Error('Tiempo de espera agotado. Acerque la tarjeta NFC al lector.'));
+      }, timeoutMs);
+    });
+  }, []);
+
+  const cleanupWs = useCallback(() => {
+    if (captureTimeoutRef.current) clearTimeout(captureTimeoutRef.current);
+    nfcApi.stopCapture().catch(() => {});
+    setNfcStatus('idle');
+  }, []);
+
+  const getFullName = (alumno: Alumno) => `${alumno.nombre} ${alumno.apellido_paterno} ${alumno.apellido_materno}`;
+
+  const getGrupoNombre = (grupoId?: number) => {
+    if (!grupoId) return '---';
+    const grupo = grupos.find(g => g.id === grupoId);
+    return grupo?.nombre ?? String(grupoId);
+  };
 
   const showToast = (message: string, type: 'success' | 'error' | 'info' = 'success') => {
     setToast({ message, type });
     setTimeout(() => setToast(null), 3000);
   };
 
-  const getStudent = (id: number) => localStudents.find((s) => s.idAlumno === id);
-  const getStudentName = (id: number) => getStudent(id)?.nombreCompleto ?? 'Desconocido';
+  const getStudent = (id: number) => localStudents.find((s) => s.id === id);
+  const getStudentName = (id: number) => {
+    const s = getStudent(id);
+    return s ? getFullName(s) : 'Desconocido';
+  };
   const getStudentControl = (id: number) => getStudent(id)?.matricula ?? '---';
-  const getStudentGroup = (id: number) => getStudent(id)?.grupo ?? '---';
+  const getStudentGroup = (id: number) => getGrupoNombre(getStudent(id)?.grupo_id);
 
   const filtered = creds.filter((c) => {
-    const matchTab = activeTab === 'Todas' || (activeTab === 'Activa' ? c.activa : !c.activa);
-    const name = getStudentName(c.idAlumno).toLowerCase();
-    const matchSearch = search === '' || name.includes(search.toLowerCase()) || c.uidNfc.toLowerCase().includes(search.toLowerCase()) || String(c.idAlumno).includes(search);
+    const isActive = c.estatus === 'Activa' || c.estatus === 'ACTIVA';
+    const matchTab = activeTab === 'Todas' || (activeTab === 'Activa' ? isActive : !isActive);
+    const name = getStudentName(c.alumno_id).toLowerCase();
+    const matchSearch = search === '' || name.includes(search.toLowerCase()) || (c.numero ?? '').toLowerCase().includes(search.toLowerCase()) || String(c.alumno_id).includes(search);
     return matchTab && matchSearch;
   });
 
-  const countByEstado = (estado: CredencialEstado) => creds.filter((c) => (estado === 'Activa' ? c.activa : !c.activa)).length;
+  const countByEstado = (estado: CredencialEstado) => creds.filter((c) => {
+    const isActive = c.estatus === 'Activa' || c.estatus === 'ACTIVA';
+    return estado === 'Activa' ? isActive : !isActive;
+  }).length;
 
   const handleSimulateScan = () => {
-    setConfirm({
-      open: true,
-      type: 'simple',
-      action: 'escanear',
-      title: 'Escanear credencial NFC',
-      message: 'Se activara el lector NFC para detectar una credencial. ¿Desea continuar?',
-    });
+    setScanModalOpen(true);
+    setScanState('scanning');
+    setScannedChipId('');
+    setScannedCredential(null);
+    setScannedStudent(null);
+
+    connectNfcWs(() => {}, 30000)
+      .then(async (uid) => {
+        setScannedChipId(uid);
+        try {
+          const found = await credencialesApi.getByUid(uid);
+          setScannedCredential(found);
+          setScannedStudent(getStudent(found.alumno_id) ?? null);
+          setScanState('found');
+        } catch {
+          setScanState('not-found');
+        }
+      })
+      .catch((err) => {
+        showToast(err instanceof Error ? err.message : 'Error al escanear tarjeta', 'error');
+        setScanState('not-found');
+      });
+  };
+
+  const closeScanModal = () => {
+    cleanupWs();
+    setScanModalOpen(false);
+    setScanState('scanning');
+    setScannedChipId('');
+    setScannedCredential(null);
+    setScannedStudent(null);
   };
 
   const handleView = (credId: number) => {
@@ -175,18 +287,17 @@ export default function CredentialsPage() {
     }
 
     if (confirm.action === 'activar' && confirm.credId) {
-      setCreds(prev => prev.map(c => c.idCredencial === confirm.credId ? { ...c, activa: true } : c));
-      showToast('Credencial activada correctamente');
+      credencialesApi.update(confirm.credId, { estatus: 'Activa' }).then(() => {
+        setCreds(prev => prev.map(c => c.id === confirm.credId ? { ...c, estatus: 'Activa' } : c));
+        showToast('Credencial activada correctamente');
+      }).catch(() => showToast('Error al activar credencial', 'error'));
     } else if (confirm.action === 'desactivar' && confirm.credId) {
-      setCreds(prev => prev.map(c => c.idCredencial === confirm.credId ? { ...c, activa: false } : c));
-      showToast('Credencial desactivada');
+      credencialesApi.update(confirm.credId, { estatus: 'Inactiva' }).then(() => {
+        setCreds(prev => prev.map(c => c.id === confirm.credId ? { ...c, estatus: 'Inactiva' } : c));
+        showToast('Credencial desactivada');
+      }).catch(() => showToast('Error al desactivar credencial', 'error'));
     } else if (confirm.action === 'reasignar' && confirm.credId) {
-      const newChip = generateChipId();
-      setCreds(prev => prev.map(c => c.idCredencial === confirm.credId ? { ...c, uidNfc: newChip, activa: true } : c));
-      showToast(`Credencial reasignada. Nuevo chip: ${newChip}`);
-    } else if (confirm.action === 'escanear') {
-      const scannedChip = generateChipId();
-      setChipId(scannedChip);
+      showToast('Use el panel de reasignacion para asignar un nuevo chip', 'info');
     }
 
     closeConfirm();
@@ -199,6 +310,7 @@ export default function CredentialsPage() {
   };
 
   const handleCloseAssignModal = () => {
+    cleanupWs();
     setShowAssignModal(false);
     setAssignStep(1);
     setAssignMode('alumno');
@@ -220,52 +332,98 @@ export default function CredentialsPage() {
     setBatchChipId('');
   };
 
-  const handleWriteChip = useCallback((onDone: (chipId: string) => void) => {
+  const handleWriteChip = useCallback(async (onDone: (chipId: string) => void) => {
     setWriting(true);
-    const newChip = generateChipId();
-    setTimeout(() => {
-      setChipId(newChip);
+    try {
+      const uid = await connectNfcWs(() => {});
+      try {
+        const existing = await credencialesApi.getByUid(uid);
+        if (existing) {
+          setWriting(false);
+          showToast(`Este chip ya esta asignado a ${existing.alumno?.nombre || `alumno #${existing.alumno_id}`}. Usa otro chip.`, 'error');
+          return;
+        }
+      } catch {
+      }
+      setChipId(uid);
       setWriting(false);
       setWritten(true);
-      onDone(newChip);
-    }, 1500);
-  }, []);
+      onDone(uid);
+    } catch (err: unknown) {
+      setWriting(false);
+      const msg = err instanceof Error ? err.message : 'Error al detectar tarjeta NFC';
+      showToast(msg, 'error');
+    }
+  }, [connectNfcWs, showToast]);
 
-  const handleVerifyChip = useCallback((_chipIdToVerify: string, onDone: () => void) => {
+  const handleVerifyChip = useCallback(async (_chipIdToVerify: string, onDone: () => void) => {
     setVerifying(true);
-    setTimeout(() => {
+    try {
+      const uid = await connectNfcWs(() => {});
+      if (uid.toUpperCase() === _chipIdToVerify.toUpperCase()) {
+        setVerifying(false);
+        setVerified(true);
+        onDone();
+      } else {
+        setVerifying(false);
+        showToast(`UID no coincide. Esperado: ${_chipIdToVerify}, Detectado: ${uid}`, 'error');
+      }
+    } catch (err: unknown) {
       setVerifying(false);
-      setVerified(true);
-      onDone();
-    }, 1500);
-  }, []);
+      const msg = err instanceof Error ? err.message : 'Error al verificar tarjeta NFC';
+      showToast(msg, 'error');
+    }
+  }, [connectNfcWs, showToast]);
 
-  const handleBatchWriteChip = useCallback((onDone: (chipId: string) => void) => {
+  const handleBatchWriteChip = useCallback(async (onDone: (chipId: string) => void) => {
     setBatchWriting(true);
-    const newChip = generateChipId();
-    setTimeout(() => {
-      setBatchChipId(newChip);
+    try {
+      const uid = await connectNfcWs(() => {});
+      try {
+        const existing = await credencialesApi.getByUid(uid);
+        if (existing) {
+          setBatchWriting(false);
+          showToast(`Este chip ya esta asignado a ${existing.alumno?.nombre || `alumno #${existing.alumno_id}`}. Usa otro chip.`, 'error');
+          return;
+        }
+      } catch {
+      }
+      setBatchChipId(uid);
       setBatchWriting(false);
       setBatchWritten(true);
-      onDone(newChip);
-    }, 1500);
-  }, []);
+      onDone(uid);
+    } catch (err: unknown) {
+      setBatchWriting(false);
+      const msg = err instanceof Error ? err.message : 'Error al detectar tarjeta NFC';
+      showToast(msg, 'error');
+    }
+  }, [connectNfcWs, showToast]);
 
-  const handleBatchVerifyChip = useCallback((_chipIdToVerify: string, onDone: () => void) => {
+  const handleBatchVerifyChip = useCallback(async (_chipIdToVerify: string, onDone: () => void) => {
     setBatchVerifying(true);
-    setTimeout(() => {
+    try {
+      const uid = await connectNfcWs(() => {});
+      if (uid.toUpperCase() === _chipIdToVerify.toUpperCase()) {
+        setBatchVerifying(false);
+        setBatchVerified(true);
+        onDone();
+      } else {
+        setBatchVerifying(false);
+        showToast(`UID no coincide. Esperado: ${_chipIdToVerify}, Detectado: ${uid}`, 'error');
+      }
+    } catch (err: unknown) {
       setBatchVerifying(false);
-      setBatchVerified(true);
-      onDone();
-    }, 1500);
-  }, []);
+      const msg = err instanceof Error ? err.message : 'Error al verificar tarjeta NFC';
+      showToast(msg, 'error');
+    }
+  }, [connectNfcWs, showToast]);
 
   const handleExportPDF = () => {
     if (exportMode === 'alumno' && exportStudentId !== 'none') {
-      const student = localStudents.find(s => s.idAlumno === Number(exportStudentId));
+      const student = localStudents.find(s => s.id === Number(exportStudentId));
       if (student) {
         generateCredentialsPDF({
-          students: [student],
+          students: [student as any],
           groupName: `alumno_${student.matricula}`,
           reposicion: isReposicion,
         });
@@ -273,11 +431,11 @@ export default function CredentialsPage() {
       }
     } else {
       const toExport = exportGroupId === 'all'
-        ? localStudents.filter(s => s.activo)
-        : localStudents.filter(s => s.grupo === exportGroupId && s.activo);
+        ? localStudents.filter(s => s.estatus === 'Activo')
+        : localStudents.filter(s => getGrupoNombre(s.grupo_id) === exportGroupId && s.estatus === 'Activo');
       const label = exportGroupId === 'all' ? 'general' : `grupo_${exportGroupId}`;
       generateCredentialsPDF({
-        students: toExport,
+        students: toExport as any,
         groupName: label,
         reposicion: isReposicion,
       });
@@ -287,27 +445,27 @@ export default function CredentialsPage() {
   };
 
   const filteredExportStudents = exportStudentQuery
-    ? localStudents.filter(s => s.activo && (
-        s.nombreCompleto.toLowerCase().includes(exportStudentQuery.toLowerCase()) ||
+    ? localStudents.filter(s => s.estatus === 'Activo' && (
+        getFullName(s).toLowerCase().includes(exportStudentQuery.toLowerCase()) ||
         s.matricula.toLowerCase().includes(exportStudentQuery.toLowerCase()) ||
-        s.grupo.toLowerCase().includes(exportStudentQuery.toLowerCase())
+        getGrupoNombre(s.grupo_id).toLowerCase().includes(exportStudentQuery.toLowerCase())
       ))
     : [];
 
   const filteredStudents = localStudents.filter((s) => {
     if (!studentQuery) return false;
     const q = studentQuery.toLowerCase();
-    return s.nombreCompleto.toLowerCase().includes(q) || s.matricula.toLowerCase().includes(q) || s.grupo.toLowerCase().includes(q);
+    return getFullName(s).toLowerCase().includes(q) || s.matricula.toLowerCase().includes(q) || getGrupoNombre(s.grupo_id).toLowerCase().includes(q);
   });
 
-  const canStartGroup = assignGroupId !== '' && localStudents.filter(s => s.grupo === assignGroupId && s.activo).length > 0;
+  const canStartGroup = assignGroupId !== '' && localStudents.filter(s => getGrupoNombre(s.grupo_id) === assignGroupId && s.estatus === 'Activo').length > 0;
   const currentBatchStudent = batchStudents[batchIndex];
   const batchComplete = batchIndex >= batchStudents.length;
 
   const startBatchProcess = () => {
     const groupStudents = localStudents
-      .filter(s => s.grupo === assignGroupId && s.activo)
-      .map(s => s.idAlumno);
+      .filter(s => getGrupoNombre(s.grupo_id) === assignGroupId && s.estatus === 'Activo')
+      .map(s => s.id);
     setBatchStudents(groupStudents);
     setBatchIndex(0);
     setBatchResults([]);
@@ -407,22 +565,22 @@ export default function CredentialsPage() {
           </thead>
           <tbody>
             {filtered.map((cred, index) => (
-              <tr key={cred.idCredencial}>
+              <tr key={cred.id}>
                 <td>{index + 1}</td>
-                <td style={{ fontWeight: 500 }}>{getStudentName(cred.idAlumno)}</td>
-                <td style={{ fontFamily: 'var(--font-mono)' }}>{getStudentControl(cred.idAlumno)}</td>
-                <td style={{ fontFamily: 'var(--font-mono)', fontSize: 13 }}>{cred.uidNfc}</td>
-                <td>{cred.fechaEmision}</td>
-                <td><span className={estadoBadgeClass[cred.activa ? 'Activa' : 'Inactiva']}>{cred.activa ? 'Activa' : 'Inactiva'}</span></td>
+                <td style={{ fontWeight: 500 }}>{getStudentName(cred.alumno_id)}</td>
+                <td style={{ fontFamily: 'var(--font-mono)' }}>{getStudentControl(cred.alumno_id)}</td>
+                <td style={{ fontFamily: 'var(--font-mono)', fontSize: 13 }}>{cred.numero ?? '---'}</td>
+                <td>{cred.fecha_emision ?? '---'}</td>
+                <td><span className={estadoBadgeClass[(cred.estatus === 'Activa' || cred.estatus === 'ACTIVA') ? 'Activa' : 'Inactiva']}>{(cred.estatus === 'Activa' || cred.estatus === 'ACTIVA') ? 'Activa' : 'Inactiva'}</span></td>
                 <td>
                   <div style={{ display: 'flex', gap: 4 }}>
-                    <button className="table-action" title="Ver detalle" onClick={() => handleView(cred.idCredencial)}><Eye size={18} /></button>
-                    {cred.activa ? (
-                      <button className="table-action" title="Desactivar" onClick={() => handleDeactivate(cred.idCredencial)}><Trash2 size={18} /></button>
+                    <button className="table-action" title="Ver detalle" onClick={() => handleView(cred.id)}><Eye size={18} /></button>
+                    {(cred.estatus === 'Activa' || cred.estatus === 'ACTIVA') ? (
+                      <button className="table-action" title="Desactivar" onClick={() => handleDeactivate(cred.id)}><Trash2 size={18} /></button>
                     ) : (
-                      <button className="table-action" title="Activar" style={{ color: '#0F8122' }} onClick={() => handleActivate(cred.idCredencial)}><RefreshCw size={18} /></button>
+                      <button className="table-action" title="Activar" style={{ color: '#0F8122' }} onClick={() => handleActivate(cred.id)}><RefreshCw size={18} /></button>
                     )}
-                    <button className="table-action" title="Reasignar chip" onClick={() => handleReassign(cred.idCredencial)}><RefreshCw size={18} /></button>
+                    <button className="table-action" title="Reasignar chip" onClick={() => handleReassign(cred.id)}><RefreshCw size={18} /></button>
                   </div>
                 </td>
               </tr>
@@ -496,9 +654,9 @@ export default function CredentialsPage() {
                       {studentQuery && filteredStudents.length > 0 && (
                         <div style={{ border: '1px solid #CAC6C7', borderRadius: 8, maxHeight: 200, overflowY: 'auto' }}>
                           {filteredStudents.map((s) => (
-                            <div key={s.idAlumno} style={{ padding: '10px 16px', cursor: 'pointer', background: selectedStudentId === s.idAlumno ? '#FEEBEE' : '#fff', borderBottom: '1px solid #F0EFEF' }} onClick={() => { setSelectedStudentId(s.idAlumno); setStudentQuery(s.nombreCompleto); }}>
-                              <div style={{ fontWeight: 600, fontSize: 14 }}>{s.nombreCompleto}</div>
-                              <div style={{ fontSize: 13, color: '#5F5657' }}>Grupo: {s.grupo} &mdash; Matricula: {s.matricula}</div>
+                            <div key={s.id} style={{ padding: '10px 16px', cursor: 'pointer', background: selectedStudentId === s.id ? '#FEEBEE' : '#fff', borderBottom: '1px solid #F0EFEF' }} onClick={() => { setSelectedStudentId(s.id); setStudentQuery(getFullName(s)); }}>
+                              <div style={{ fontWeight: 600, fontSize: 14 }}>{getFullName(s)}</div>
+                              <div style={{ fontSize: 13, color: '#5F5657' }}>Grupo: {getGrupoNombre(s.grupo_id)} &mdash; Matricula: {s.matricula}</div>
                             </div>
                           ))}
                         </div>
@@ -520,7 +678,7 @@ export default function CredentialsPage() {
                         <select className="select" value={assignGroupId} onChange={(e) => setAssignGroupId(e.target.value)}>
                           <option value="">Elegir un grupo</option>
                           {uniqueGroups.map((g) => {
-                            const count = localStudents.filter((s) => s.grupo === g && s.activo).length;
+                            const count = localStudents.filter((s) => getGrupoNombre(s.grupo_id) === g && s.estatus === 'Activo').length;
                             return <option key={g} value={g}>Grupo {g} ({count} alumnos)</option>;
                           })}
                         </select>
@@ -529,7 +687,7 @@ export default function CredentialsPage() {
                         <div style={{ padding: 16, background: '#F0EFEF', borderRadius: 8 }}>
                           <div style={{ fontSize: 12, color: '#5F5657', marginBottom: 4 }}>Alumnos del grupo</div>
                           <div style={{ fontWeight: 700, fontSize: 16 }}>
-                            {localStudents.filter(s => s.grupo === assignGroupId && s.activo).length} alumnos activos
+                            {localStudents.filter(s => getGrupoNombre(s.grupo_id) === assignGroupId && s.estatus === 'Activo').length} alumnos activos
                           </div>
                           <div style={{ fontSize: 13, color: '#5F5657', marginTop: 4 }}>
                             Se escribiran y verificaran los chips NFC uno por uno
@@ -549,18 +707,24 @@ export default function CredentialsPage() {
                     <div style={{ fontSize: 13, color: '#5F5657' }}>Matricula: {getStudentControl(selectedStudentId!)}</div>
                   </div>
                   <NfcZone state={writing ? 'writing' : written ? 'written' : 'idle'} />
+                  {nfcStatus === 'connecting' && (
+                    <p style={{ fontSize: 13, color: '#1792AB', marginBottom: 8 }}>Conectando al lector NFC...</p>
+                  )}
+                  {nfcStatus === 'waiting' && (
+                    <p style={{ fontSize: 13, color: '#EB2466', marginBottom: 8, fontWeight: 600 }}>Esperando tarjeta NFC... Acerque la tarjeta al lector</p>
+                  )}
                   <p style={{ fontSize: 16, color: '#5F5657', marginBottom: 16 }}>
-                    {writing ? 'Escribiendo datos en el chip NFC...' : written ? 'Datos escritos correctamente en el chip' : 'Acerca el chip NFC al lector para escribir los datos del alumno'}
+                    {writing ? 'Leyendo tarjeta NFC...' : written ? 'UID capturado correctamente' : 'Acerca el chip NFC al lector para asociarlo al alumno'}
                   </p>
                   {written && chipId && (
                     <div style={{ padding: 12, background: '#F0EFEF', borderRadius: 8, display: 'inline-block' }}>
-                      <span style={{ fontSize: 12, color: '#5F5657' }}>ID del Chip escrito: </span>
+                      <span style={{ fontSize: 12, color: '#5F5657' }}>UID NFC capturado: </span>
                       <span style={{ fontFamily: 'var(--font-mono)', fontWeight: 700, fontSize: 16, color: '#0F8122' }}>{chipId}</span>
                     </div>
                   )}
                   {!writing && !written && (
-                    <button className="btn btn--primary" onClick={() => handleWriteChip(() => {})}>
-                      <Nfc size={18} /> Escribir chip
+                    <button className="btn btn--primary" onClick={() => handleWriteChip(() => {})} disabled={nfcStatus === 'connecting' || nfcStatus === 'waiting'}>
+                      <Nfc size={18} /> Detectar tarjeta NFC
                     </button>
                   )}
                 </div>
@@ -628,7 +792,7 @@ export default function CredentialsPage() {
                   </div>
                   <NfcZone state={verifying ? 'verifying' : verified ? 'verified' : 'idle'} />
                   <p style={{ fontSize: 16, color: '#5F5657', marginBottom: 16 }}>
-                    {verifying ? 'Leyendo chip NFC para verificar...' : verified ? 'Verificacion exitosa. Los datos coinciden.' : 'Acerca el chip NFC al lector para verificar los datos escritos'}
+                    {verifying ? 'Leyendo tarjeta NFC para verificar...' : verified ? 'Verificacion exitosa. El UID coincide.' : 'Acerca la misma tarjeta NFC al lector para verificar'}
                   </p>
                   {verified && (
                     <div style={{ padding: 16, background: '#F0FDF4', borderRadius: 8, border: '1px solid #0F8122', marginBottom: 16 }}>
@@ -646,8 +810,8 @@ export default function CredentialsPage() {
                     </div>
                   )}
                   {!verifying && !verified && (
-                    <button className="btn btn--primary" onClick={() => handleVerifyChip(chipId, () => {})}>
-                      <Nfc size={18} /> Verificar chip
+                    <button className="btn btn--primary" onClick={() => handleVerifyChip(chipId, () => {})} disabled={nfcStatus === 'connecting' || nfcStatus === 'waiting'}>
+                      <Nfc size={18} /> Detectar tarjeta para verificar
                     </button>
                   )}
                 </div>
@@ -726,16 +890,20 @@ export default function CredentialsPage() {
                 <button
                   className="btn btn--primary"
                   onClick={() => {
-                    const newId = Math.max(0, ...creds.map(c => c.idCredencial)) + 1;
-                    setCreds(prev => [...prev, {
-                      idCredencial: newId,
-                      idAlumno: selectedStudentId!,
-                      uidNfc: chipId,
-                      fechaEmision: new Date().toISOString().split('T')[0],
-                      activa: true,
-                    }]);
-                    showToast(`Credencial asignada a ${getStudentName(selectedStudentId!)}`);
-                    handleCloseAssignModal();
+                    const newCred: CredencialCreate = {
+                      alumno_id: selectedStudentId!,
+                      numero: chipId,
+                      estatus: 'Activa',
+                      fecha_emision: new Date().toISOString().split('T')[0],
+                    };
+                    credencialesApi.create(newCred).then((created) => {
+                      setCreds(prev => [...prev, created]);
+                      showToast(`Credencial asignada a ${getStudentName(selectedStudentId!)}`);
+                      handleCloseAssignModal();
+                    }).catch((err) => {
+                      const msg = err?.response?.data?.detail ?? err?.message ?? 'Error al crear credencial';
+                      showToast(msg, 'error');
+                    });
                   }}
                 >
                   <Check size={18} /> Confirmar Asignacion
@@ -744,19 +912,26 @@ export default function CredentialsPage() {
               {assignStep === 3 && assignMode === 'grupo' && batchComplete && (
                 <button
                   className="btn btn--primary"
-                  onClick={() => {
-                    const baseId = Math.max(0, ...creds.map(c => c.idCredencial)) + 1;
-                    batchResults.forEach((result, i) => {
-                      setCreds(prev => [...prev, {
-                        idCredencial: baseId + i,
-                        idAlumno: result.studentId,
-                        uidNfc: result.uidNfc,
-                        fechaEmision: new Date().toISOString().split('T')[0],
-                        activa: true,
-                      }]);
-                    });
-                    showToast(`${batchResults.filter(r => r.success).length} credenciales asignadas correctamente`);
-                    handleCloseAssignModal();
+                  onClick={async () => {
+                    const successfulResults = batchResults.filter(r => r.success);
+                    try {
+                      const createdCreds = await Promise.all(
+                        successfulResults.map(result =>
+                          credencialesApi.create({
+                            alumno_id: result.studentId,
+                            numero: result.uidNfc,
+                            estatus: 'Activa',
+                            fecha_emision: new Date().toISOString().split('T')[0],
+                          })
+                        )
+                      );
+                      setCreds(prev => [...prev, ...createdCreds]);
+                      showToast(`${successfulResults.length} credenciales asignadas correctamente`);
+                      handleCloseAssignModal();
+                    } catch (err: any) {
+                      const msg = err?.response?.data?.detail ?? err?.message ?? 'Error al asignar credenciales';
+                      showToast(msg, 'error');
+                    }
                   }}
                 >
                   <Check size={18} /> Confirmar Asignacion
@@ -811,8 +986,135 @@ export default function CredentialsPage() {
                 {confirm.action === 'activar' && <><RefreshCw size={16} /> Activar</>}
                 {confirm.action === 'desactivar' && <><Trash2 size={16} /> Desactivar</>}
                 {confirm.action === 'reasignar' && <><RefreshCw size={16} /> Reasignar</>}
-                {confirm.action === 'escanear' && <><Nfc size={16} /> Escanear</>}
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ========== MODAL ESCANEAR CREDENCIAL ========== */}
+      {scanModalOpen && (
+        <div className="modal-backdrop" onClick={closeScanModal} style={{ zIndex: 9998 }}>
+          <div className="modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 440 }}>
+            <div className="modal-header">
+              <h3 style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <Nfc size={20} color="#EB2466" />
+                Escanear credencial NFC
+              </h3>
+              <button className="modal-close" onClick={closeScanModal}><X size={20} /></button>
+            </div>
+            <div className="modal-body" style={{ textAlign: 'center', padding: 24 }}>
+
+              {scanState === 'scanning' && (
+                <>
+                  <NfcZone state="verifying" size={72} />
+                  <p style={{ fontSize: 16, fontWeight: 600, color: '#1C1819', marginBottom: 8 }}>
+                    Esperando tarjeta NFC...
+                  </p>
+                  <p style={{ fontSize: 13, color: '#5F5657' }}>
+                    Acerca la credencial al lector para escanear
+                  </p>
+                </>
+              )}
+
+              {scanState === 'found' && scannedCredential && (
+                <>
+                  <div style={{ width: 64, height: 64, borderRadius: '50%', background: '#F0FDF4', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 16px', border: '2px solid #0F8122' }}>
+                    <Check size={32} color="#0F8122" />
+                  </div>
+                  <p style={{ fontSize: 16, fontWeight: 600, color: '#0F8122', marginBottom: 16 }}>
+                    Credencial detectada correctamente
+                  </p>
+
+                  <div style={{ background: '#F8F7F7', borderRadius: 8, padding: 16, textAlign: 'left' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 10 }}>
+                      <span style={{ fontSize: 12, color: '#85787A', fontWeight: 600 }}>UID NFC</span>
+                      <span style={{ fontSize: 13, fontFamily: 'var(--font-mono)', fontWeight: 700, color: '#EB2466' }}>{scannedChipId}</span>
+                    </div>
+                    <div style={{ borderTop: '1px solid #F0EFEF', margin: '8px 0' }} />
+                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 10 }}>
+                      <span style={{ fontSize: 12, color: '#85787A', fontWeight: 600 }}>Alumno</span>
+                      <span style={{ fontSize: 13, fontWeight: 600, color: '#1C1819', textAlign: 'right' }}>{scannedStudent ? getFullName(scannedStudent) : '---'}</span>
+                    </div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 10 }}>
+                      <span style={{ fontSize: 12, color: '#85787A', fontWeight: 600 }}>Matricula</span>
+                      <span style={{ fontSize: 13, fontFamily: 'var(--font-mono)', color: '#1C1819' }}>{scannedStudent?.matricula ?? '---'}</span>
+                    </div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 10 }}>
+                      <span style={{ fontSize: 12, color: '#85787A', fontWeight: 600 }}>Grupo</span>
+                      <span style={{ fontSize: 13, color: '#1C1819' }}>{scannedStudent ? getGrupoNombre(scannedStudent.grupo_id) : '---'}</span>
+                    </div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 10 }}>
+                      <span style={{ fontSize: 12, color: '#85787A', fontWeight: 600 }}>Email</span>
+                      <span style={{ fontSize: 13, fontFamily: 'var(--font-mono)', color: '#1C1819' }}>{scannedStudent?.email ?? '---'}</span>
+                    </div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                      <span style={{ fontSize: 12, color: '#85787A', fontWeight: 600 }}>Estado</span>
+                      <span className={(scannedCredential.estatus === 'Activa' || scannedCredential.estatus === 'ACTIVA') ? 'badge badge--active' : 'badge badge--inactive'}>
+                        {(scannedCredential.estatus === 'Activa' || scannedCredential.estatus === 'ACTIVA') ? 'Activa' : 'Inactiva'}
+                      </span>
+                    </div>
+                  </div>
+                </>
+              )}
+
+              {scanState === 'not-found' && (
+                <>
+                  <div style={{ width: 64, height: 64, borderRadius: '50%', background: '#FEF2F2', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 16px', border: '2px solid #AB1748' }}>
+                    <X size={32} color="#AB1748" />
+                  </div>
+                  <p style={{ fontSize: 16, fontWeight: 600, color: '#AB1748', marginBottom: 8 }}>
+                    No se detecto ninguna credencial
+                  </p>
+                  <p style={{ fontSize: 13, color: '#5F5657' }}>
+                    Intente acercar la credencial al lector nuevamente
+                  </p>
+                </>
+              )}
+
+            </div>
+            <div className="modal-footer">
+              <button className="btn btn--secondary" onClick={closeScanModal}>Cerrar</button>
+              {scanState === 'scanning' && (
+                <button className="btn btn--secondary" onClick={() => {
+                  setScanState('scanning');
+                  connectNfcWs(() => {}, 30000)
+                    .then(async (uid) => {
+                      setScannedChipId(uid);
+                      try {
+                        const found = await credencialesApi.getByUid(uid);
+                        setScannedCredential(found);
+                        setScannedStudent(getStudent(found.alumno_id) ?? null);
+                        setScanState('found');
+                      } catch {
+                        setScanState('not-found');
+                      }
+                    })
+                    .catch(() => setScanState('not-found'));
+                }}>
+                  <Loader2 size={16} /> Reintentar
+                </button>
+              )}
+              {scanState === 'not-found' && (
+                <button className="btn btn--primary" onClick={() => {
+                  setScanState('scanning');
+                  connectNfcWs(() => {}, 30000)
+                    .then(async (uid) => {
+                      setScannedChipId(uid);
+                      try {
+                        const found = await credencialesApi.getByUid(uid);
+                        setScannedCredential(found);
+                        setScannedStudent(getStudent(found.alumno_id) ?? null);
+                        setScanState('found');
+                      } catch {
+                        setScanState('not-found');
+                      }
+                    })
+                    .catch(() => setScanState('not-found'));
+                }}>
+                  <RefreshCw size={16} /> Reintentar
+                </button>
+              )}
             </div>
           </div>
         </div>
@@ -868,12 +1170,12 @@ export default function CredentialsPage() {
                     <div style={{ border: '1px solid #CAC6C7', borderRadius: 8, maxHeight: 200, overflowY: 'auto', marginTop: 8 }}>
                       {filteredExportStudents.map((s) => (
                         <div
-                          key={s.idAlumno}
-                          style={{ padding: '10px 16px', cursor: 'pointer', background: exportStudentId === String(s.idAlumno) ? '#FEEBEE' : '#fff', borderBottom: '1px solid #F0EFEF' }}
-                          onClick={() => { setExportStudentId(String(s.idAlumno)); setExportStudentQuery(s.nombreCompleto); }}
+                          key={s.id}
+                          style={{ padding: '10px 16px', cursor: 'pointer', background: exportStudentId === String(s.id) ? '#FEEBEE' : '#fff', borderBottom: '1px solid #F0EFEF' }}
+                          onClick={() => { setExportStudentId(String(s.id)); setExportStudentQuery(getFullName(s)); }}
                         >
-                          <div style={{ fontWeight: 600, fontSize: 14 }}>{s.nombreCompleto}</div>
-                          <div style={{ fontSize: 13, color: '#5F5657' }}>Matricula: {s.matricula} &mdash; Grupo: {s.grupo}</div>
+                          <div style={{ fontWeight: 600, fontSize: 14 }}>{getFullName(s)}</div>
+                          <div style={{ fontSize: 13, color: '#5F5657' }}>Matricula: {s.matricula} &mdash; Grupo: {getGrupoNombre(s.grupo_id)}</div>
                         </div>
                       ))}
                     </div>
@@ -886,8 +1188,8 @@ export default function CredentialsPage() {
                   {exportStudentId !== 'none' && (
                     <div style={{ marginTop: 8, padding: 12, background: '#FEEBEE', borderRadius: 8 }}>
                       <div style={{ fontSize: 12, color: '#5F5657', marginBottom: 2 }}>Alumno seleccionado</div>
-                      <div style={{ fontWeight: 700, fontSize: 14 }}>{localStudents.find(s => s.idAlumno === Number(exportStudentId))?.nombreCompleto}</div>
-                      <div style={{ fontSize: 13, color: '#5F5657' }}>Matricula: {localStudents.find(s => s.idAlumno === Number(exportStudentId))?.matricula}</div>
+                      <div style={{ fontWeight: 700, fontSize: 14 }}>{localStudents.find(s => s.id === Number(exportStudentId)) ? getFullName(localStudents.find(s => s.id === Number(exportStudentId))!) : ''}</div>
+                      <div style={{ fontSize: 13, color: '#5F5657' }}>Matricula: {localStudents.find(s => s.id === Number(exportStudentId))?.matricula}</div>
                     </div>
                   )}
                 </div>
@@ -901,9 +1203,9 @@ export default function CredentialsPage() {
                     value={exportGroupId}
                     onChange={(e) => setExportGroupId(e.target.value)}
                   >
-                    <option value="all">Todos los alumnos activos ({localStudents.filter(s => s.activo).length})</option>
+                    <option value="all">Todos los alumnos activos ({localStudents.filter(s => s.estatus === 'Activo').length})</option>
                     {uniqueGroups.map((g) => {
-                      const count = localStudents.filter((s) => s.grupo === g && s.activo).length;
+                      const count = localStudents.filter((s) => getGrupoNombre(s.grupo_id) === g && s.estatus === 'Activo').length;
                       return (
                         <option key={g} value={g}>
                           Grupo {g} ({count} alumnos)
@@ -957,32 +1259,38 @@ export default function CredentialsPage() {
 
       {/* ========== PANEL LATERAL DETALLE CREDENCIAL ========== */}
       {selectedCredentialId !== null && (() => {
-        const cred = creds.find(c => c.idCredencial === selectedCredentialId);
+        const cred = creds.find(c => c.id === selectedCredentialId);
         if (!cred) return null;
-        const student = getStudent(cred.idAlumno);
+        const student = getStudent(cred.alumno_id);
         if (!student) return null;
 
+        const isCredActive = cred.estatus === 'Activa' || cred.estatus === 'ACTIVA';
         const estadoBadge: Record<string, string> = {
           Activa: 'badge badge--active',
           Inactiva: 'badge badge--inactive',
         };
 
-        const closePanel = () => { setSelectedCredentialId(null); setPanelMode('view'); };
+        const closePanel = () => { cleanupWs(); setSelectedCredentialId(null); setPanelMode('view'); };
 
-        const handleWriteReassignChip = () => {
+        const handleWriteReassignChip = async () => {
           setReassignWriting(true);
-          const chip = generateChipId();
-          setTimeout(() => {
-            setNewChipId(chip);
+          try {
+            const uid = await connectNfcWs(() => {});
+            setNewChipId(uid);
             setReassignWriting(false);
             setReassignWritten(true);
-          }, 1500);
+          } catch (err: unknown) {
+            setReassignWriting(false);
+            showToast(err instanceof Error ? err.message : 'Error al detectar tarjeta NFC', 'error');
+          }
         };
 
         const handleConfirmReassign = () => {
-          setCreds(prev => prev.map(c => c.idCredencial === cred.idCredencial ? { ...c, uidNfc: newChipId, activa: true } : c));
-          showToast(`Chip reasignado correctamente. Nuevo ID: ${newChipId}`);
-          closePanel();
+          credencialesApi.update(cred.id, { numero: newChipId, estatus: 'Activa' }).then(() => {
+            setCreds(prev => prev.map(c => c.id === cred.id ? { ...c, numero: newChipId, estatus: 'Activa' } : c));
+            showToast(`Chip reasignado correctamente. Nuevo ID: ${newChipId}`);
+            closePanel();
+          }).catch(() => showToast('Error al reasignar chip', 'error'));
         };
 
         return (
@@ -1007,9 +1315,9 @@ export default function CredentialsPage() {
                   <User size={36} color="#85787A" />
                 </div>
                 <div style={{ flex: 1 }}>
-                  <div style={{ fontSize: 18, fontWeight: 700, color: '#1C1819' }}>{student.nombreCompleto}</div>
+                  <div style={{ fontSize: 18, fontWeight: 700, color: '#1C1819' }}>{getFullName(student)}</div>
                   <div style={{ fontSize: 16, fontFamily: 'monospace', color: '#EB2466', marginTop: 2 }}>{student.matricula}</div>
-                  <div style={{ fontSize: 13, color: '#5F5657', marginTop: 2 }}>Grupo: {student.grupo}</div>
+                  <div style={{ fontSize: 13, color: '#5F5657', marginTop: 2 }}>Grupo: {getGrupoNombre(student.grupo_id)}</div>
                 </div>
               </div>
 
@@ -1019,28 +1327,28 @@ export default function CredentialsPage() {
                   <div style={{ padding: '0 32px', marginBottom: 24 }}>
                     <h3 style={{ fontSize: 14, fontWeight: 600, color: '#EB2466', textTransform: 'uppercase', marginBottom: 12, letterSpacing: 0.5 }}>Informacion general</h3>
                     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px 24px', fontSize: 14 }}>
-                      <div><span style={{ color: '#5F5657', fontSize: 12 }}>Nombre</span><div style={{ fontWeight: 500 }}>{student.nombreCompleto}</div></div>
+                      <div><span style={{ color: '#5F5657', fontSize: 12 }}>Nombre</span><div style={{ fontWeight: 500 }}>{getFullName(student)}</div></div>
                       <div><span style={{ color: '#5F5657', fontSize: 12 }}>Matricula</span><div style={{ fontWeight: 500, fontFamily: 'monospace' }}>{student.matricula}</div></div>
-                      <div><span style={{ color: '#5F5657', fontSize: 12 }}>Grupo</span><div style={{ fontWeight: 500 }}>{student.grupo}</div></div>
-                      <div><span style={{ color: '#5F5657', fontSize: 12 }}>Capacitacion</span><div style={{ fontWeight: 500 }}>{student.capacitacion}</div></div>
-                      <div><span style={{ color: '#5F5657', fontSize: 12 }}>Turno</span><div style={{ fontWeight: 500 }}>{student.turno}</div></div>
-                      <div><span style={{ color: '#5F5657', fontSize: 12 }}>Estado</span><div><span style={{ display: 'inline-block', padding: '2px 10px', borderRadius: 12, fontSize: 12, fontWeight: 600, background: student.activo ? '#FEEBEE' : '#F0EFEF', color: student.activo ? '#0F8122' : '#5F5657' }}>{student.activo ? 'Activo' : 'Inactivo'}</span></div></div>
+                      <div><span style={{ color: '#5F5657', fontSize: 12 }}>Grupo</span><div style={{ fontWeight: 500 }}>{getGrupoNombre(student.grupo_id)}</div></div>
+                      <div><span style={{ color: '#5F5657', fontSize: 12 }}>Email</span><div style={{ fontWeight: 500 }}>{student.email ?? '---'}</div></div>
+                      <div><span style={{ color: '#5F5657', fontSize: 12 }}>Telefono</span><div style={{ fontWeight: 500 }}>{student.telefono ?? '---'}</div></div>
+                      <div><span style={{ color: '#5F5657', fontSize: 12 }}>Estado</span><div><span style={{ display: 'inline-block', padding: '2px 10px', borderRadius: 12, fontSize: 12, fontWeight: 600, background: student.estatus === 'Activo' ? '#FEEBEE' : '#F0EFEF', color: student.estatus === 'Activo' ? '#0F8122' : '#5F5657' }}>{student.estatus === 'Activo' ? 'Activo' : 'Inactivo'}</span></div></div>
                     </div>
                   </div>
                   <div style={{ padding: '0 32px', marginBottom: 24 }}>
                     <h3 style={{ fontSize: 14, fontWeight: 600, color: '#EB2466', textTransform: 'uppercase', marginBottom: 12, letterSpacing: 0.5 }}>Credencial NFC</h3>
                     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px 24px', fontSize: 14 }}>
-                      <div><span style={{ color: '#5F5657', fontSize: 12 }}>UID NFC</span><div style={{ fontWeight: 500, fontFamily: 'monospace', color: '#0F8122' }}>{cred.uidNfc}</div></div>
-                      <div><span style={{ color: '#5F5657', fontSize: 12 }}>Fecha emision</span><div style={{ fontWeight: 500 }}>{cred.fechaEmision}</div></div>
-                      <div><span style={{ color: '#5F5657', fontSize: 12 }}>Estado</span><div><span className={estadoBadge[cred.activa ? 'Activa' : 'Inactiva']}>{cred.activa ? 'Activa' : 'Inactiva'}</span></div></div>
+                      <div><span style={{ color: '#5F5657', fontSize: 12 }}>UID NFC</span><div style={{ fontWeight: 500, fontFamily: 'monospace', color: '#0F8122' }}>{cred.numero ?? '---'}</div></div>
+                      <div><span style={{ color: '#5F5657', fontSize: 12 }}>Fecha emision</span><div style={{ fontWeight: 500 }}>{cred.fecha_emision ?? '---'}</div></div>
+                      <div><span style={{ color: '#5F5657', fontSize: 12 }}>Estado</span><div><span className={estadoBadge[isCredActive ? 'Activa' : 'Inactiva']}>{isCredActive ? 'Activa' : 'Inactiva'}</span></div></div>
                     </div>
                   </div>
                   <div style={{ padding: '0 32px', marginBottom: 32 }}>
                     <h3 style={{ fontSize: 14, fontWeight: 600, color: '#EB2466', textTransform: 'uppercase', marginBottom: 12, letterSpacing: 0.5 }}>Contacto</h3>
                     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px 24px', fontSize: 14 }}>
-                      <div style={{ gridColumn: 'span 2' }}><span style={{ color: '#5F5657', fontSize: 12 }}>Domicilio</span><div style={{ fontWeight: 500 }}>{student.domicilio}</div></div>
-                      <div><span style={{ color: '#5F5657', fontSize: 12 }}>Tutor</span><div style={{ fontWeight: 500 }}>{student.tutor}</div></div>
-                      <div><span style={{ color: '#5F5657', fontSize: 12 }}>Telefono tutor</span><div style={{ fontWeight: 500, fontFamily: 'monospace' }}>{student.telefonoTutor}</div></div>
+                      <div style={{ gridColumn: 'span 2' }}><span style={{ color: '#5F5657', fontSize: 12 }}>Direccion</span><div style={{ fontWeight: 500 }}>{student.direccion ?? '---'}</div></div>
+                      <div><span style={{ color: '#5F5657', fontSize: 12 }}>Email</span><div style={{ fontWeight: 500 }}>{student.email ?? '---'}</div></div>
+                      <div><span style={{ color: '#5F5657', fontSize: 12 }}>Telefono</span><div style={{ fontWeight: 500, fontFamily: 'monospace' }}>{student.telefono ?? '---'}</div></div>
                     </div>
                   </div>
                 </>
@@ -1064,11 +1372,11 @@ export default function CredentialsPage() {
                       <div style={{ padding: 16, background: '#F0EFEF', borderRadius: 8, fontSize: 14 }}>
                         <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
                           <span style={{ color: '#5F5657' }}>Alumno:</span>
-                          <span style={{ fontWeight: 600 }}>{student.nombreCompleto}</span>
+                          <span style={{ fontWeight: 600 }}>{getFullName(student)}</span>
                         </div>
                         <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
                           <span style={{ color: '#5F5657' }}>Chip actual:</span>
-                          <span style={{ fontFamily: 'monospace', fontWeight: 600, color: '#AB1748' }}>{cred.uidNfc}</span>
+                          <span style={{ fontFamily: 'monospace', fontWeight: 600, color: '#AB1748' }}>{cred.numero ?? '---'}</span>
                         </div>
                         <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                           <span style={{ color: '#5F5657' }}>Accion:</span>
@@ -1087,7 +1395,7 @@ export default function CredentialsPage() {
                   {reassignStep === 'write' && (
                     <div style={{ textAlign: 'center' }}>
                       <div style={{ marginBottom: 16, padding: 12, background: '#FEEBEE', borderRadius: 8 }}>
-                        <div style={{ fontWeight: 600, fontSize: 14 }}>{student.nombreCompleto}</div>
+                        <div style={{ fontWeight: 600, fontSize: 14 }}>{getFullName(student)}</div>
                         <div style={{ fontSize: 13, color: '#5F5657' }}>Matricula: {student.matricula}</div>
                       </div>
                       <div className={`nfc-zone ${reassignWriting ? 'scanning' : reassignWritten ? '' : 'scanning'}`} style={{ margin: '0 auto 16px' }}>

@@ -1,4 +1,4 @@
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import {
   Search,
   Filter,
@@ -16,27 +16,17 @@ import {
   FileSpreadsheet,
 } from "lucide-react";
 import * as XLSX from "xlsx";
-import { alumnos, type Alumno } from "../data/mockData";
+import { alumnosApi } from "../api";
+import type { Alumno } from "../types";
 import { generateStudentListPDF } from "../utils/generateStudentListPDF";
 
 const ROWS_PER_PAGE_OPTIONS = [10, 25, 50, 100];
 
-const mockHistory = [
-  { date: "2026-07-13", entry: "08:02", exit: "16:30" },
-  { date: "2026-07-12", entry: "07:58", exit: "16:25" },
-  { date: "2026-07-11", entry: "08:05", exit: "16:35" },
-  { date: "2026-07-10", entry: "08:00", exit: "16:28" },
-  { date: "2026-07-09", entry: "07:55", exit: "16:32" },
-  { date: "2026-07-08", entry: "08:10", exit: "16:20" },
-  { date: "2026-07-07", entry: "08:03", exit: "16:27" },
-];
-
 export default function StudentsPage() {
+  const [alumnosData, setAlumnosData] = useState<Alumno[]>([]);
   const [search, setSearch] = useState("");
-  const [activeFilters, setActiveFilters] = useState<string[]>([
-    "Grupo A",
-    "Activo",
-  ]);
+  const [activeFilters, setActiveFilters] = useState<string[]>([]);
+  const [showFilterDropdown, setShowFilterDropdown] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
   const [rowsPerPage, setRowsPerPage] = useState(10);
   const [selectedStudent, setSelectedStudent] = useState<Alumno | null>(
@@ -77,25 +67,64 @@ export default function StudentsPage() {
   const [uploadFile, setUploadFile] = useState<File | null>(null);
   const [uploadPreview, setUploadPreview] = useState<{ headers: string[]; rows: string[][] } | null>(null);
   const [uploadError, setUploadError] = useState<string | null>(null);
+  const [uploadProgress, setUploadProgress] = useState<{ current: number; total: number; success: number; failed: number; done: boolean; errors: string[] } | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const filterRef = useRef<HTMLDivElement>(null);
 
-  const filteredStudents = alumnos.filter((s) => {
-    if (!search) return true;
-    const q = search.toLowerCase();
-    return (
-      s.nombreCompleto.toLowerCase().includes(q) ||
-      s.matricula.toLowerCase().includes(q) ||
-      s.grupo.toLowerCase().includes(q)
-    );
+  useEffect(() => {
+    fetchAlumnos();
+  }, []);
+
+  const fetchAlumnos = async () => {
+    try {
+      const data = await alumnosApi.getAll();
+      setAlumnosData(data);
+    } catch (error) {
+      console.error('Error fetching alumnos:', error);
+      showToast("Error al cargar los alumnos", "error");
+    }
+  };
+
+  useEffect(() => {
+    if (!showFilterDropdown) return;
+    const handleClickOutside = (e: MouseEvent) => {
+      if (filterRef.current && !filterRef.current.contains(e.target as Node)) {
+        setShowFilterDropdown(false);
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, [showFilterDropdown]);
+
+  const uniqueGroups = Array.from(new Set(alumnosData.map((s) => s.grupo_nombre || (s.grupo_id ? String(s.grupo_id) : 'Sin grupo')))).sort();
+
+  const filteredStudents = alumnosData.filter((s) => {
+    const nombreCompleto = `${s.nombre} ${s.apellido_paterno} ${s.apellido_materno}`.trim();
+    if (search) {
+      const q = search.toLowerCase();
+      const matchSearch =
+        nombreCompleto.toLowerCase().includes(q) ||
+        s.matricula.toLowerCase().includes(q) ||
+        (s.grupo_nombre || (s.grupo_id ? String(s.grupo_id) : 'Sin grupo')).toLowerCase().includes(q);
+      if (!matchSearch) return false;
+    }
+    if (activeFilters.length > 0) {
+      const matchFilters = activeFilters.every((f) => {
+        if (uniqueGroups.includes(f)) return (s.grupo_nombre || (s.grupo_id ? String(s.grupo_id) : 'Sin grupo')) === f;
+        if (f === "Activo") return s.estatus === "Activo";
+        if (f === "Inactivo") return s.estatus !== "Activo";
+        return true;
+      });
+      if (!matchFilters) return false;
+    }
+    return true;
   });
-
-  const uniqueGroups = Array.from(new Set(alumnos.map((s) => s.grupo))).sort();
 
   const handleExportPDF = () => {
     const toExport =
       exportGroupId === "all"
         ? filteredStudents
-        : alumnos.filter((s) => s.grupo === exportGroupId);
+        : alumnosData.filter((s) => (s.grupo_nombre || (s.grupo_id ? String(s.grupo_id) : 'Sin grupo')) === exportGroupId);
     const label = exportGroupId === "all" ? "general" : `grupo_${exportGroupId}`;
     generateStudentListPDF({
       students: toExport,
@@ -120,17 +149,18 @@ export default function StudentsPage() {
   };
 
   const handleEdit = (student: Alumno) => {
-    setEditName(student.nombreCompleto);
+    const nombreCompleto = `${student.nombre} ${student.apellido_paterno} ${student.apellido_materno}`.trim();
+    setEditName(nombreCompleto);
     setEditControl(student.matricula);
-    setEditGrupo(student.grupo);
-    setEditCapacitacion(student.capacitacion);
-    setEditTurno(student.turno);
-    setEditCurp(student.curp || "GARC080315HDFRRL09");
-    setEditFechaNacimiento(student.fechaRegistro || "");
-    setEditTipoSangre(student.tipoSangre || "O+");
-    setEditDomicilio(student.domicilio || "Av. Insurgentes Sur 1234, Col. Del Valle, CDMX");
-    setEditTelefonoTutor(student.tutorTelefono);
-    setEditCorreoTutor(student.tutorNombre + "@email.com");
+    setEditGrupo(student.grupo_nombre || (student.grupo_id ? String(student.grupo_id) : ''));
+    setEditCapacitacion(student.capacitacion || '');
+    setEditTurno(student.turno || '');
+    setEditCurp(student.curp || '');
+    setEditFechaNacimiento(student.fecha_nacimiento || '');
+    setEditTipoSangre(student.tipo_sangre || '');
+    setEditDomicilio(student.direccion || '');
+    setEditTelefonoTutor(student.tutor_telefono || '');
+    setEditCorreoTutor(student.email);
     setSelectedStudent(student);
     setShowConfirmEdit(true);
   };
@@ -140,9 +170,31 @@ export default function StudentsPage() {
     setPanelMode("edit");
   };
 
-  const handleSaveEdit = () => {
-    setPanelMode("view");
-    showToast("Datos del alumno actualizados correctamente");
+  const handleSaveEdit = async () => {
+    if (!selectedStudent) return;
+    try {
+      const nameParts = editName.split(' ');
+      await alumnosApi.update(selectedStudent.id, {
+        matricula: editControl,
+        nombre: nameParts[0] || '',
+        apellido_paterno: nameParts[1] || '',
+        apellido_materno: nameParts.slice(2).join(' ') || '',
+        email: editCorreoTutor,
+        telefono: editTelefonoTutor,
+        fecha_nacimiento: editFechaNacimiento,
+        direccion: editDomicilio,
+        curp: editCurp,
+        tipo_sangre: editTipoSangre,
+        grupo_nombre: editGrupo,
+        capacitacion: editCapacitacion,
+        turno: editTurno,
+      });
+      setPanelMode("view");
+      showToast("Datos del alumno actualizados correctamente");
+      fetchAlumnos();
+    } catch (error) {
+      showToast("Error al actualizar el alumno", "error");
+    }
   };
 
   const handleClosePanel = () => {
@@ -192,32 +244,31 @@ export default function StudentsPage() {
     setShowNewStudentModal(true);
   };
 
-  const handleSaveNewStudent = () => {
+  const handleSaveNewStudent = async () => {
     if (!newName.trim() || !newControl.trim() || !newGrupo.trim()) {
       showToast("Nombre, numero de control y grupo son obligatorios", "error");
       return;
     }
-    const newId = Math.max(...alumnos.map((s) => s.idAlumno), 0) + 1;
-    alumnos.push({
-      idAlumno: newId,
-      nombreCompleto: newName.trim(),
-      matricula: newControl.trim(),
-      grupo: newGrupo.trim(),
-      capacitacion: newCapacitacion.trim(),
-      cohorte: newCohorte.trim(),
-      tutorNombre: newTutor.trim(),
-      tutorTelefono: newTelefonoTutor.trim(),
-      curp: newCurp.trim(),
-      fechaRegistro: newFechaNacimiento.trim(),
-      tipoSangre: newTipoSangre.trim(),
-      nss: newNumAfiliacion.trim(),
-      domicilio: newDomicilio.trim(),
-      activo: true,
-      turno: newTurno,
-    });
-    setShowNewStudentModal(false);
-    showToast(`Alumno "${newName.trim()}" agregado correctamente`);
-    resetNewStudentForm();
+    try {
+      const nameParts = newName.trim().split(' ');
+      await alumnosApi.create({
+        matricula: newControl.trim(),
+        nombre: nameParts[0] || '',
+        apellido_paterno: nameParts[1] || '',
+        apellido_materno: nameParts[2] || '',
+        email: `${newControl.trim()}@cobao.edu.mx`,
+        telefono: newTelefonoTutor.trim(),
+        fecha_nacimiento: newFechaNacimiento.trim(),
+        direccion: newDomicilio.trim(),
+        grupo_id: newGrupo.trim() ? Number(newGrupo.trim()) : undefined,
+      });
+      setShowNewStudentModal(false);
+      showToast(`Alumno "${newName.trim()}" agregado correctamente`);
+      resetNewStudentForm();
+      fetchAlumnos();
+    } catch (error) {
+      showToast("Error al crear el alumno", "error");
+    }
   };
 
   const handleDownloadTemplate = () => {
@@ -271,64 +322,112 @@ export default function StudentsPage() {
     reader.readAsArrayBuffer(file);
   };
 
-  const handleConfirmUpload = () => {
+  const handleConfirmUpload = async () => {
     if (!uploadPreview) return;
-    const headerMap: Record<string, keyof Alumno> = {};
-    const requiredFields = ["Nombre", "No. Control", "Grupo"];
+    const headerMap: Record<string, number> = {};
     uploadPreview.headers.forEach((h, i) => {
       const normalized = h.toLowerCase().trim();
-      if (normalized.includes("nombre")) headerMap[i] = "nombreCompleto";
-      else if (normalized.includes("control")) headerMap[i] = "matricula";
-      else if (normalized.includes("grupo")) headerMap[i] = "grupo";
-      else if (normalized.includes("capacitacion")) headerMap[i] = "capacitacion";
-      else if (normalized.includes("cohorte")) headerMap[i] = "cohorte";
-      else if (normalized.includes("turno")) headerMap[i] = "turno";
-      else if (normalized.includes("curp")) headerMap[i] = "curp";
-      else if (normalized.includes("nacimiento")) headerMap[i] = "fechaRegistro";
-      else if (normalized.includes("sangre")) headerMap[i] = "tipoSangre";
-      else if (normalized.includes("afiliacion")) headerMap[i] = "nss";
-      else if (normalized.includes("domicilio")) headerMap[i] = "domicilio";
-      else if (normalized.includes("tutor") && !normalized.includes("telefono")) headerMap[i] = "tutorNombre";
-      else if (normalized.includes("telefono")) headerMap[i] = "tutorTelefono";
+      if (normalized.includes("nombre")) headerMap[i] = 0;
+      else if (normalized.includes("control")) headerMap[i] = 1;
+      else if (normalized.includes("grupo")) headerMap[i] = 2;
+      else if (normalized.includes("curp")) headerMap[i] = 3;
+      else if (normalized.includes("nacimiento")) headerMap[i] = 4;
+      else if (normalized.includes("sangre")) headerMap[i] = 5;
+      else if (normalized.includes("afiliacion")) headerMap[i] = 6;
+      else if (normalized.includes("domicilio") || normalized.includes("direc")) headerMap[i] = 7;
+      else if (normalized.includes("tutor") && normalized.includes("tel")) headerMap[i] = 8;
+      else if (normalized.includes("tutor") && !normalized.includes("tel")) headerMap[i] = 9;
+      else if (normalized.includes("telefono") || normalized.includes("tel")) headerMap[i] = 8;
+      else if (normalized.includes("capacitacion")) headerMap[i] = 10;
+      else if (normalized.includes("cohorte")) headerMap[i] = 11;
+      else if (normalized.includes("turno")) headerMap[i] = 12;
     });
-    const missingHeaders = requiredFields.filter((f) => !Object.values(headerMap).includes(f as keyof Alumno));
+    const requiredFields = ["Nombre", "No. Control", "Grupo"];
+    const missingHeaders = requiredFields.filter((f) => {
+      const idx = Object.values(headerMap).findIndex((v) => requiredFields.indexOf(f) === v);
+      return idx === -1;
+    });
     if (missingHeaders.length > 0) {
       showToast(`Faltan columnas requeridas: ${missingHeaders.join(", ")}`, "error");
       return;
     }
-    let added = 0;
-    const baseId = Math.max(...alumnos.map((s) => s.idAlumno), 0);
-    uploadPreview.rows.forEach((row, idx) => {
-      const nombreCompleto = row[Object.keys(headerMap).find((k) => headerMap[Number(k)] === "nombreCompleto") as unknown as number] || "";
-      const matricula = row[Object.keys(headerMap).find((k) => headerMap[Number(k)] === "matricula") as unknown as number] || "";
-      const grupo = row[Object.keys(headerMap).find((k) => headerMap[Number(k)] === "grupo") as unknown as number] || "";
-      if (!nombreCompleto || !matricula || !grupo) return;
-      const getField = (field: keyof Alumno): string => {
-        const idx = Object.keys(headerMap).find((k) => headerMap[Number(k)] === field);
-        return idx !== undefined ? String(row[Number(idx)] || "") : "";
+    const rowsToImport = uploadPreview.rows.filter((row) => {
+      const getVal = (fieldIdx: number) => {
+        const colIdx = Object.keys(headerMap).find((k) => headerMap[Number(k)] === fieldIdx);
+        return colIdx ? String(row[Number(colIdx)] || "").trim() : "";
       };
-      alumnos.push({
-        idAlumno: baseId + idx + 1,
-        nombreCompleto: String(nombreCompleto),
-        matricula: String(matricula),
-        grupo: String(grupo),
-        capacitacion: getField("capacitacion"),
-        cohorte: getField("cohorte"),
-        tutorNombre: getField("tutorNombre"),
-        tutorTelefono: getField("tutorTelefono"),
-        curp: getField("curp"),
-        fechaRegistro: getField("fechaRegistro"),
-        tipoSangre: getField("tipoSangre"),
-        nss: getField("nss"),
-        domicilio: getField("domicilio"),
-        activo: true,
-        turno: (getField("turno") as "Matutino" | "Vespertino") || "Matutino",
-      });
-      added++;
+      const matricula = getVal(1);
+      return getVal(0) && matricula && matricula !== "nan" && matricula !== "NaN" && !/^\d+\.?\d*$/.test(matricula);
     });
-    setShowNewStudentModal(false);
-    showToast(`${added} alumno(s) importado(s) correctamente`);
-    resetNewStudentForm();
+    const total = rowsToImport.length;
+    let added = 0;
+    let failed = 0;
+    const errors: string[] = [];
+    setUploadProgress({ current: 0, total, success: 0, failed: 0, done: false, errors: [] });
+    for (let i = 0; i < rowsToImport.length; i++) {
+      const row = rowsToImport[i];
+      const getVal = (fieldIdx: number) => {
+        const colIdx = Object.keys(headerMap).find((k) => headerMap[Number(k)] === fieldIdx);
+        return colIdx ? String(row[Number(colIdx)] || "").trim() : "";
+      };
+
+      const nombreCompleto = getVal(0);
+      const matricula = getVal(1);
+      const grupo = getVal(2);
+      const curp = getVal(3);
+      const fechaNac = getVal(4);
+      const tipoSangre = getVal(5);
+      const nss = getVal(6);
+      const domicilio = getVal(7);
+      const telefonoTutor = getVal(8);
+      const tutor = getVal(9);
+      const capacitacion = getVal(10);
+      const cohorte = getVal(11);
+      const turno = getVal(12);
+
+      const nameParts = nombreCompleto.split(' ');
+      try {
+        await alumnosApi.create({
+          matricula,
+          nombre: nameParts[0] || '',
+          apellido_paterno: nameParts[1] || '',
+          apellido_materno: nameParts.slice(2).join(' ') || '',
+          email: `${matricula}@cobao.edu.mx`,
+          curp: curp || undefined,
+          fecha_nacimiento: fechaNac || undefined,
+          tipo_sangre: tipoSangre || undefined,
+          nss: nss || undefined,
+          direccion: domicilio || undefined,
+          tutor_telefono: telefonoTutor || undefined,
+          tutor_nombre: tutor || undefined,
+          grupo_id: grupo ? Number(grupo) : undefined,
+          grupo_nombre: grupo || undefined,
+          capacitacion: capacitacion || undefined,
+          cohorte: cohorte || undefined,
+          turno: turno || undefined,
+        });
+        added++;
+      } catch (err: unknown) {
+        failed++;
+        let msg = "Error desconocido";
+        if (err && typeof err === "object" && "response" in err) {
+          const axErr = err as { response?: { status?: number; data?: { detail?: unknown } } };
+          const detail = axErr.response?.data?.detail;
+          if (typeof detail === "string") msg = detail;
+          else if (Array.isArray(detail) && detail.length > 0) {
+            msg = detail.map((d: { msg?: string }) => d.msg || JSON.stringify(d)).join("; ");
+          } else if (detail) msg = JSON.stringify(detail);
+          else msg = `Error HTTP ${axErr.response?.status || "desconocido"}`;
+        } else if (err instanceof Error) {
+          msg = err.message;
+        }
+        errors.push(`Fila ${i + 1} (${matricula || "?"}): ${msg}`);
+      }
+      setUploadProgress({ current: i + 1, total, success: added, failed, done: false, errors: [...errors] });
+    }
+    setUploadProgress((prev) => prev ? { ...prev, done: true, errors: [...errors] } : null);
+    showToast(`${added} alumno(s) importado(s)${failed > 0 ? ` (${failed} fallidos)` : ""}`);
+    fetchAlumnos();
   };
 
   return (
@@ -384,22 +483,117 @@ export default function StudentsPage() {
         </div>
 
         <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
+          <div ref={filterRef} style={{ position: "relative" }}>
           <button
+            onClick={() => setShowFilterDropdown(!showFilterDropdown)}
             style={{
               display: "flex",
               alignItems: "center",
               gap: 6,
               padding: "8px 16px",
-              border: "1px solid #CAC6C7",
+              border: activeFilters.length > 0 ? "1px solid #EB2466" : "1px solid #CAC6C7",
               borderRadius: 8,
-              background: "#fff",
+              background: activeFilters.length > 0 ? "#FEEBEE" : "#fff",
               fontSize: 14,
               cursor: "pointer",
+              color: activeFilters.length > 0 ? "#EB2466" : "#1C1819",
+              fontWeight: activeFilters.length > 0 ? 600 : 400,
+              transition: "all 150ms",
             }}
           >
             <Filter size={16} />
             Filtrar
+            {activeFilters.length > 0 && (
+              <span style={{ background: "#EB2466", color: "#fff", borderRadius: 10, padding: "1px 7px", fontSize: 12, fontWeight: 600 }}>
+                {activeFilters.length}
+              </span>
+            )}
           </button>
+          {showFilterDropdown && (
+            <div style={{
+              position: "absolute", top: "100%", right: 0, marginTop: 6,
+              background: "#fff", border: "none", borderRadius: 12,
+              boxShadow: "0 8px 32px rgba(0,0,0,0.15)", zIndex: 50, width: 260, overflow: "hidden",
+            }}>
+              <div style={{ padding: "14px 16px 10px", borderBottom: "1px solid #F0EFEF", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                <span style={{ fontSize: 14, fontWeight: 700, color: "#1C1819" }}>Filtros</span>
+                {activeFilters.length > 0 && (
+                  <button onClick={() => { setActiveFilters([]); }} style={{
+                    border: "none", background: "none", color: "#AB1748", fontSize: 12, cursor: "pointer", fontWeight: 600, padding: 0,
+                  }}>
+                    Limpiar todo
+                  </button>
+                )}
+              </div>
+
+              <div style={{ padding: "12px 16px 8px" }}>
+                <div style={{ fontSize: 11, fontWeight: 700, color: "#85787A", textTransform: "uppercase", letterSpacing: "0.5px", marginBottom: 8 }}>Grupo</div>
+                <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+                  {uniqueGroups.map((g) => {
+                    const active = activeFilters.includes(g);
+                    return (
+                      <button key={g} onClick={() => {
+                        setActiveFilters(prev => active ? prev.filter(f => f !== g) : [...prev, g]);
+                      }} style={{
+                        padding: "5px 12px", borderRadius: 16, fontSize: 12, fontWeight: 500, cursor: "pointer",
+                        border: active ? "1px solid #EB2466" : "1px solid #E5E3E4",
+                        background: active ? "#EB2466" : "#fff",
+                        color: active ? "#fff" : "#5F5657",
+                        transition: "all 120ms",
+                      }}>
+                        {g}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              <div style={{ padding: "8px 16px" }}>
+                <div style={{ fontSize: 11, fontWeight: 700, color: "#85787A", textTransform: "uppercase", letterSpacing: "0.5px", marginBottom: 8 }}>Estado</div>
+                <div style={{ display: "flex", gap: 6 }}>
+                  {["Activo", "Inactivo"].map((e) => {
+                    const active = activeFilters.includes(e);
+                    return (
+                      <button key={e} onClick={() => {
+                        setActiveFilters(prev => active ? prev.filter(f => f !== e) : [...prev, e]);
+                      }} style={{
+                        padding: "5px 14px", borderRadius: 16, fontSize: 12, fontWeight: 500, cursor: "pointer",
+                        border: active ? "1px solid #EB2466" : "1px solid #E5E3E4",
+                        background: active ? "#EB2466" : "#fff",
+                        color: active ? "#fff" : "#5F5657",
+                        transition: "all 120ms",
+                      }}>
+                        {e}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              <div style={{ padding: "8px 16px 14px" }}>
+                <div style={{ fontSize: 11, fontWeight: 700, color: "#85787A", textTransform: "uppercase", letterSpacing: "0.5px", marginBottom: 8 }}>Turno</div>
+                <div style={{ display: "flex", gap: 6 }}>
+                  {["Matutino", "Vespertino"].map((t) => {
+                    const active = activeFilters.includes(t);
+                    return (
+                      <button key={t} onClick={() => {
+                        setActiveFilters(prev => active ? prev.filter(f => f !== t) : [...prev, t]);
+                      }} style={{
+                        padding: "5px 14px", borderRadius: 16, fontSize: 12, fontWeight: 500, cursor: "pointer",
+                        border: active ? "1px solid #EB2466" : "1px solid #E5E3E4",
+                        background: active ? "#EB2466" : "#fff",
+                        color: active ? "#fff" : "#5F5657",
+                        transition: "all 120ms",
+                      }}>
+                        {t}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            </div>
+          )}
+          </div>
           <button
             onClick={() => setShowExportModal(true)}
             style={{
@@ -516,9 +710,10 @@ export default function StudentsPage() {
           <tbody>
             {paginatedStudents.map((student, idx) => {
               const rowIdx = (currentPage - 1) * rowsPerPage + idx;
+              const nombreCompleto = `${student.nombre} ${student.apellido_paterno} ${student.apellido_materno}`.trim();
               return (
                 <tr
-                  key={student.idAlumno}
+                  key={student.id}
                   style={{
                     background: rowIdx % 2 === 0 ? "#fff" : "#F0EFEF",
                     transition: "background 0.15s",
@@ -533,7 +728,7 @@ export default function StudentsPage() {
                 >
                   <td style={{ padding: "12px" }}>{rowIdx + 1}</td>
                   <td style={{ padding: "12px", fontWeight: 500 }}>
-                    {student.nombreCompleto}
+                    {nombreCompleto}
                   </td>
                   <td
                     style={{
@@ -544,10 +739,10 @@ export default function StudentsPage() {
                   >
                     {student.matricula}
                   </td>
-                  <td style={{ padding: "12px" }}>{student.grupo}</td>
-                  <td style={{ padding: "12px" }}>{student.capacitacion}</td>
-                  <td style={{ padding: "12px" }}>                    {student.tutorNombre}</td>
-                  <td style={{ padding: "12px" }}>                    {student.tutorTelefono}</td>
+                  <td style={{ padding: "12px" }}>{student.grupo_nombre || (student.grupo_id ? String(student.grupo_id) : 'Sin grupo')}</td>
+                  <td style={{ padding: "12px" }}>{student.capacitacion || '---'}</td>
+                  <td style={{ padding: "12px" }}>{student.tutor_nombre || '---'}</td>
+                  <td style={{ padding: "12px" }}>{student.tutor_telefono || '---'}</td>
                   <td style={{ padding: "12px" }}>
                     <span
                       style={{
@@ -557,12 +752,12 @@ export default function StudentsPage() {
                         fontSize: 12,
                         fontWeight: 600,
                         background:
-                          student.activo ? "#FEEBEE" : "#F0EFEF",
+                          student.estatus === "Activo" ? "#FEEBEE" : "#F0EFEF",
                         color:
-                          student.activo ? "#0F8122" : "#5F5657",
+                          student.estatus === "Activo" ? "#0F8122" : "#5F5657",
                       }}
                     >
-                      {student.activo ? 'Activo' : 'De baja'}
+                      {student.estatus === "Activo" ? 'Activo' : 'De baja'}
                     </span>
                   </td>
                   <td style={{ padding: "12px" }}>
@@ -788,15 +983,15 @@ export default function StudentsPage() {
                 <User size={36} color="#85787A" />
               </div>
               <div style={{ flex: 1 }}>
-                <div style={{ fontSize: 18, fontWeight: 700, color: "#1C1819" }}>{selectedStudent.nombreCompleto}</div>
+                <div style={{ fontSize: 18, fontWeight: 700, color: "#1C1819" }}>{`${selectedStudent.nombre} ${selectedStudent.apellido_paterno} ${selectedStudent.apellido_materno}`}</div>
                 <div style={{ fontSize: 16, fontFamily: "monospace", color: "#EB2466", marginTop: 2 }}>{selectedStudent.matricula}</div>
-                <div style={{ fontSize: 13, color: "#5F5657", marginTop: 2 }}>Grupo: {selectedStudent.grupo}</div>
+                <div style={{ fontSize: 13, color: "#5F5657", marginTop: 2 }}>Grupo: {selectedStudent.grupo_nombre || (selectedStudent.grupo_id ? String(selectedStudent.grupo_id) : 'Sin grupo')}</div>
               </div>
               {panelMode === "view" && (
                 <button onClick={() => {
-                  setEditName(selectedStudent.nombreCompleto);
+                  setEditName(`${selectedStudent.nombre} ${selectedStudent.apellido_paterno} ${selectedStudent.apellido_materno}`.trim());
                   setEditControl(selectedStudent.matricula);
-                  setEditGrupo(selectedStudent.grupo);
+                  setEditGrupo(selectedStudent.grupo_id ? String(selectedStudent.grupo_id) : '');
                   setPanelMode("edit");
                 }} style={{ display: "flex", alignItems: "center", gap: 6, padding: "8px 14px", border: "none", borderRadius: 8, background: "#AB1748", color: "#fff", fontSize: 13, fontWeight: 500, cursor: "pointer" }}>
                   <Edit size={14} /> Editar
@@ -820,57 +1015,29 @@ export default function StudentsPage() {
                 <div style={{ padding: "0 32px", marginBottom: 24 }}>
                   <h3 style={{ fontSize: 14, fontWeight: 600, color: "#EB2466", textTransform: "uppercase", marginBottom: 12, letterSpacing: 0.5 }}>Informacion general</h3>
                   <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "8px 24px", fontSize: 14 }}>
-                    <div><span style={{ color: "#5F5657", fontSize: 12 }}>Grupo</span><div style={{ fontWeight: 500 }}>{selectedStudent.grupo}</div></div>
-                    <div><span style={{ color: "#5F5657", fontSize: 12 }}>Capacitacion</span><div style={{ fontWeight: 500 }}>{selectedStudent.capacitacion}</div></div>
-                    <div><span style={{ color: "#5F5657", fontSize: 12 }}>Turno</span><div style={{ fontWeight: 500 }}>{selectedStudent.turno}</div></div>
-                    <div><span style={{ color: "#5F5657", fontSize: 12 }}>Estado</span><div><span style={{ display: "inline-block", padding: "2px 10px", borderRadius: 12, fontSize: 12, fontWeight: 600, background: selectedStudent.activo ? "#FEEBEE" : "#F0EFEF", color: selectedStudent.activo ? "#0F8122" : "#5F5657" }}>{selectedStudent.activo ? 'Activo' : 'De baja'}</span></div></div>
+                    <div><span style={{ color: "#5F5657", fontSize: 12 }}>Grupo</span><div style={{ fontWeight: 500 }}>{selectedStudent.grupo_nombre || (selectedStudent.grupo_id ? String(selectedStudent.grupo_id) : 'Sin grupo')}</div></div>
+                    <div><span style={{ color: "#5F5657", fontSize: 12 }}>Capacitacion</span><div style={{ fontWeight: 500 }}>{selectedStudent.capacitacion || '---'}</div></div>
+                    <div><span style={{ color: "#5F5657", fontSize: 12 }}>Cohorte</span><div style={{ fontWeight: 500 }}>{selectedStudent.cohorte || '---'}</div></div>
+                    <div><span style={{ color: "#5F5657", fontSize: 12 }}>Turno</span><div style={{ fontWeight: 500 }}>{selectedStudent.turno || '---'}</div></div>
+                    <div><span style={{ color: "#5F5657", fontSize: 12 }}>Estado</span><div><span style={{ display: "inline-block", padding: "2px 10px", borderRadius: 12, fontSize: 12, fontWeight: 600, background: selectedStudent.estatus === "Activo" ? "#FEEBEE" : "#F0EFEF", color: selectedStudent.estatus === "Activo" ? "#0F8122" : "#5F5657" }}>{selectedStudent.estatus}</span></div></div>
                   </div>
                 </div>
                 <div style={{ padding: "0 32px", marginBottom: 24 }}>
-                  <h3 style={{ fontSize: 14, fontWeight: 600, color: "#EB2466", textTransform: "uppercase", marginBottom: 12, letterSpacing: 0.5 }}>Informacion personal</h3>
+                  <h3 style={{ fontSize: 14, fontWeight: 600, color: "#EB2466", textTransform: "uppercase", marginBottom: 12, letterSpacing: 0.5 }}>Datos personales</h3>
                   <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "8px 24px", fontSize: 14 }}>
-                    <div style={{ gridColumn: "span 2" }}><span style={{ color: "#5F5657", fontSize: 12 }}>CURP</span><div style={{ fontWeight: 500, fontFamily: "monospace" }}>{selectedStudent.curp || "GARC080315HDFRRL09"}</div></div>
-                    <div><span style={{ color: "#5F5657", fontSize: 12 }}>Fecha de registro</span><div style={{ fontWeight: 500 }}>{selectedStudent.fechaRegistro || ""}</div></div>
-                    <div><span style={{ color: "#5F5657", fontSize: 12 }}>Tipo de sangre</span><div style={{ fontWeight: 500 }}>{selectedStudent.tipoSangre || "O+"}</div></div>
+                    <div><span style={{ color: "#5F5657", fontSize: 12 }}>CURP</span><div style={{ fontWeight: 500, fontFamily: "monospace", fontSize: 13 }}>{selectedStudent.curp || '---'}</div></div>
+                    <div><span style={{ color: "#5F5657", fontSize: 12 }}>NSS</span><div style={{ fontWeight: 500, fontFamily: "monospace", fontSize: 13 }}>{selectedStudent.nss || '---'}</div></div>
+                    <div><span style={{ color: "#5F5657", fontSize: 12 }}>Fecha de nacimiento</span><div style={{ fontWeight: 500 }}>{selectedStudent.fecha_nacimiento || '---'}</div></div>
+                    <div><span style={{ color: "#5F5657", fontSize: 12 }}>Tipo de sangre</span><div style={{ fontWeight: 500 }}>{selectedStudent.tipo_sangre || '---'}</div></div>
+                    <div><span style={{ color: "#5F5657", fontSize: 12 }}>Genero</span><div style={{ fontWeight: 500 }}>{selectedStudent.genero || '---'}</div></div>
                   </div>
                 </div>
                 <div style={{ padding: "0 32px", marginBottom: 24 }}>
                   <h3 style={{ fontSize: 14, fontWeight: 600, color: "#EB2466", textTransform: "uppercase", marginBottom: 12, letterSpacing: 0.5 }}>Contacto</h3>
                   <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "8px 24px", fontSize: 14 }}>
-                    <div style={{ gridColumn: "span 2" }}><span style={{ color: "#5F5657", fontSize: 12 }}>Domicilio</span><div style={{ fontWeight: 500 }}>{selectedStudent.domicilio || "Av. Insurgentes Sur 1234, Col. Del Valle, CDMX"}</div></div>
-                    <div><span style={{ color: "#5F5657", fontSize: 12 }}>Telefono tutor</span><div style={{ fontWeight: 500 }}>{selectedStudent.tutorTelefono}</div></div>
-                    <div><span style={{ color: "#5F5657", fontSize: 12 }}>Correo tutor</span><div style={{ fontWeight: 500 }}>{selectedStudent.tutorNombre + "@email.com"}</div></div>
-                  </div>
-                </div>
-                <div style={{ padding: "0 32px", marginBottom: 24 }}>
-                  <h3 style={{ fontSize: 14, fontWeight: 600, color: "#EB2466", textTransform: "uppercase", marginBottom: 12, letterSpacing: 0.5 }}>Credencial NFC</h3>
-                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "8px 24px", fontSize: 14 }}>
-                    <div><span style={{ color: "#5F5657", fontSize: 12 }}>Chip ID</span><div style={{ fontWeight: 500, fontFamily: "monospace" }}>{`NFC-${String(selectedStudent.idAlumno).padStart(4, "0")}`}</div></div>
-                    <div><span style={{ color: "#5F5657", fontSize: 12 }}>Fecha asignacion</span><div style={{ fontWeight: 500 }}>{"01/09/2025"}</div></div>
-                    <div><span style={{ color: "#5F5657", fontSize: 12 }}>Estado</span><div><span style={{ display: "inline-block", padding: "2px 10px", borderRadius: 12, fontSize: 12, fontWeight: 600, background: "#FEEBEE", color: "#0F8122" }}>{"Activo"}</span></div></div>
-                  </div>
-                </div>
-                <div style={{ padding: "0 32px", marginBottom: 32 }}>
-                  <h3 style={{ fontSize: 14, fontWeight: 600, color: "#EB2466", textTransform: "uppercase", marginBottom: 12, letterSpacing: 0.5 }}>Historial</h3>
-                  <div style={{ border: "1px solid #F0EFEF", borderRadius: 8, overflow: "hidden" }}>
-                    <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
-                      <thead>
-                        <tr style={{ background: "#FFFFFF" }}>
-                          <th style={{ padding: "8px 12px", textAlign: "left", fontWeight: 600, color: "#5F5657" }}>Fecha</th>
-                          <th style={{ padding: "8px 12px", textAlign: "left", fontWeight: 600, color: "#5F5657" }}>Entrada</th>
-                          <th style={{ padding: "8px 12px", textAlign: "left", fontWeight: 600, color: "#5F5657" }}>Salida</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {mockHistory.map((entry) => (
-                          <tr key={entry.date} style={{ borderTop: "1px solid #F0EFEF" }}>
-                            <td style={{ padding: "8px 12px" }}>{entry.date}</td>
-                            <td style={{ padding: "8px 12px", color: "#0F8122" }}>{entry.entry}</td>
-                            <td style={{ padding: "8px 12px", color: "#AB1748" }}>{entry.exit}</td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
+                    <div style={{ gridColumn: "span 2" }}><span style={{ color: "#5F5657", fontSize: 12 }}>Direccion</span><div style={{ fontWeight: 500 }}>{selectedStudent.direccion || '---'}</div></div>
+                    <div><span style={{ color: "#5F5657", fontSize: 12 }}>Tutor</span><div style={{ fontWeight: 500 }}>{selectedStudent.tutor_nombre || '---'}</div></div>
+                    <div><span style={{ color: "#5F5657", fontSize: 12 }}>Telefono tutor</span><div style={{ fontWeight: 500 }}>{selectedStudent.tutor_telefono || '---'}</div></div>
                   </div>
                 </div>
               </>
@@ -1006,7 +1173,7 @@ export default function StudentsPage() {
               >
                 <option value="all">Todos los alumnos ({filteredStudents.length})</option>
                 {uniqueGroups.map((g) => {
-                  const count = alumnos.filter((s) => s.grupo === g).length;
+                  const count = alumnosData.filter((s) => (s.grupo_nombre || (s.grupo_id ? String(s.grupo_id) : 'Sin grupo')) === g).length;
                   return (
                     <option key={g} value={g}>
                       Grupo {g} ({count} alumnos)
@@ -1179,7 +1346,7 @@ export default function StudentsPage() {
               </button>
             </div>
             <p style={{ fontSize: 14, color: "#5F5657", lineHeight: 1.6, marginBottom: 24 }}>
-              Desea editar los datos del alumno <strong style={{ color: "#1C1819" }}>{selectedStudent.nombreCompleto}</strong>?
+              Desea editar los datos del alumno <strong style={{ color: "#1C1819" }}>{`${selectedStudent.nombre} ${selectedStudent.apellido_paterno} ${selectedStudent.apellido_materno}`.trim()}</strong>?
             </p>
             <div style={{ display: "flex", gap: 12, justifyContent: "flex-end" }}>
               <button
@@ -1233,7 +1400,7 @@ export default function StudentsPage() {
             justifyContent: "center",
             zIndex: 1000,
           }}
-          onClick={() => { setShowNewStudentModal(false); resetNewStudentForm(); }}
+          onClick={() => { setShowNewStudentModal(false); resetNewStudentForm(); setUploadProgress(null); }}
         >
           <div
             style={{
@@ -1254,7 +1421,7 @@ export default function StudentsPage() {
                 Nuevo alumno
               </h2>
               <button
-                onClick={() => { setShowNewStudentModal(false); resetNewStudentForm(); }}
+                onClick={() => { setShowNewStudentModal(false); resetNewStudentForm(); setUploadProgress(null); }}
                 style={{ background: "none", border: "none", cursor: "pointer", color: "#85787A" }}
               >
                 <X size={22} />
@@ -1384,7 +1551,7 @@ export default function StudentsPage() {
                 </div>
                 <div style={{ display: "flex", gap: 12, justifyContent: "flex-end" }}>
                   <button
-                    onClick={() => { setShowNewStudentModal(false); resetNewStudentForm(); }}
+                    onClick={() => { setShowNewStudentModal(false); resetNewStudentForm(); setUploadProgress(null); }}
                     style={{
                       padding: "10px 20px",
                       border: "1px solid #CAC6C7",
@@ -1519,33 +1686,78 @@ export default function StudentsPage() {
                   </div>
                 )}
 
+                {uploadProgress && (
+                  <div style={{ marginBottom: 20, padding: 16, border: "1px solid #F0EFEF", borderRadius: 8, background: "#FAFAFA" }}>
+                    <div style={{ display: "flex", justifyContent: "space-between", fontSize: 13, color: "#5F5657", marginBottom: 8 }}>
+                      <span>
+                        {uploadProgress.done
+                          ? uploadProgress.failed === 0
+                            ? "Importacion completa"
+                            : `Importacion completa (${uploadProgress.failed} fallidos)`
+                          : `Subiendo ${uploadProgress.current} de ${uploadProgress.total}...`}
+                      </span>
+                      <span style={{ fontWeight: 600 }}>
+                        {uploadProgress.total > 0 ? Math.round((uploadProgress.current / uploadProgress.total) * 100) : 0}%
+                      </span>
+                    </div>
+                    <div style={{ width: "100%", height: 8, background: "#E0E0E0", borderRadius: 4, overflow: "hidden" }}>
+                      <div
+                        style={{
+                          width: `${uploadProgress.total > 0 ? (uploadProgress.current / uploadProgress.total) * 100 : 0}%`,
+                          height: "100%",
+                          background: uploadProgress.done
+                            ? uploadProgress.failed === 0
+                              ? "#0F8122"
+                              : "linear-gradient(135deg, #EB2466, #AB1748)"
+                            : "linear-gradient(135deg, #EB2466, #AB1748)",
+                          borderRadius: 4,
+                          transition: "width 0.3s ease",
+                        }}
+                      />
+                    </div>
+                    <div style={{ display: "flex", gap: 16, fontSize: 12, color: "#85787A", marginTop: 8 }}>
+                      <span style={{ color: "#0F8122" }}>{uploadProgress.success} exitosos</span>
+                      {uploadProgress.failed > 0 && <span style={{ color: "#AB1748" }}>{uploadProgress.failed} fallidos</span>}
+                    </div>
+                    {uploadProgress.done && uploadProgress.errors.length > 0 && (
+                      <div style={{ marginTop: 10, maxHeight: 120, overflowY: "auto", fontSize: 11, color: "#AB1748", background: "#FFF0F3", padding: 8, borderRadius: 6 }}>
+                        {uploadProgress.errors.map((e, i) => (
+                          <div key={i} style={{ marginBottom: 2 }}>{e}</div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
+
                 <div style={{ display: "flex", gap: 12, justifyContent: "flex-end" }}>
                   <button
-                    onClick={() => { setShowNewStudentModal(false); resetNewStudentForm(); }}
+                    onClick={() => { setShowNewStudentModal(false); resetNewStudentForm(); setUploadProgress(null); }}
+                    disabled={!!uploadProgress && !uploadProgress.done}
                     style={{
                       padding: "10px 20px",
                       border: "1px solid #CAC6C7",
                       borderRadius: 8,
                       background: "#fff",
                       fontSize: 14,
-                      cursor: "pointer",
+                      cursor: uploadProgress && !uploadProgress.done ? "not-allowed" : "pointer",
                       fontFamily: "var(--font-sans)",
+                      opacity: uploadProgress && !uploadProgress.done ? 0.5 : 1,
                     }}
                   >
-                    Cancelar
+                    {uploadProgress && !uploadProgress.done ? "Subiendo..." : uploadProgress?.done ? "Cerrar" : "Cancelar"}
                   </button>
                   <button
                     onClick={handleConfirmUpload}
-                    disabled={!uploadPreview}
+                    disabled={!uploadPreview || (!!uploadProgress && !uploadProgress.done)}
                     style={{
                       padding: "10px 20px",
                       border: "none",
                       borderRadius: 8,
-                      background: uploadPreview ? "linear-gradient(135deg, #EB2466, #AB1748)" : "#CAC6C7",
+                      background: uploadPreview && !(uploadProgress && !uploadProgress.done) ? "linear-gradient(135deg, #EB2466, #AB1748)" : "#CAC6C7",
                       color: "#fff",
                       fontSize: 14,
                       fontWeight: 600,
-                      cursor: uploadPreview ? "pointer" : "not-allowed",
+                      cursor: uploadPreview && !(uploadProgress && !uploadProgress.done) ? "pointer" : "not-allowed",
                       fontFamily: "var(--font-sans)",
                       display: "flex",
                       alignItems: "center",
@@ -1553,7 +1765,7 @@ export default function StudentsPage() {
                     }}
                   >
                     <Upload size={16} />
-                    Importar alumnos
+                    {uploadProgress && !uploadProgress.done ? "Importando..." : "Importar alumnos"}
                   </button>
                 </div>
               </>

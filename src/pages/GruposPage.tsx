@@ -1,32 +1,59 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import {
   Search, Users, Building2, Calendar, BookOpen, ChevronDown,
 } from 'lucide-react';
-import { alumnos, registrosAcceso, credenciales, getAlumnoByCredencialId } from '../data/mockData';
+import { alumnosApi } from '../api/alumnos';
+import { registrosApi } from '../api/registros';
+import { credencialesApi } from '../api/credenciales';
+import type { Alumno, Credencial, RegistroAcceso } from '../types';
 
 export default function GruposPage() {
   const [search, setSearch] = useState('');
   const [expandedGroup, setExpandedGroup] = useState<string | null>(null);
 
-  const grupos = Array.from(new Set(alumnos.map(s => s.grupo)))
+  const [alumnosData, setAlumnosData] = useState<Alumno[]>([]);
+  const [credencialesData, setCredencialesData] = useState<Credencial[]>([]);
+  const [registrosData, setRegistrosData] = useState<RegistroAcceso[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    async function fetchData() {
+      try {
+        const [al, cr, rg] = await Promise.all([
+          alumnosApi.getAll(),
+          credencialesApi.getAll(),
+          registrosApi.getAll(),
+        ]);
+        setAlumnosData(al);
+        setCredencialesData(cr);
+        setRegistrosData(rg);
+      } catch (err) {
+        console.error('Error fetching data:', err);
+      } finally {
+        setLoading(false);
+      }
+    }
+    fetchData();
+  }, []);
+
+  const grupos = Array.from(new Set(alumnosData.map(s => s.grupo_nombre || (s.grupo_id ? String(s.grupo_id) : 'Sin grupo'))))
     .sort()
     .map(grupo => {
-      const groupStudents = alumnos.filter(s => s.grupo === grupo);
-      const capacitacion = groupStudents[0]?.capacitacion ?? '';
-      const cohorte = groupStudents[0]?.cohorte ?? '';
-      const turno = groupStudents[0]?.turno ?? '';
-      const activos = groupStudents.filter(s => s.activo).length;
-      const groupCreds = credenciales.filter(c =>
-        groupStudents.some(s => s.idAlumno === c.idAlumno)
-      );
-      const activas = groupCreds.filter(c => c.activa).length;
-      const records = registrosAcceso.filter(r => {
-        const alumno = getAlumnoByCredencialId(r.idCredencial);
-        return alumno && groupStudents.some(s => s.idAlumno === alumno.idAlumno);
+      const groupStudents = alumnosData.filter(s => {
+        const g = s.grupo_nombre || (s.grupo_id ? String(s.grupo_id) : 'Sin grupo');
+        return g === grupo;
       });
-      const entradas = records.filter(r => r.tipoEvento === 'ENTRADA').length;
+      const activos = groupStudents.filter(s => s.estatus === 'Activo').length;
+      const groupCreds = credencialesData.filter(c =>
+        groupStudents.some(s => s.id === c.alumno_id)
+      );
+      const activas = groupCreds.filter(c => c.estatus === 'ACTIVA').length;
+      const records = registrosData.filter(r =>
+        groupStudents.some(s => s.id === r.alumno_id)
+      );
+      const entradas = records.filter(r => r.tipo_acceso === 'ENTRADA').length;
       return {
-        grupo, capacitacion, cohorte, turno,
+        grupo,
         total: groupStudents.length,
         activos,
         inactivos: groupStudents.length - activos,
@@ -41,14 +68,20 @@ export default function GruposPage() {
   const filtered = grupos.filter(g => {
     if (!search) return true;
     const q = search.toLowerCase();
-    return g.grupo.toLowerCase().includes(q) ||
-      g.capacitacion.toLowerCase().includes(q) ||
-      g.cohorte.toLowerCase().includes(q);
+    return g.grupo.toLowerCase().includes(q);
   });
 
   const toggleGroup = (grupo: string) => {
     setExpandedGroup(prev => prev === grupo ? null : grupo);
   };
+
+  if (loading) {
+    return (
+      <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: 200, color: '#85787A', fontSize: 15 }}>
+        Cargando datos...
+      </div>
+    );
+  }
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
@@ -58,9 +91,9 @@ export default function GruposPage() {
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 16 }}>
         {[
           { label: 'Total grupos', value: grupos.length, color: '#EB2466', bg: '#FEEBEE', icon: Building2 },
-          { label: 'Total alumnos', value: alumnos.length, color: '#0F8122', bg: '#E8F5E9', icon: Users },
-          { label: 'Credenciales activas', value: credenciales.filter(c => c.activa).length, color: '#1792AB', bg: '#DCF5FF', icon: BookOpen },
-          { label: 'Registros hoy', value: registrosAcceso.length, color: '#5F5657', bg: '#F0EFEF', icon: Calendar },
+          { label: 'Total alumnos', value: alumnosData.length, color: '#0F8122', bg: '#E8F5E9', icon: Users },
+          { label: 'Credenciales activas', value: credencialesData.filter(c => c.estatus === 'ACTIVA').length, color: '#1792AB', bg: '#DCF5FF', icon: BookOpen },
+          { label: 'Registros hoy', value: registrosData.length, color: '#5F5657', bg: '#F0EFEF', icon: Calendar },
         ].map(stat => (
           <div key={stat.label} style={{
             background: '#fff', borderRadius: 12, padding: 20,
@@ -84,7 +117,7 @@ export default function GruposPage() {
         <Search size={18} style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', color: '#CAC6C7' }} />
         <input
           type="text"
-          placeholder="Buscar por grupo, capacitacion o cohorte..."
+          placeholder="Buscar por grupo..."
           value={search}
           onChange={e => setSearch(e.target.value)}
           style={{
@@ -132,9 +165,6 @@ export default function GruposPage() {
                     <div style={{ fontSize: 16, fontWeight: 700, color: '#1C1819' }}>
                       Grupo {g.grupo}
                     </div>
-                    <div style={{ fontSize: 13, color: '#85787A', marginTop: 2 }}>
-                      {g.capacitacion} &middot; {g.cohorte} &middot; {g.turno}
-                    </div>
                   </div>
                   <div style={{ display: 'flex', gap: 20, alignItems: 'center' }}>
                     <div style={{ textAlign: 'center' }}>
@@ -169,22 +199,21 @@ export default function GruposPage() {
                           <th style={{ textAlign: 'left', padding: '10px 16px', fontSize: 12, fontWeight: 600, color: '#5F5657' }}>Matricula</th>
                           <th style={{ textAlign: 'left', padding: '10px 16px', fontSize: 12, fontWeight: 600, color: '#5F5657' }}>Estado</th>
                           <th style={{ textAlign: 'left', padding: '10px 16px', fontSize: 12, fontWeight: 600, color: '#5F5657' }}>Credencial</th>
-                          <th style={{ textAlign: 'left', padding: '10px 16px', fontSize: 12, fontWeight: 600, color: '#5F5657' }}>Turno</th>
                         </tr>
                       </thead>
                       <tbody>
                         {g.alumnos.map((s, idx) => {
-                          const cred = credenciales.find(c => c.idAlumno === s.idAlumno);
+                          const cred = credencialesData.find(c => c.alumno_id === s.id);
                           return (
                             <tr
-                              key={s.idAlumno}
+                              key={s.id}
                               style={{
                                 borderBottom: '1px solid #F0EFEF',
                                 background: idx % 2 === 0 ? '#fff' : '#FAFAFA',
                               }}
                             >
                               <td style={{ padding: '12px 20px', fontSize: 14, fontWeight: 600, color: '#1C1819' }}>
-                                {s.nombreCompleto}
+                                {s.nombre} {s.apellido_paterno} {s.apellido_materno}
                               </td>
                               <td style={{ padding: '12px 16px', fontSize: 13, fontFamily: 'var(--font-mono)', color: '#5F5657' }}>
                                 {s.matricula}
@@ -192,27 +221,24 @@ export default function GruposPage() {
                               <td style={{ padding: '12px 16px' }}>
                                 <span style={{
                                   padding: '3px 10px', borderRadius: 12, fontSize: 12, fontWeight: 600,
-                                  background: s.activo ? '#E8F5E9' : '#FEEBEE',
-                                  color: s.activo ? '#0F8122' : '#EB2466',
+                                  background: s.estatus === 'ACTIVO' ? '#E8F5E9' : '#FEEBEE',
+                                  color: s.estatus === 'ACTIVO' ? '#0F8122' : '#EB2466',
                                 }}>
-                                  {s.activo ? 'Activo' : 'Inactivo'}
+                                  {s.estatus === 'ACTIVO' ? 'Activo' : 'Inactivo'}
                                 </span>
                               </td>
                               <td style={{ padding: '12px 16px' }}>
                                 {cred ? (
                                   <span style={{
                                     padding: '3px 10px', borderRadius: 12, fontSize: 12, fontWeight: 600,
-                                    background: cred.activa ? '#E8F5E9' : '#FEEBEE',
-                                    color: cred.activa ? '#0F8122' : '#EB2466',
+                                    background: cred.estatus === 'ACTIVA' ? '#E8F5E9' : '#FEEBEE',
+                                    color: cred.estatus === 'ACTIVA' ? '#0F8122' : '#EB2466',
                                   }}>
-                                    {cred.activa ? 'Activa' : 'Inactiva'}
+                                    {cred.estatus === 'ACTIVA' ? 'Activa' : 'Inactiva'}
                                   </span>
                                 ) : (
                                   <span style={{ fontSize: 12, color: '#85787A' }}>Sin credencial</span>
                                 )}
-                              </td>
-                              <td style={{ padding: '12px 16px', fontSize: 13, color: '#5F5657' }}>
-                                {s.turno}
                               </td>
                             </tr>
                           );

@@ -1,0 +1,11 @@
+# Dependencias para el script lector NFC (nfc_reader.py)
+# Ejecutar fuera del Docker, en la maquina con el lector ACR122U conectado.
+#
+# Instalar con:
+#   pip install -r requirements-nfc.txt
+#
+# En Linux tambien necesitas:
+#   sudo apt-get install libpcsclite-dev
+
+pyscard>=2.0.0
+requests>=2.28.0

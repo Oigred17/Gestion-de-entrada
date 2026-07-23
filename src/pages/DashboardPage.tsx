@@ -2,9 +2,10 @@ import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   UserCheck, Clock, AlertTriangle, LogOut, TrendingUp,
-  Activity, ChevronRight, Bell, ScanLine,
+  ChevronRight, Bell, ScanLine,
 } from 'lucide-react';
-import { registrosAcceso, retardos, alumnos, incidents, dashboardStats, getAlumnoByCredencialId, getAlumnoById } from '../data/mockData';
+import { registrosApi, retardosApi, alumnosApi } from '../api';
+import type { RegistroAcceso, Retardo, Alumno } from '../types';
 
 const tipoConfig: Record<string, { label: string; color: string; bg: string; icon: string }> = {
   ENTRADA: { label: 'Entrada', color: '#0F8122', bg: '#E8F5E9', icon: '✓' },
@@ -16,56 +17,84 @@ const tipoConfig: Record<string, { label: string; color: string; bg: string; ico
 export default function DashboardPage() {
   const navigate = useNavigate();
   const [currentTime, setCurrentTime] = useState(new Date());
+  const [registros, setRegistros] = useState<RegistroAcceso[]>([]);
+  const [retardosData, setRetardosData] = useState<Retardo[]>([]);
+  const [alumnosData, setAlumnosData] = useState<Alumno[]>([]);
+
+  const alumnoMap = Object.fromEntries(alumnosData.map(a => [a.id, a]));
 
   useEffect(() => {
     const timer = setInterval(() => setCurrentTime(new Date()), 1000);
     return () => clearInterval(timer);
   }, []);
 
+  useEffect(() => {
+    const fetchData = async () => {
+      try {
+        const [registrosRes, retardosRes, alumnosRes] = await Promise.all([
+          registrosApi.getAll(),
+          retardosApi.getAll(),
+          alumnosApi.getAll(),
+        ]);
+        setRegistros(registrosRes);
+        setRetardosData(retardosRes);
+        setAlumnosData(alumnosRes);
+      } catch (error) {
+        console.error('Error fetching dashboard data:', error);
+      }
+    };
+    fetchData();
+  }, []);
+
+  const totalAlumnos = alumnosData.length;
+  const presentes = registros.filter(r => r.tipo_acceso === 'ENTRADA').length;
+  const retardosCount = retardosData.length;
+  const salidas = registros.filter(r => r.tipo_acceso === 'SALIDA').length;
+  
   const stats = [
-    { label: 'Presentes', value: dashboardStats.presentes, total: dashboardStats.total, color: '#0F8122', bg: '#E8F5E9', icon: UserCheck },
-    { label: 'Fuera de horario', value: dashboardStats.retardos, total: dashboardStats.total, color: '#1792AB', bg: '#DCF5FF', icon: Clock },
-    { label: 'Faltas', value: dashboardStats.faltas, total: dashboardStats.total, color: '#EB2466', bg: '#FEEBEE', icon: AlertTriangle },
-    { label: 'Salidas', value: dashboardStats.salidas, total: dashboardStats.total, color: '#5F5657', bg: '#F0EFEF', icon: LogOut },
-    { label: 'Incidencias', value: dashboardStats.incidencias, total: dashboardStats.total, color: '#AB1748', bg: '#FEEBEE', icon: AlertTriangle },
+    { label: 'Presentes', value: presentes, total: totalAlumnos, color: '#0F8122', bg: '#E8F5E9', icon: UserCheck },
+    { label: 'Fuera de horario', value: retardosCount, total: totalAlumnos, color: '#1792AB', bg: '#DCF5FF', icon: Clock },
+    { label: 'Faltas', value: Math.max(0, totalAlumnos - presentes - retardosCount), total: totalAlumnos, color: '#EB2466', bg: '#FEEBEE', icon: AlertTriangle },
+    { label: 'Salidas', value: salidas, total: totalAlumnos, color: '#5F5657', bg: '#F0EFEF', icon: LogOut },
+    { label: 'Incidencias', value: 0, total: totalAlumnos, color: '#AB1748', bg: '#FEEBEE', icon: AlertTriangle },
   ];
 
   const recentActivity = [
-    ...registrosAcceso.map(r => ({
-      key: `reg-${r.idRegistro}`,
-      tipo: r.tipoEvento,
-      hora: r.fechaHora.split('T')[1],
-      fecha: r.fechaHora.split('T')[0],
-      alumno: getAlumnoByCredencialId(r.idCredencial),
+    ...registros.map(r => ({
+      key: `reg-${r.id}`,
+      tipo: r.tipo_acceso,
+      hora: r.fecha_hora.split('T')[1] || r.fecha_hora.split(' ')[1] || '',
+      fecha: r.fecha_hora.split('T')[0] || r.fecha_hora.split(' ')[0] || '',
+      alumno: r.alumno || alumnoMap[r.alumno_id] || null,
     })),
-    ...retardos.map(r => ({
-      key: `ret-${r.idRetardo}`,
+    ...retardosData.map(r => ({
+      key: `ret-${r.id}`,
       tipo: 'retardo' as const,
-      hora: `${r.minutosRetardo} min tarde`,
+      hora: r.hora_llegada,
       fecha: r.fecha,
-      alumno: getAlumnoById(r.idAlumno),
+      alumno: r.alumno || alumnoMap[r.alumno_id] || null,
     })),
   ].sort((a, b) => b.fecha.localeCompare(a.fecha) || b.hora.localeCompare(a.hora));
 
-  const attendanceByGroup = Array.from(new Set(alumnos.map(s => s.grupo))).map(group => {
-    const groupStudents = alumnos.filter(s => s.grupo === group);
-    const groupRegistros = registrosAcceso.filter(r => {
-      const alumno = getAlumnoByCredencialId(r.idCredencial);
-      return alumno?.grupo === group;
+  const attendanceByGroup = Array.from(new Set(alumnosData.map(s => s.grupo_id ? `Grupo ${s.grupo_id}` : 'Sin grupo'))).map(group => {
+    const groupStudents = alumnosData.filter(s => s.grupo_id ? `Grupo ${s.grupo_id}` === group : 'Sin grupo' === group);
+    const groupRegistros = registros.filter(r => {
+      const alumno = r.alumno || alumnoMap[r.alumno_id];
+      return alumno?.grupo_id ? `Grupo ${alumno.grupo_id}` === group : 'Sin grupo' === group;
     });
-    const groupRetardos = retardos.filter(r => {
-      const alumno = getAlumnoById(r.idAlumno);
-      return alumno?.grupo === group;
+    const groupRetardos = retardosData.filter(r => {
+      const alumno = r.alumno || alumnoMap[r.alumno_id];
+      return alumno?.grupo_id ? `Grupo ${alumno.grupo_id}` === group : 'Sin grupo' === group;
     });
     return {
       group,
       total: groupStudents.length,
-      presentes: groupRegistros.filter(r => r.tipoEvento === 'ENTRADA').length,
+      presentes: groupRegistros.filter(r => r.tipo_acceso === 'ENTRADA').length,
       retardos: groupRetardos.length,
     };
   });
 
-  const unresolvedIncidents = incidents.filter(i => i.estado !== 'Resuelto');
+  const unresolvedIncidents: Array<{id: number; tipo: string; alumno?: {nombre: string; apellido_paterno: string; apellido_materno: string}; fecha: string; gravedad: string}> = [];
 
   const currentTimeStr = currentTime.toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' });
   const currentDateStr = currentTime.toLocaleDateString('es-MX', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
@@ -161,16 +190,16 @@ export default function DashboardPage() {
                         {record.hora}
                       </td>
                       <td style={{ padding: '12px 16px', fontSize: 14, fontWeight: 600, color: '#1C1819' }}>
-                        {record.alumno?.nombreCompleto ?? 'Desconocido'}
+                        {record.alumno ? `${record.alumno.nombre} ${record.alumno.apellido_paterno} ${record.alumno.apellido_materno}`.trim() : 'Desconocido'}
                       </td>
                       <td style={{ padding: '12px 16px', fontSize: 13, fontFamily: 'var(--font-mono)', color: '#5F5657' }}>
                         {record.alumno?.matricula ?? '---'}
                       </td>
                       <td style={{ padding: '12px 16px', fontSize: 14, color: '#5F5657' }}>
-                        {record.alumno?.grupo ?? '---'}
+                        {record.alumno?.grupo_id ?? '---'}
                       </td>
                       <td style={{ padding: '12px 16px', fontSize: 13, color: '#85787A' }}>
-                        {record.alumno?.capacitacion ?? '---'}
+                        {record.alumno?.email ?? '---'}
                       </td>
                       <td style={{ padding: '12px 16px' }}>
                         <span style={{
@@ -277,7 +306,7 @@ export default function DashboardPage() {
                         {incident.tipo}
                       </div>
                       <div style={{ fontSize: 12, color: '#85787A' }}>
-                        {incident.alumno?.nombreCompleto} &mdash; {incident.fecha}
+                        {incident.alumno ? `${incident.alumno.nombre} ${incident.alumno.apellido_paterno} ${incident.alumno.apellido_materno}`.trim() : '---'} &mdash; {incident.fecha}
                       </div>
                     </div>
                     <span style={{

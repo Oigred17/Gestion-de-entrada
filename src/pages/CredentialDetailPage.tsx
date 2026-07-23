@@ -1,11 +1,12 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { Edit, Check, X, RefreshCw, Nfc, Loader2, AlertTriangle, User } from 'lucide-react';
-import { alumnos, credenciales } from '../data/mockData';
+import { credencialesApi, alumnosApi } from '../api';
+import { nfcApi } from '../api/nfc';
+import type { Credencial, Alumno } from '../types';
 
-function generateChipId(): string {
-  const hex = () => Math.floor(Math.random() * 256).toString(16).toUpperCase().padStart(2, '0');
-  return `NFC-${hex()}-${hex()}-${hex()}-${hex()}`;
+function nombreCompleto(a: Alumno): string {
+  return `${a.nombre} ${a.apellido_paterno} ${a.apellido_materno}`;
 }
 
 const estadoBadgeClass: Record<string, string> = {
@@ -33,19 +34,62 @@ export default function CredentialDetailPage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
 
-  const studentData = alumnos.find(s => s.idAlumno === Number(id)) ?? alumnos[0];
-  const credentialData = credenciales.find(c => c.idAlumno === studentData.idAlumno);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [studentData, setStudentData] = useState<Alumno | null>(null);
+  const [credentialData, setCredentialData] = useState<Credencial | null>(null);
+
+  useEffect(() => {
+    if (!id) return;
+    let cancelled = false;
+    setLoading(true);
+    setError(null);
+
+    credencialesApi.getById(Number(id))
+      .then((cred) => {
+        if (cancelled) return;
+        setCredentialData(cred);
+        if (cred.alumno) {
+          setStudentData(cred.alumno);
+          setLoading(false);
+        } else {
+          return alumnosApi.getById(cred.alumno_id);
+        }
+      })
+      .then((alumno) => {
+        if (cancelled) return;
+        if (alumno) setStudentData(alumno);
+        setLoading(false);
+      })
+      .catch((err) => {
+        if (cancelled) return;
+        setError(err?.message ?? 'Error al cargar los datos');
+        setLoading(false);
+      });
+
+    return () => { cancelled = true; };
+  }, [id]);
 
   const [isEditing, setIsEditing] = useState(false);
-  const [editName, setEditName] = useState(studentData.nombreCompleto);
-  const [editControl, setEditControl] = useState(studentData.matricula);
-  const [editGrupo, setEditGrupo] = useState(studentData.grupo);
+  const [editName, setEditName] = useState('');
+  const [editControl, setEditControl] = useState('');
+  const [editGrupo, setEditGrupo] = useState('');
+
+  useEffect(() => {
+    if (studentData) {
+      setEditName(nombreCompleto(studentData));
+      setEditControl(studentData.matricula);
+      setEditGrupo(studentData.grupo_id?.toString() ?? '');
+    }
+  }, [studentData]);
 
   const [showReassignModal, setShowReassignModal] = useState(false);
   const [reassignStep, setReassignStep] = useState<'confirm' | 'write'>('confirm');
   const [newChipId, setNewChipId] = useState('');
   const [writing, setWriting] = useState(false);
   const [written, setWritten] = useState(false);
+  const [nfcWaiting, setNfcWaiting] = useState(false);
+  const captureTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' | 'info' } | null>(null);
 
@@ -60,9 +104,11 @@ export default function CredentialDetailPage() {
   };
 
   const handleCancelEdit = () => {
-    setEditName(studentData.nombreCompleto);
-    setEditControl(studentData.matricula);
-    setEditGrupo(studentData.grupo);
+    if (studentData) {
+      setEditName(nombreCompleto(studentData));
+      setEditControl(studentData.matricula);
+      setEditGrupo(studentData.grupo_id?.toString() ?? '');
+    }
     setIsEditing(false);
   };
 
@@ -74,20 +120,83 @@ export default function CredentialDetailPage() {
     setWritten(false);
   };
 
-  const handleWriteNewChip = useCallback(() => {
-    setWriting(true);
-    const chip = generateChipId();
-    setTimeout(() => {
-      setNewChipId(chip);
-      setWriting(false);
-      setWritten(true);
-    }, 1500);
+  const cleanupWs = useCallback(() => {
+    if (captureTimeoutRef.current) clearTimeout(captureTimeoutRef.current);
+    nfcApi.stopCapture().catch(() => {});
+    setNfcWaiting(false);
   }, []);
+
+  useEffect(() => {
+    return () => { cleanupWs(); };
+  }, [cleanupWs]);
+
+  const handleWriteNewChip = useCallback(async () => {
+    setWriting(true);
+    setNfcWaiting(true);
+
+    try {
+      await nfcApi.startCapture();
+    } catch {
+      setWriting(false);
+      setNfcWaiting(false);
+      showToast('No se pudo activar el modo captura', 'error');
+      return;
+    }
+
+    let stopped = false;
+
+    captureTimeoutRef.current = setTimeout(() => {
+      stopped = true;
+      setWriting(false);
+      setNfcWaiting(false);
+      nfcApi.stopCapture().catch(() => {});
+      showToast('Tiempo de espera agotado. Acerque la tarjeta NFC al lector.', 'error');
+    }, 30000);
+
+    const pollInterval = setInterval(async () => {
+      if (stopped) return;
+      try {
+        const result = await nfcApi.pollCapture();
+        if (result.status === 'captured' && result.uid_nfc) {
+          stopped = true;
+          if (captureTimeoutRef.current) clearTimeout(captureTimeoutRef.current);
+          clearInterval(pollInterval);
+          nfcApi.stopCapture().catch(() => {});
+          setNewChipId(result.uid_nfc);
+          setWriting(false);
+          setWritten(true);
+          setNfcWaiting(false);
+        }
+      } catch {}
+    }, 500);
+  }, [showToast]);
 
   const handleConfirmReassign = () => {
     setShowReassignModal(false);
     showToast(`Chip reasignado correctamente. Nuevo ID: ${newChipId}`);
   };
+
+  if (loading) {
+    return (
+      <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh' }}>
+        <Loader2 size={32} color="#EB2466" style={{ animation: 'spin 1s linear infinite' }} />
+        <span style={{ marginLeft: 12, fontSize: 14, color: '#5F5657' }}>Cargando datos...</span>
+        <style>{`@keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }`}</style>
+      </div>
+    );
+  }
+
+  if (error || !studentData) {
+    return (
+      <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh', flexDirection: 'column', gap: 12 }}>
+        <AlertTriangle size={32} color="#AB1748" />
+        <span style={{ fontSize: 14, color: '#AB1748', fontWeight: 600 }}>{error ?? 'No se encontraron datos'}</span>
+        <button onClick={() => navigate(-1)} style={{ marginTop: 8, padding: '8px 16px', border: 'none', borderRadius: 8, background: '#AB1748', color: '#fff', fontSize: 13, fontWeight: 500, cursor: 'pointer' }}>
+          Volver
+        </button>
+      </div>
+    );
+  }
 
   return (
     <div>
@@ -121,9 +230,9 @@ export default function CredentialDetailPage() {
             <User size={36} color="#85787A" />
           </div>
           <div style={{ flex: 1 }}>
-            <div style={{ fontSize: 18, fontWeight: 700, color: '#1C1819' }}>{studentData.nombreCompleto}</div>
+            <div style={{ fontSize: 18, fontWeight: 700, color: '#1C1819' }}>{nombreCompleto(studentData)}</div>
             <div style={{ fontSize: 16, fontFamily: 'monospace', color: '#EB2466', marginTop: 2 }}>{studentData.matricula}</div>
-            <div style={{ fontSize: 13, color: '#5F5657', marginTop: 2 }}>Grupo: {studentData.grupo}</div>
+            <div style={{ fontSize: 13, color: '#5F5657', marginTop: 2 }}>Grupo: {studentData.grupo_id ?? '-'}</div>
           </div>
           {!isEditing ? (
             <button onClick={() => setIsEditing(true)} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '8px 14px', border: 'none', borderRadius: 8, background: '#AB1748', color: '#fff', fontSize: 13, fontWeight: 500, cursor: 'pointer' }}>
@@ -151,7 +260,7 @@ export default function CredentialDetailPage() {
                 <input type="text" value={editName} onChange={(e) => setEditName(e.target.value)}
                   style={{ width: '100%', padding: '6px 10px', border: '1px solid #CAC6C7', borderRadius: 6, fontSize: 14, fontWeight: 500, marginTop: 4, fontFamily: 'var(--font-sans)' }} />
               ) : (
-                <FieldValue>{studentData.nombreCompleto}</FieldValue>
+                <FieldValue>{nombreCompleto(studentData)}</FieldValue>
               )}
             </div>
             <div>
@@ -169,26 +278,18 @@ export default function CredentialDetailPage() {
                 <input type="text" value={editGrupo} onChange={(e) => setEditGrupo(e.target.value)}
                   style={{ width: '100%', padding: '6px 10px', border: '1px solid #CAC6C7', borderRadius: 6, fontSize: 14, fontWeight: 500, marginTop: 4, fontFamily: 'var(--font-sans)' }} />
               ) : (
-                <FieldValue>{studentData.grupo}</FieldValue>
+                <FieldValue>{studentData.grupo_id ?? '-'}</FieldValue>
               )}
-            </div>
-            <div>
-              <FieldLabel>Capacitacion</FieldLabel>
-              <FieldValue>{studentData.capacitacion}</FieldValue>
-            </div>
-            <div>
-              <FieldLabel>Turno</FieldLabel>
-              <FieldValue>{studentData.turno}</FieldValue>
             </div>
             <div>
               <FieldLabel>Estado</FieldLabel>
               <div>
                 <span style={{
                   display: 'inline-block', padding: '2px 10px', borderRadius: 12, fontSize: 12, fontWeight: 600,
-                  background: studentData.activo ? '#FEEBEE' : '#F0EFEF',
-                  color: studentData.activo ? '#0F8122' : '#5F5657',
+                  background: studentData.estatus === 'Activo' ? '#FEEBEE' : '#F0EFEF',
+                  color: studentData.estatus === 'Activo' ? '#0F8122' : '#5F5657',
                 }}>
-                  {studentData.activo ? 'Activo' : 'Inactivo'}
+                  {studentData.estatus === 'Activo' ? 'Activo' : 'Inactivo'}
                 </span>
               </div>
             </div>
@@ -202,15 +303,15 @@ export default function CredentialDetailPage() {
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px 24px', fontSize: 14 }}>
               <div>
                 <FieldLabel>ID Chip</FieldLabel>
-                <FieldValue mono color="#0F8122">{credentialData.uidNfc}</FieldValue>
+                <FieldValue mono color="#0F8122">{credentialData.numero ?? '-'}</FieldValue>
               </div>
               <div>
                 <FieldLabel>Fecha asignacion</FieldLabel>
-                <FieldValue>{credentialData.fechaEmision}</FieldValue>
+                <FieldValue>{credentialData.fecha_emision ?? '-'}</FieldValue>
               </div>
               <div>
                 <FieldLabel>Estado</FieldLabel>
-                <div><span className={credentialData.activa ? estadoBadgeClass['Activa'] : estadoBadgeClass['Inactiva']}>{credentialData.activa ? 'Activa' : 'Inactiva'}</span></div>
+                <div><span className={credentialData.estatus === 'Activa' ? estadoBadgeClass['Activa'] : estadoBadgeClass['Inactiva']}>{credentialData.estatus === 'Activa' ? 'Activa' : 'Inactiva'}</span></div>
               </div>
               <div style={{ gridColumn: 'span 2', marginTop: 8 }}>
                 <button onClick={handleStartReassign} style={{
@@ -235,15 +336,11 @@ export default function CredentialDetailPage() {
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px 24px', fontSize: 14 }}>
             <div style={{ gridColumn: 'span 2' }}>
               <FieldLabel>Domicilio</FieldLabel>
-              <FieldValue>{studentData.domicilio}</FieldValue>
+              <FieldValue>{studentData.direccion ?? '-'}</FieldValue>
             </div>
             <div>
-              <FieldLabel>Tutor</FieldLabel>
-              <FieldValue>{studentData.tutorNombre}</FieldValue>
-            </div>
-            <div>
-              <FieldLabel>Telefono tutor</FieldLabel>
-              <FieldValue mono>{studentData.tutorTelefono}</FieldValue>
+              <FieldLabel>Telefono</FieldLabel>
+              <FieldValue mono>{studentData.telefono ?? '-'}</FieldValue>
             </div>
           </div>
         </div>
@@ -258,7 +355,7 @@ export default function CredentialDetailPage() {
                 {reassignStep === 'confirm' ? <AlertTriangle size={20} color="#AB1748" /> : <Nfc size={20} color="#EB2466" />}
                 {reassignStep === 'confirm' ? 'Reasignar chip NFC' : 'Escribir nuevo chip'}
               </h3>
-              <button className="modal-close" onClick={() => setShowReassignModal(false)}><X size={20} /></button>
+              <button className="modal-close" onClick={() => { cleanupWs(); setShowReassignModal(false); }}><X size={20} /></button>
             </div>
             <div className="modal-body">
               {reassignStep === 'confirm' && (
@@ -276,11 +373,11 @@ export default function CredentialDetailPage() {
                   <div style={{ padding: 16, background: '#F0EFEF', borderRadius: 8, fontSize: 14 }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
                       <span style={{ color: '#5F5657' }}>Alumno:</span>
-                      <span style={{ fontWeight: 600 }}>{studentData.nombreCompleto}</span>
+                      <span style={{ fontWeight: 600 }}>{nombreCompleto(studentData)}</span>
                     </div>
                     <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
                       <span style={{ color: '#5F5657' }}>Chip actual:</span>
-                      <span style={{ fontFamily: 'monospace', fontWeight: 600, color: '#AB1748' }}>{credentialData?.uidNfc ?? '---'}</span>
+                      <span style={{ fontFamily: 'monospace', fontWeight: 600, color: '#AB1748' }}>{credentialData?.numero ?? '---'}</span>
                     </div>
                     <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                       <span style={{ color: '#5F5657' }}>Accion:</span>
@@ -293,7 +390,7 @@ export default function CredentialDetailPage() {
               {reassignStep === 'write' && (
                 <div style={{ textAlign: 'center', padding: 16 }}>
                   <div style={{ marginBottom: 16, padding: 12, background: '#FEEBEE', borderRadius: 8 }}>
-                    <div style={{ fontWeight: 600, fontSize: 14 }}>{studentData.nombreCompleto}</div>
+                    <div style={{ fontWeight: 600, fontSize: 14 }}>{nombreCompleto(studentData)}</div>
                     <div style={{ fontSize: 13, color: '#5F5657' }}>No. Control: {studentData.matricula}</div>
                   </div>
                   <div className={`nfc-zone ${writing ? 'scanning' : written ? '' : 'scanning'}`} style={{ margin: '0 auto 16px' }}>
@@ -308,24 +405,24 @@ export default function CredentialDetailPage() {
                     </div>
                   </div>
                   <p style={{ fontSize: 15, color: '#5F5657', marginBottom: 16 }}>
-                    {writing ? 'Escribiendo datos en el nuevo chip NFC...' : written ? 'Escritura completada correctamente' : 'Acerca el nuevo chip NFC al lector para escribir'}
+                    {writing ? 'Leyendo tarjeta NFC...' : written ? 'UID capturado correctamente' : 'Acerca el nuevo chip NFC al lector para capturar su UID'}
                   </p>
                   {written && newChipId && (
                     <div style={{ padding: 12, background: '#F0EFEF', borderRadius: 8, display: 'inline-block' }}>
-                      <span style={{ fontSize: 12, color: '#5F5657' }}>Nuevo ID del Chip: </span>
+                      <span style={{ fontSize: 12, color: '#5F5657' }}>UID NFC capturado: </span>
                       <span style={{ fontFamily: 'monospace', fontWeight: 700, fontSize: 16, color: '#0F8122' }}>{newChipId}</span>
                     </div>
                   )}
                   {!writing && !written && (
-                    <button className="btn btn--primary" onClick={handleWriteNewChip}>
-                      <Nfc size={18} /> Escribir chip
+                    <button className="btn btn--primary" onClick={handleWriteNewChip} disabled={nfcWaiting}>
+                      <Nfc size={18} /> Detectar tarjeta NFC
                     </button>
                   )}
                 </div>
               )}
             </div>
             <div className="modal-footer">
-              <button className="btn btn--secondary" onClick={() => setShowReassignModal(false)}>Cancelar</button>
+              <button className="btn btn--secondary" onClick={() => { cleanupWs(); setShowReassignModal(false); }}>Cancelar</button>
               {reassignStep === 'confirm' && (
                 <button className="btn btn--danger" onClick={() => setReassignStep('write')}>
                   <RefreshCw size={16} /> Continuar

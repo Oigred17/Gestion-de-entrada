@@ -1,5 +1,5 @@
 import { jsPDF } from 'jspdf';
-import type { Alumno } from '../data/mockData';
+import type { Alumno } from '../types';
 
 /**
  * Genera un PDF carta con 4 bloques de datos de credencial, apilados en columna.
@@ -64,7 +64,8 @@ function getCredentialLayout(): CredentialLayout {
 }
 
 function studentToBlock(s: Alumno, reposicion: boolean, layout: CredentialLayout) {
-  const domicilio = s.domicilio?.toUpperCase() ?? '';
+  const nombreCompleto = `${s.nombre} ${s.apellido_paterno} ${s.apellido_materno}`;
+  const domicilio = s.direccion?.toUpperCase() ?? '';
   const domicilioParts = domicilio.split(/,|(?=C\.P\.)/i).map(p => p.trim()).filter(Boolean);
 
   const overrides = Object.fromEntries(
@@ -74,17 +75,17 @@ function studentToBlock(s: Alumno, reposicion: boolean, layout: CredentialLayout
   );
 
   return {
-    nombre: reposicion ? `NOMBRE: ${s.nombreCompleto}  [REPOSICION]` : `NOMBRE: ${s.nombreCompleto}`,
+    nombre: reposicion ? `NOMBRE: ${nombreCompleto}  [REPOSICION]` : `NOMBRE: ${nombreCompleto}`,
     plantel: overrides.plantel ?? 'PLANTEL 27 MIAHUATLAN',
     no_control: `NO. DE CONTROL: ${s.matricula}`,
     domicilio1: `DOMICILIO: ${domicilioParts[0] ?? ''}`,
     domicilio2: domicilioParts[1] ?? '',
     domicilio3: domicilioParts[2] ?? '',
-    curp: `CURP: ${s.curp}`,
-    tipo_sangre: `TIPO DE SANGRE: ${s.tipoSangre}`,
-    afiliacion: `NUMERO DE AFILIACION: ${s.nss}`,
-    tutor: `TUTOR: ${s.tutorNombre?.toUpperCase() ?? ''}`,
-    tel_tutor: `TELEFONO TUTOR: ${s.tutorTelefono ?? ''}`,
+    curp: `CURP: ${s.email ?? ''}`,
+    tipo_sangre: `TIPO DE SANGRE: ${s.genero ?? ''}`,
+    afiliacion: `NUMERO DE AFILIACION: ${s.telefono ?? ''}`,
+    tutor: `TELEFONO: ${s.telefono ?? ''}`,
+    tel_tutor: `EMAIL: ${s.email ?? ''}`,
     firma: overrides.firma ?? 'LIC. FABIAN OCAMPO GODINEZ',
   };
 }

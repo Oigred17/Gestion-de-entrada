@@ -1,7 +1,26 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { Search, Plus, Eye, Check, AlertTriangle, Upload, X as XIcon } from 'lucide-react';
-import { incidents as mockIncidents, alumnos, type Incident, type Alumno } from '../data/mockData';
+import { alumnosApi } from '../api';
+import type { Alumno as ApiAlumno } from '../types';
 import type { UserRole } from '../App';
+
+interface MockAlumno {
+  idAlumno: number;
+  nombreCompleto: string;
+  matricula: string;
+  grupo: string;
+}
+
+interface Incident {
+  id: number;
+  fecha: string;
+  tipo: string;
+  alumno?: MockAlumno;
+  descripcion: string;
+  registradoPor: string;
+  estado: 'Abierto' | 'En revision' | 'Resuelto';
+  gravedad: 'Leve' | 'Moderada' | 'Grave';
+}
 
 const tipoOptions = ['Todas', 'Acceso sin credencial', 'Credencial danada', 'Acceso fuera de horario', 'Alumno no registrado', 'Intento no autorizado', 'Salida sin credencial', 'Otro'];
 const tipoOptionsSinTodas = tipoOptions.filter(t => t !== 'Todas');
@@ -23,7 +42,8 @@ function getDefaultDateTime(): { fecha: string; hora: string } {
 }
 
 export default function IncidentsPage({ role }: IncidentsPageProps) {
-  const [incidentsList, setIncidentsList] = useState<Incident[]>(mockIncidents);
+  const [apiAlumnos, setApiAlumnos] = useState<MockAlumno[]>([]);
+  const [incidentsList, setIncidentsList] = useState<Incident[]>([]);
   const [activeTab, setActiveTab] = useState('Todas');
   const [searchQuery, setSearchQuery] = useState('');
   const [modalOpen, setModalOpen] = useState(false);
@@ -34,7 +54,7 @@ export default function IncidentsPage({ role }: IncidentsPageProps) {
   const [formFecha, setFormFecha] = useState('');
   const [formHora, setFormHora] = useState('');
   const [formAlumnoQuery, setFormAlumnoQuery] = useState('');
-  const [formAlumnoSelected, setFormAlumnoSelected] = useState<Alumno | null>(null);
+  const [formAlumnoSelected, setFormAlumnoSelected] = useState<MockAlumno | null>(null);
   const [showAlumnoDropdown, setShowAlumnoDropdown] = useState(false);
   const [formDescripcion, setFormDescripcion] = useState('');
   const [formGravedad, setFormGravedad] = useState('');
@@ -44,14 +64,25 @@ export default function IncidentsPage({ role }: IncidentsPageProps) {
 
   const registradoPor = getRegistradoPor(role);
 
+  useEffect(() => {
+    alumnosApi.getAll().then((data) => {
+      setApiAlumnos(data.map((a: ApiAlumno) => ({
+        idAlumno: a.id,
+        nombreCompleto: `${a.apellido_paterno} ${a.apellido_materno} ${a.nombre}`.trim(),
+        matricula: a.matricula,
+        grupo: a.grupo_id?.toString() ?? '',
+      })));
+    }).catch(console.error);
+  }, []);
+
   const alumnoResults = useMemo(() => {
     if (!formAlumnoQuery || formAlumnoSelected) return [];
     const q = formAlumnoQuery.toLowerCase();
-    return alumnos.filter(s =>
+    return apiAlumnos.filter(s =>
       s.nombreCompleto.toLowerCase().includes(q) ||
       s.matricula.toLowerCase().includes(q)
     ).slice(0, 6);
-  }, [formAlumnoQuery, formAlumnoSelected]);
+  }, [formAlumnoQuery, formAlumnoSelected, apiAlumnos]);
 
   const filtered = incidentsList.filter((inc) => {
     const matchTab = activeTab === 'Todas' || inc.tipo === activeTab;
@@ -113,7 +144,7 @@ export default function IncidentsPage({ role }: IncidentsPageProps) {
     handleCloseModal();
   };
 
-  const handleSelectAlumno = (alumno: Alumno) => {
+  const handleSelectAlumno = (alumno: MockAlumno) => {
     setFormAlumnoSelected(alumno);
     setFormAlumnoQuery(alumno.nombreCompleto);
     setShowAlumnoDropdown(false);

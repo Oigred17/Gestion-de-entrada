@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import {
   Settings,
   Clock,
@@ -20,8 +20,14 @@ import {
   Copy,
 } from 'lucide-react';
 import { DEFAULT_CREDENTIAL_LAYOUT, LAYOUT_VERSION, type CredentialLayout } from '../utils/generateCredentialsPDF';
+import { usuariosApi } from '../api/usuarios';
+import type { UserRole } from '../App';
 
-const TABS = [
+interface ConfigPageProps {
+  role?: UserRole;
+}
+
+const ALL_TABS = [
   { id: 'general', label: 'General', icon: Settings },
   { id: 'horarios', label: 'Horarios', icon: Clock },
   { id: 'usuarios', label: 'Usuarios', icon: Users },
@@ -30,7 +36,7 @@ const TABS = [
   { id: 'respaldo', label: 'Respaldo', icon: Database },
 ] as const;
 
-type TabId = (typeof TABS)[number]['id'];
+type TabId = (typeof ALL_TABS)[number]['id'];
 
 interface HorarioEspecial {
   id: number;
@@ -42,11 +48,15 @@ interface HorarioEspecial {
 
 interface Usuario {
   id: number;
+  username: string;
+  email: string;
   nombre: string;
-  correo: string;
-  rol: string;
-  estado: string;
-  ultimoAcceso: string;
+  apellido_paterno: string;
+  apellido_materno: string;
+  rol_id: number;
+  estatus: string;
+  created_at?: string;
+  updated_at?: string;
 }
 
 interface Plantilla {
@@ -81,8 +91,11 @@ const colors = {
   lightBlue: '#E3F2FD',
 };
 
-export default function ConfigPage() {
-  const [activeTab, setActiveTab] = useState<TabId>('general');
+export default function ConfigPage({ role }: ConfigPageProps) {
+  const tabs = role === 'Servicios Escolares'
+    ? ALL_TABS.filter(t => t.id === 'credencial')
+    : [...ALL_TABS];
+  const [activeTab, setActiveTab] = useState<TabId>(tabs[0].id);
 
   const [plantelNombre, setPlantelNombre] = useState('Plantel 27 Miahuatlan');
   const [direccion, setDireccion] = useState('');
@@ -109,15 +122,17 @@ export default function ConfigPage() {
     { id: 3, nombre: 'Jornada extendida', entrada: '07:00', salida: '17:00', fecha: '2026-08-01' },
   ]);
 
-  const [usuarios, setUsuarios] = useState<Usuario[]>([
-    { id: 1, nombre: 'Director Perez', correo: 'director@plantel27.edu.mx', rol: 'Directivo', estado: 'Activo', ultimoAcceso: '2026-07-12 09:15' },
-    { id: 2, nombre: 'Prefecto Ramirez', correo: 'prefecto@plantel27.edu.mx', rol: 'Prefectura', estado: 'Activo', ultimoAcceso: '2026-07-12 08:30' },
-    { id: 3, nombre: 'Admin Lopez', correo: 'admin@plantel27.edu.mx', rol: 'Directivo', estado: 'Inactivo', ultimoAcceso: '2026-06-30 14:45' },
-  ]);
+  const [usuarios, setUsuarios] = useState<Usuario[]>([]);
   const [showUsuarioModal, setShowUsuarioModal] = useState(false);
-  const [nuevoUsuario, setNuevoUsuario] = useState({ nombre: '', correo: '', contrasena: '', rol: 'Prefectura', enviarCorreo: true });
+  const [nuevoUsuario, setNuevoUsuario] = useState({ username: '', nombre: '', contrasena: '', rol_id: 2, enviarCorreo: true });
   const [showPassword, setShowPassword] = useState(false);
   const [autoGenerate, setAutoGenerate] = useState(true);
+
+  useEffect(() => {
+    if (activeTab === 'usuarios') {
+      usuariosApi.getAll().then(setUsuarios).catch(() => {});
+    }
+  }, [activeTab]);
 
   const [notifEmail, setNotifEmail] = useState(true);
   const [notifSMS, setNotifSMS] = useState(false);
@@ -220,14 +235,32 @@ export default function ConfigPage() {
 
   const removeHorarioEspecial = (id: number) => setHorariosEspeciales(horariosEspeciales.filter(h => h.id !== id));
 
-  const addUsuario = () => {
-    const newId = Math.max(...usuarios.map(u => u.id), 0) + 1;
-    setUsuarios([...usuarios, { id: newId, nombre: nuevoUsuario.nombre, correo: nuevoUsuario.correo, rol: nuevoUsuario.rol, estado: 'Activo', ultimoAcceso: 'Nunca' }]);
-    setShowUsuarioModal(false);
-    setNuevoUsuario({ nombre: '', correo: '', contrasena: '', rol: 'Prefectura', enviarCorreo: true });
+  const addUsuario = async () => {
+    try {
+      await usuariosApi.create({
+        username: nuevoUsuario.username,
+        password_user: nuevoUsuario.contrasena,
+        nombre: nuevoUsuario.nombre,
+        id_rol: nuevoUsuario.rol_id,
+        activo: true,
+      });
+      const updated = await usuariosApi.getAll();
+      setUsuarios(updated);
+      setShowUsuarioModal(false);
+      setNuevoUsuario({ username: '', nombre: '', contrasena: '', rol_id: 2, enviarCorreo: true });
+    } catch (err) {
+      console.error('Error creating user:', err);
+    }
   };
 
-  const removeUsuario = (id: number) => setUsuarios(usuarios.filter(u => u.id !== id));
+  const removeUsuario = async (id: number) => {
+    try {
+      await usuariosApi.delete(id);
+      setUsuarios(usuarios.filter(u => u.id !== id));
+    } catch (err) {
+      console.error('Error deleting user:', err);
+    }
+  };
 
   const s = {
     page: { padding: '24px', background: colors.bg, minHeight: '100vh', fontFamily: "'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" } as React.CSSProperties,
@@ -473,6 +506,7 @@ export default function ConfigPage() {
             <thead>
               <tr>
                 <th style={s.th}>Nombre</th>
+                <th style={s.th}>Usuario</th>
                 <th style={s.th}>Correo</th>
                 <th style={s.th}>Rol</th>
                 <th style={s.th}>Estado</th>
@@ -483,11 +517,12 @@ export default function ConfigPage() {
             <tbody>
               {usuarios.map(u => (
                 <tr key={u.id}>
-                  <td style={s.tdBold}>{u.nombre}</td>
-                  <td style={s.td}>{u.correo}</td>
-                  <td style={s.td}><span style={s.badge(u.rol === 'Directivo' ? 'blue' : 'green')}>{u.rol}</span></td>
-                  <td style={s.td}><span style={s.badge(u.estado === 'Activo' ? 'green' : 'gray')}>{u.estado}</span></td>
-                  <td style={s.td}>{u.ultimoAcceso}</td>
+                  <td style={s.tdBold}>{u.nombre} {u.apellido_paterno} {u.apellido_materno}</td>
+                  <td style={s.td}>{u.username}</td>
+                  <td style={s.td}>{u.email}</td>
+                  <td style={s.td}><span style={s.badge(u.rol_id === 1 ? 'blue' : u.rol_id === 3 ? 'green' : 'gray')}>{u.rol_id === 1 ? 'Directivo' : u.rol_id === 3 ? 'Servicios Escolares' : 'Prefectura'}</span></td>
+                  <td style={s.td}><span style={s.badge(u.estatus === 'Activo' ? 'green' : 'gray')}>{u.estatus}</span></td>
+                  <td style={s.td}>{u.created_at ? new Date(u.created_at).toLocaleString() : 'Nunca'}</td>
                   <td style={s.td}>
                     <div style={s.actionsCell}>
                       <button style={s.btnIcon()}><Edit size={16} /></button>
@@ -510,14 +545,15 @@ export default function ConfigPage() {
               <input style={s.input} value={nuevoUsuario.nombre} onChange={e => setNuevoUsuario({ ...nuevoUsuario, nombre: e.target.value })} onFocus={handleInputFocus} onBlur={handleInputBlur} />
             </div>
             <div style={s.field}>
-              <label style={s.label}>Correo electronico</label>
-              <input type="email" style={s.input} value={nuevoUsuario.correo} onChange={e => setNuevoUsuario({ ...nuevoUsuario, correo: e.target.value })} onFocus={handleInputFocus} onBlur={handleInputBlur} />
+              <label style={s.label}>Nombre de usuario</label>
+              <input style={s.input} value={nuevoUsuario.username} onChange={e => setNuevoUsuario({ ...nuevoUsuario, username: e.target.value })} onFocus={handleInputFocus} onBlur={handleInputBlur} placeholder="Ej: jperez" />
             </div>
             <div style={s.field}>
               <label style={s.label}>Rol</label>
-              <select style={s.select} value={nuevoUsuario.rol} onChange={e => setNuevoUsuario({ ...nuevoUsuario, rol: e.target.value })} onFocus={handleInputFocus} onBlur={handleInputBlur}>
-                <option value="Directivo">Directivo</option>
-                <option value="Prefectura">Prefectura</option>
+              <select style={s.select} value={nuevoUsuario.rol_id} onChange={e => setNuevoUsuario({ ...nuevoUsuario, rol_id: Number(e.target.value) })} onFocus={handleInputFocus} onBlur={handleInputBlur}>
+                <option value={1}>Directivo</option>
+                <option value={2}>Prefectura</option>
+                <option value={3}>Servicios Escolares</option>
               </select>
             </div>
             <div style={s.field}>
@@ -768,7 +804,7 @@ export default function ConfigPage() {
       firma:{ bg: '#FEF2F2', border: '#FECACA', text: '#991B1B', accent: '#DC2626' },
     };
 
-    const allFields = Object.entries(credLayout).sort(([, a], [, b]) => a.y - b.y);
+    const allFields = Object.entries(credLayout).sort(([, a], [, b]) => a.y - b.y) as [string, { y: number; size: number; x: string; xOffset: number; text?: string; label?: string }][];
 
     return (
       <div style={s.tabContent}>
@@ -1186,7 +1222,7 @@ export default function ConfigPage() {
   return (
     <div style={s.page}>
       <div style={s.tabs}>
-        {TABS.map(tab => (
+        {tabs.map(tab => (
           <button
             key={tab.id}
             style={s.tab(activeTab === tab.id)}

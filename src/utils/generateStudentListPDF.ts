@@ -1,11 +1,5 @@
 import { jsPDF } from 'jspdf';
-import type { Alumno } from '../data/mockData';
-
-/**
- * Genera un PDF con la lista de alumnos (nomina/roster).
- * Incline: #, Nombre, No. Control, Grupo, Turno, Estado.
- * Nombre del archivo: lista_grupo_X.pdf o lista_alumnos_general.pdf
- */
+import type { Alumno } from '../types';
 
 interface GenerateListOptions {
   students: Alumno[];
@@ -25,12 +19,10 @@ export function generateStudentListPDF(options: GenerateListOptions) {
 
   const columns = [
     { label: '#', x: marginX, w: 30 },
-    { label: 'Nombre', x: marginX + 30, w: 170 },
-    { label: 'No. Control', x: marginX + 200, w: 90 },
-    { label: 'Grupo', x: marginX + 290, w: 45 },
-    { label: 'Turno', x: marginX + 335, w: 55 },
-    { label: 'Capacitacion', x: marginX + 390, w: 100 },
-    { label: 'Estado', x: marginX + 490, w: 50 },
+    { label: 'Nombre', x: marginX + 30, w: 200 },
+    { label: 'No. Control', x: marginX + 230, w: 90 },
+    { label: 'Grupo', x: marginX + 320, w: 60 },
+    { label: 'Estado', x: marginX + 380, w: 60 },
   ];
 
   let currentY = marginTop;
@@ -82,12 +74,10 @@ export function generateStudentListPDF(options: GenerateListOptions) {
 
     const rowData = [
       String(idx + 1),
-      s.nombreCompleto,
+      `${s.nombre} ${s.apellido_paterno} ${s.apellido_materno}`,
       s.matricula,
-      s.grupo,
-      s.turno,
-      s.capacitacion,
-      s.activo ? 'Activo' : 'De baja',
+      s.grupo_id ? String(s.grupo_id) : 'S/I',
+      s.estatus === 'Activo' ? 'Activo' : 'De baja',
     ];
 
     columns.forEach((col, i) => {

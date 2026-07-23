@@ -1,0 +1,13 @@
+export { authApi } from './auth';
+export { alumnosApi } from './alumnos';
+export { credencialesApi } from './credenciales';
+export { gruposApi } from './grupos';
+export { nfcApi } from './nfc';
+export { profesoresApi } from './profesores';
+export { registrosApi } from './registros';
+export { retardosApi } from './retardos';
+export { ciclosApi } from './ciclos';
+export { inscripcionesApi } from './inscripciones';
+export { usuariosApi } from './usuarios';
+export { rolesApi } from './roles';
+export { default as apiClient } from './client';

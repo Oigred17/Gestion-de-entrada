@@ -6,12 +6,14 @@ import {
   ScanLine, ChevronLeft, ChevronRight,
 } from 'lucide-react';
 import type { UserRole } from '../App';
+import { useAuth } from '../context/AuthContext';
 
 interface LayoutProps {
   children: ReactNode;
   role: UserRole;
   onLogout: () => void;
 }
+
 
 const directivoMenu = [
   { icon: LayoutDashboard, label: 'Dashboard', path: '/dashboard' },
@@ -24,9 +26,20 @@ const directivoMenu = [
   { icon: Settings, label: 'Configuracion', path: '/configuracion' },
 ];
 
+const serviciosEscolaresMenu = [
+  { icon: LayoutDashboard, label: 'Dashboard', path: '/dashboard' },
+  { icon: Users, label: 'Alumnos', path: '/alumnos' },
+  { icon: Building2, label: 'Grupos', path: '/grupos' },
+  { icon: CreditCard, label: 'Credenciales', path: '/credenciales' },
+  { icon: CalendarCheck, label: 'Permisos', path: '/permisos' },
+  { icon: Settings, label: 'Configuracion', path: '/configuracion' },
+];
+
 const prefectoMenu = [
-  { icon: ScanLine, label: 'Escaneo NFC', path: '/escaneo' },
+  { icon: ScanLine, label: 'Dashboard', path: '/escaneo' },
+  { icon: CalendarCheck, label: 'Permisos', path: '/permisos' },
   { icon: AlertTriangle, label: 'Incidencias', path: '/incidencias' },
+  { icon: FileText, label: 'Reportes', path: '/reportes' },
 ];
 
 export default function Layout({ children, role, onLogout }: LayoutProps) {
@@ -35,7 +48,12 @@ export default function Layout({ children, role, onLogout }: LayoutProps) {
   const [notifOpen, setNotifOpen] = useState(false);
   const location = useLocation();
   const navigate = useNavigate();
-  const menu = role === 'Directivo' ? directivoMenu : prefectoMenu;
+  const { user } = useAuth();
+  const menu = role === 'Directivo' ? directivoMenu : role === 'Servicios Escolares' ? serviciosEscolaresMenu : prefectoMenu;
+
+  const userFullName = user ? `${user.nombre} ${user.apellido_paterno} ${user.apellido_materno}`.trim() : 'Usuario';
+  const userInitials = user ? `${user.nombre?.[0] ?? ''}${user.apellido_paterno?.[0] ?? ''}`.toUpperCase() : 'U';
+  const userRoleLabel = user?.rol ?? role;
 
   const pageTitle = menu.find(m => location.pathname.startsWith(m.path))?.label ?? 'Sistema NFC';
 
@@ -59,12 +77,10 @@ export default function Layout({ children, role, onLogout }: LayoutProps) {
         <div className="sidebar-logo">
           <img src={collapsed ? "/images/logo.png" : "/images/logoCompleto.png"} alt="Logo" />
         </div>
-        {role === 'Directivo' && (
-          <div className="sidebar-user">
-            <div className="sidebar-user-name">Lic. Fabian Ocampo</div>
-            <div className="sidebar-user-role">Directivo</div>
-          </div>
-        )}
+        <div className="sidebar-user">
+          <div className="sidebar-user-name">{userFullName}</div>
+          <div className="sidebar-user-role">{userRoleLabel}</div>
+        </div>
         <div className="sidebar-divider" />
         <nav className="sidebar-nav">
           {menu.map(item => {
@@ -156,7 +172,7 @@ export default function Layout({ children, role, onLogout }: LayoutProps) {
             </div>
             <div className="topbar-avatar">
               <div style={{ width: 36, height: 36, borderRadius: '50%', background: '#EB2466', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontWeight: 700, fontSize: 14 }}>
-                {role === 'Directivo' ? 'FO' : 'VI'}
+                {userInitials}
               </div>
             </div>
           </div>
