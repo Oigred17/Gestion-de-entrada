@@ -47,10 +47,16 @@ export const nfcApi = {
   },
 
   connectWebSocket(onMessage: (msg: NFCWSMessage) => void, onOpen?: () => void, onClose?: () => void): WebSocket {
-    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-    const host = window.location.hostname;
-    const port = '8000';
-    const url = `${protocol}//${host}:${port}/api/v1/nfc/ws`;
+    const configured = import.meta.env.VITE_API_URL;
+    let base: string;
+    if (configured && /^https?:\/\//.test(configured)) {
+      base = configured.replace(/\/api\/v1\/?$/, '');
+    } else {
+      base = window.location.origin;
+    }
+    const protocol = base.startsWith('https') ? 'wss:' : 'ws:';
+    const host = base.replace(/^https?:\/\//, '');
+    const url = `${protocol}//${host}/api/v1/nfc/ws`;
 
     const ws = new WebSocket(url);
     ws.onopen = () => onOpen?.();

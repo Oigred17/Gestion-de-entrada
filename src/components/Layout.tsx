@@ -40,27 +40,45 @@ const serviciosEscolaresMenu = [
 ];
 
 const prefectoMenu = [
-  { icon: ScanLine, label: 'Dashboard', path: '/escaneo' },
+  { icon: ScanLine, label: 'Escaneo NFC', path: '/escaneo' },
   { icon: CalendarCheck, label: 'Permisos', path: '/permisos' },
   { icon: AlertTriangle, label: 'Incidencias', path: '/incidencias' },
   { icon: Shield, label: 'Faltas al Reglamento', path: '/faltas' },
+  { icon: UserCheck, label: 'Profesores', path: '/profesores' },
   { icon: FileText, label: 'Reportes', path: '/reportes' },
 ];
+
+interface NotificationItem {
+  id: number;
+  type: 'success' | 'info' | 'warning' | 'error';
+  text: string;
+  time: string;
+  unread: boolean;
+}
 
 export default function Layout({ children, role, onLogout }: LayoutProps) {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [collapsed, setCollapsed] = useState(false);
   const [notifOpen, setNotifOpen] = useState(false);
+  const [notifications, setNotifications] = useState<NotificationItem[]>([]);
   const location = useLocation();
   const navigate = useNavigate();
   const { user } = useAuth();
   const menu = role === 'Directivo' ? directivoMenu : role === 'Servicios Escolares' ? serviciosEscolaresMenu : prefectoMenu;
 
   const userFullName = user ? `${user.nombre} ${user.apellido_paterno} ${user.apellido_materno}`.trim() : 'Usuario';
-  const userInitials = user ? `${user.nombre?.[0] ?? ''}${user.apellido_paterno?.[0] ?? ''}`.toUpperCase() : 'U';
+  const userInitials = (user ? `${user.nombre?.[0] ?? ''}${user.apellido_paterno?.[0] ?? ''}` : '').trim().toUpperCase() || (user?.username?.[0]?.toUpperCase() ?? 'U');
   const userRoleLabel = user?.rol ?? role;
 
-  const pageTitle = menu.find(m => location.pathname.startsWith(m.path))?.label ?? 'Sistema NFC';
+  const unreadCount = notifications.filter(n => n.unread).length;
+  const pageTitle = location.pathname === '/'
+    ? menu[0]?.label ?? 'Sistema NFC'
+    : menu.find(m => location.pathname.startsWith(m.path))?.label ?? 'Sistema NFC';
+
+  const markAllAsRead = () => {
+    setNotifications(prev => prev.map(n => ({ ...n, unread: false })));
+    setNotifOpen(false);
+  };
 
   return (
     <div className="app-layout">
@@ -133,45 +151,41 @@ export default function Layout({ children, role, onLogout }: LayoutProps) {
                 onClick={() => setNotifOpen(!notifOpen)}
               >
                 <Bell size={22} />
-                <span className="topbar-badge">3</span>
+                {unreadCount > 0 && <span className="topbar-badge">{unreadCount}</span>}
               </button>
               {notifOpen && (
                 <div className="notification-panel">
                   <div className="notification-panel-header">
                     <span style={{ fontWeight: 600, fontSize: 16 }}>Notificaciones</span>
-                    <button
-                      style={{ background: 'none', border: 'none', color: '#EB2466', cursor: 'pointer', fontSize: 13, fontFamily: 'var(--font-sans)' }}
-                      onClick={() => setNotifOpen(false)}
-                    >
-                      Marcar todas como leidas
-                    </button>
+                    {unreadCount > 0 && (
+                      <button
+                        style={{ background: 'none', border: 'none', color: '#EB2466', cursor: 'pointer', fontSize: 13, fontFamily: 'var(--font-sans)' }}
+                        onClick={markAllAsRead}
+                      >
+                        Marcar todas como leidas
+                      </button>
+                    )}
                   </div>
-                  <div className="notification-list">
-                    <div className="notification-item unread">
-                      <div className="notification-icon notification-icon--warning">&#9888;</div>
-                      <div className="notification-content">
-                        <div className="notification-text"><strong>RETARDO</strong> - ALEIDA XIMENA GARCIA CANSECO registro entrada fuera de horario</div>
-                        <div className="notification-time">07:45 - 10 Jul 2026</div>
-                      </div>
-                      <div className="notification-dot" />
+                  {notifications.length === 0 ? (
+                    <div style={{ padding: '32px 16px', textAlign: 'center', color: '#85787A', fontSize: 14 }}>
+                      No tienes notificaciones
                     </div>
-                    <div className="notification-item unread">
-                      <div className="notification-icon notification-icon--error">&#10006;</div>
-                      <div className="notification-content">
-                        <div className="notification-text"><strong>ACCESO DENEGADO</strong> - Credencial no reconocida en lector 2</div>
-                        <div className="notification-time">08:30 - 10 Jul 2026</div>
-                      </div>
-                      <div className="notification-dot" />
+                  ) : (
+                    <div className="notification-list">
+                      {notifications.map(n => (
+                        <div key={n.id} className={`notification-item ${n.unread ? 'unread' : ''}`}>
+                          <div className={`notification-icon notification-icon--${n.type}`}>
+                            {n.type === 'warning' ? '&#9888;' : n.type === 'error' ? '&#10006;' : '&#9432;'}
+                          </div>
+                          <div className="notification-content">
+                            <div className="notification-text">{n.text}</div>
+                            <div className="notification-time">{n.time}</div>
+                          </div>
+                          {n.unread && <div className="notification-dot" />}
+                        </div>
+                      ))}
                     </div>
-                    <div className="notification-item unread">
-                      <div className="notification-icon notification-icon--error">&#9888;</div>
-                      <div className="notification-content">
-                        <div className="notification-text"><strong>INCIDENCIA GRAVE</strong> - Intento de acceso no autorizado reportado</div>
-                        <div className="notification-time">08:32 - 10 Jul 2026</div>
-                      </div>
-                      <div className="notification-dot" />
-                    </div>
-                  </div>
+                  )}
                 </div>
               )}
             </div>

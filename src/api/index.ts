@@ -10,5 +10,7 @@ export { ciclosApi } from './ciclos';
 export { usuariosApi } from './usuarios';
 export { rolesApi } from './roles';
 export { reportesApi } from './reportes';
+export { reportesProgramadosApi } from './reportesProgramados';
 export { justificacionesApi } from './justificaciones';
+export { reposicionesApi } from './reposiciones';
 export { default as apiClient } from './client';

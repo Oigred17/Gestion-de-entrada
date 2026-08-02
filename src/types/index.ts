@@ -12,6 +12,10 @@ export interface Alumno {
   curp?: string;
   nss?: string;
   tipo_sangre?: string;
+  capacitacion?: string;
+  turno?: string;
+  cohorte?: string;
+  fecha_nacimiento?: string;
   tutor_nombre?: string;
   tutor_telefono?: string;
   id_grupo?: number;
@@ -28,6 +32,10 @@ export interface AlumnoCreate {
   curp?: string;
   nss?: string;
   tipo_sangre?: string;
+  capacitacion?: string;
+  turno?: string;
+  cohorte?: string;
+  fecha_nacimiento?: string;
   tutor_nombre?: string;
   tutor_telefono?: string;
   id_grupo?: number;
@@ -44,6 +52,10 @@ export interface AlumnoUpdate {
   curp?: string;
   nss?: string;
   tipo_sangre?: string;
+  capacitacion?: string;
+  turno?: string;
+  cohorte?: string;
+  fecha_nacimiento?: string;
   tutor_nombre?: string;
   tutor_telefono?: string;
   id_grupo?: number;
@@ -191,6 +203,47 @@ export interface JustificacionCreate {
   fecha_fin: string;
   motivo: string;
   id_usuario_registro: number;
+}
+
+export interface Reposicion {
+  id: number;
+  id_alumno: number;
+  id_credencial?: number;
+  motivo: string;
+  fecha_solicitud: string;
+  fecha_entrega?: string;
+  id_usuario_registro?: number;
+  fecha_registro?: string;
+  alumno?: Alumno;
+}
+
+export interface ReposicionCreate {
+  id_alumno: number;
+  id_credencial?: number;
+  motivo: string;
+  fecha_solicitud?: string;
+  fecha_entrega?: string;
+  id_usuario_registro?: number;
+}
+
+export interface ReporteProgramado {
+  id: number;
+  nombre: string;
+  frecuencia: string;
+  ultima_generacion?: string;
+  proxima_generacion?: string;
+  destinatarios?: string;
+  activo: boolean;
+  fecha_registro?: string;
+}
+
+export interface ReporteProgramadoCreate {
+  nombre: string;
+  frecuencia: string;
+  ultima_generacion?: string;
+  proxima_generacion?: string;
+  destinatarios?: string;
+  activo?: boolean;
 }
 
 export interface Reporte {

@@ -4,8 +4,8 @@ import {
   UserCheck, Clock, AlertTriangle, LogOut, TrendingUp,
   ChevronRight, Bell, ScanLine,
 } from 'lucide-react';
-import { registrosApi, retardosApi, alumnosApi } from '../api';
-import type { RegistroAcceso, Retardo, Alumno } from '../types';
+import { registrosApi, retardosApi, alumnosApi, reportesApi, gruposApi } from '../api';
+import type { RegistroAcceso, Retardo, Alumno, Reporte, Grupo } from '../types';
 
 const tipoConfig: Record<string, { label: string; color: string; bg: string; icon: string }> = {
   ENTRADA: { label: 'Entrada', color: '#0F8122', bg: '#E8F5E9', icon: '✓' },
@@ -14,14 +14,28 @@ const tipoConfig: Record<string, { label: string; color: string; bg: string; ico
   denegado: { label: 'Denegado', color: '#AB1748', bg: '#FEEBEE', icon: '✗' },
 };
 
+function esHoy(fechaHora: string, hoy: string): boolean {
+  return fechaHora.startsWith(hoy);
+}
+
+function obtenerGravedad(reporte: Reporte): 'Leve' | 'Moderada' | 'Grave' {
+  const sancion = (reporte.sancion || '').toLowerCase();
+  if (/suspension|expulsion|grave/.test(sancion)) return 'Grave';
+  if (/amonestacion|llamado/.test(sancion)) return 'Moderada';
+  return 'Leve';
+}
+
 export default function DashboardPage() {
   const navigate = useNavigate();
   const [currentTime, setCurrentTime] = useState(new Date());
   const [registros, setRegistros] = useState<RegistroAcceso[]>([]);
   const [retardosData, setRetardosData] = useState<Retardo[]>([]);
   const [alumnosData, setAlumnosData] = useState<Alumno[]>([]);
+  const [reportesData, setReportesData] = useState<Reporte[]>([]);
+  const [gruposData, setGruposData] = useState<Grupo[]>([]);
 
   const alumnoMap = Object.fromEntries(alumnosData.map(a => [a.id, a]));
+  const grupoMap = Object.fromEntries(gruposData.map(g => [g.id, g.nombre]));
 
   useEffect(() => {
     const timer = setInterval(() => setCurrentTime(new Date()), 1000);
@@ -31,14 +45,18 @@ export default function DashboardPage() {
   useEffect(() => {
     const fetchData = async () => {
       try {
-        const [registrosRes, retardosRes, alumnosRes] = await Promise.all([
+        const [registrosRes, retardosRes, alumnosRes, reportesRes, gruposRes] = await Promise.all([
           registrosApi.getAll(),
           retardosApi.getAll(),
           alumnosApi.getAll(),
+          reportesApi.getAll(),
+          gruposApi.getAll(),
         ]);
         setRegistros(registrosRes);
         setRetardosData(retardosRes);
         setAlumnosData(alumnosRes);
+        setReportesData(reportesRes);
+        setGruposData(gruposRes);
       } catch (error) {
         console.error('Error fetching dashboard data:', error);
       }
@@ -46,23 +64,34 @@ export default function DashboardPage() {
     fetchData();
   }, []);
 
+  const hoy = new Date().toISOString().slice(0, 10);
   const totalAlumnos = alumnosData.length;
-  const presentes = registros.filter(r => r.tipo_acceso === 'ENTRADA').length;
-  const retardosCount = retardosData.length;
-  const salidas = registros.filter(r => r.tipo_acceso === 'SALIDA').length;
-  
+  const presentes = new Set(
+    registros
+      .filter(r => r.tipo_acceso === 'ENTRADA' && esHoy(r.fecha_hora, hoy))
+      .map(r => r.alumno_id)
+  ).size;
+  const salidas = new Set(
+    registros
+      .filter(r => r.tipo_acceso === 'SALIDA' && esHoy(r.fecha_hora, hoy))
+      .map(r => r.alumno_id)
+  ).size;
+  const retardosCount = retardosData.filter(r => esHoy(r.fecha, hoy)).length;
+  const reportesCount = reportesData.length;
+
   const stats = [
     { label: 'Presentes', value: presentes, total: totalAlumnos, color: '#0F8122', bg: '#E8F5E9', icon: UserCheck },
     { label: 'Fuera de horario', value: retardosCount, total: totalAlumnos, color: '#1792AB', bg: '#DCF5FF', icon: Clock },
     { label: 'Faltas', value: Math.max(0, totalAlumnos - presentes - retardosCount), total: totalAlumnos, color: '#EB2466', bg: '#FEEBEE', icon: AlertTriangle },
     { label: 'Salidas', value: salidas, total: totalAlumnos, color: '#5F5657', bg: '#F0EFEF', icon: LogOut },
-    { label: 'Incidencias', value: 0, total: totalAlumnos, color: '#AB1748', bg: '#FEEBEE', icon: AlertTriangle },
+    { label: 'Reportes', value: reportesCount, total: totalAlumnos, color: '#AB1748', bg: '#FEEBEE', icon: AlertTriangle },
   ];
 
   const recentActivity = [
     ...registros.map(r => ({
       key: `reg-${r.id}`,
       tipo: r.tipo_acceso,
+      sort: r.fecha_hora,
       hora: r.fecha_hora.split('T')[1] || r.fecha_hora.split(' ')[1] || '',
       fecha: r.fecha_hora.split('T')[0] || r.fecha_hora.split(' ')[0] || '',
       alumno: r.alumno || alumnoMap[r.alumno_id] || null,
@@ -70,31 +99,42 @@ export default function DashboardPage() {
     ...retardosData.map(r => ({
       key: `ret-${r.id}`,
       tipo: 'retardo' as const,
+      sort: `${r.fecha}T${r.hora_llegada || '00:00:00'}`,
       hora: r.hora_llegada,
       fecha: r.fecha,
       alumno: r.alumno || alumnoMap[r.alumno_id] || null,
     })),
-  ].sort((a, b) => b.fecha.localeCompare(a.fecha) || b.hora.localeCompare(a.hora));
+  ].sort((a, b) => b.sort.localeCompare(a.sort)).slice(0, 10);
 
-  const attendanceByGroup = Array.from(new Set(alumnosData.map(s => s.id_grupo ? `Grupo ${s.id_grupo}` : 'Sin grupo'))).map(group => {
-    const groupStudents = alumnosData.filter(s => s.id_grupo ? `Grupo ${s.id_grupo}` === group : 'Sin grupo' === group);
+  const attendanceByGroup = Array.from(new Set(alumnosData.map(s => s.id_grupo ? s.id_grupo : 0))).map(idGrupo => {
+    const groupStudents = alumnosData.filter(s => (s.id_grupo ?? 0) === idGrupo);
     const groupRegistros = registros.filter(r => {
       const alumno = r.alumno || alumnoMap[r.alumno_id];
-      return alumno?.id_grupo ? `Grupo ${alumno.id_grupo}` === group : 'Sin grupo' === group;
+      return (alumno?.id_grupo ?? 0) === idGrupo;
     });
     const groupRetardos = retardosData.filter(r => {
       const alumno = r.alumno || alumnoMap[r.alumno_id];
-      return alumno?.id_grupo ? `Grupo ${alumno.id_grupo}` === group : 'Sin grupo' === group;
+      return (alumno?.id_grupo ?? 0) === idGrupo;
     });
     return {
-      group,
+      idGrupo,
+      group: idGrupo ? (grupoMap[idGrupo] || `Grupo ${idGrupo}`) : 'Sin grupo',
       total: groupStudents.length,
-      presentes: groupRegistros.filter(r => r.tipo_acceso === 'ENTRADA').length,
+      presentes: new Set(groupRegistros.filter(r => r.tipo_acceso === 'ENTRADA').map(r => r.alumno_id)).size,
       retardos: groupRetardos.length,
     };
-  });
+  }).sort((a, b) => b.total - a.total);
 
-  const unresolvedIncidents: Array<{id: number; tipo: string; alumno?: {nombre: string; apellido_paterno: string; apellido_materno: string}; fecha: string; gravedad: string}> = [];
+  const unresolvedIncidents: Array<{id: number; tipo: string; alumno?: {nombre: string; apellido_paterno: string; apellido_materno: string}; fecha: string; gravedad: string}> = reportesData
+    .sort((a, b) => b.fecha.localeCompare(a.fecha))
+    .slice(0, 5)
+    .map(r => ({
+      id: r.id,
+      tipo: r.motivo,
+      alumno: r.alumno || alumnoMap[r.id_alumno] as Alumno | undefined,
+      fecha: r.fecha,
+      gravedad: obtenerGravedad(r),
+    }));
 
   const currentTimeStr = currentTime.toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' });
   const currentDateStr = currentTime.toLocaleDateString('es-MX', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
@@ -110,7 +150,7 @@ export default function DashboardPage() {
 
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 16 }}>
         {stats.map(stat => {
-          const pct = Math.round((stat.value / stat.total) * 100);
+          const pct = stat.total > 0 ? Math.round((stat.value / stat.total) * 100) : 0;
           return (
             <div key={stat.label} style={{
               background: '#fff', borderRadius: 12, padding: 20,
@@ -196,10 +236,10 @@ export default function DashboardPage() {
                         {record.alumno?.matricula ?? '---'}
                       </td>
                       <td style={{ padding: '12px 16px', fontSize: 14, color: '#5F5657' }}>
-                        {record.alumno?.id_grupo ?? '---'}
+                        {record.alumno?.id_grupo ? (grupoMap[record.alumno.id_grupo] || `Grupo ${record.alumno.id_grupo}`) : '---'}
                       </td>
                       <td style={{ padding: '12px 16px', fontSize: 13, color: '#85787A' }}>
-                        {'---'}
+                        {record.alumno?.capacitacion ?? '---'}
                       </td>
                       <td style={{ padding: '12px 16px' }}>
                         <span style={{
@@ -229,8 +269,12 @@ export default function DashboardPage() {
             Asistencia por grupo
           </h2>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-            {attendanceByGroup.map(g => {
-              const maxPresentes = Math.max(...attendanceByGroup.map(x => x.total));
+            {attendanceByGroup.length === 0 ? (
+              <div style={{ padding: 32, textAlign: 'center', color: '#85787A', fontSize: 14 }}>
+                No hay grupos registrados
+              </div>
+            ) : attendanceByGroup.map(g => {
+              const maxPresentes = Math.max(1, ...attendanceByGroup.map(x => x.total));
               const pct = g.total > 0 ? Math.round((g.presentes / g.total) * 100) : 0;
               return (
                 <div key={g.group} style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
@@ -270,7 +314,7 @@ export default function DashboardPage() {
               )}
             </h2>
             <button
-              onClick={() => navigate('/incidencias')}
+              onClick={() => navigate('/reportes')}
               style={{
                 display: 'flex', alignItems: 'center', gap: 4, background: 'none', border: 'none',
                 color: '#EB2466', cursor: 'pointer', fontSize: 13, fontWeight: 600, fontFamily: 'var(--font-sans)',

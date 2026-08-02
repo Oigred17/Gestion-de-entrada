@@ -43,6 +43,7 @@ export default function StudentsPage() {
   const [editFechaNacimiento, setEditFechaNacimiento] = useState("");
   const [editTipoSangre, setEditTipoSangre] = useState("");
   const [editDomicilio, setEditDomicilio] = useState("");
+  const [editTutorNombre, setEditTutorNombre] = useState("");
   const [editTelefonoTutor, setEditTelefonoTutor] = useState("");
   const [editCorreoTutor, setEditCorreoTutor] = useState("");
   const [toast, setToast] = useState<{ message: string; type: "success" | "error" | "info" } | null>(null);
@@ -108,6 +109,10 @@ export default function StudentsPage() {
 
   const uniqueGroups = Array.from(new Set(alumnosData.map((s) => getGrupoName(s.id_grupo)))).sort();
 
+  const gruposList = Object.entries(gruposMap)
+    .map(([id, nombre]) => ({ id: Number(id), nombre }))
+    .sort((a, b) => a.nombre.localeCompare(b.nombre));
+
   const filteredStudents = alumnosData.filter((s) => {
     const nombreCompleto = `${s.nombre} ${s.apellido_paterno} ${s.apellido_materno}`.trim();
     if (search) {
@@ -123,6 +128,7 @@ export default function StudentsPage() {
         if (uniqueGroups.includes(f)) return getGrupoName(s.id_grupo) === f;
         if (f === "Activo") return s.estatus === "Activo";
         if (f === "Inactivo") return s.estatus !== "Activo";
+        if (f === "Matutino" || f === "Vespertino") return s.turno === f;
         return true;
       });
       if (!matchFilters) return false;
@@ -153,6 +159,11 @@ export default function StudentsPage() {
     setActiveFilters((prev) => prev.filter((f) => f !== filter));
   };
 
+  const toggleFilter = (filter: string) => {
+    setActiveFilters((prev) => prev.includes(filter) ? prev.filter((f) => f !== filter) : [...prev, filter]);
+    setCurrentPage(1);
+  };
+
   const showToast = (message: string, type: "success" | "error" | "info" = "success") => {
     setToast({ message, type });
     setTimeout(() => setToast(null), 3000);
@@ -162,10 +173,14 @@ export default function StudentsPage() {
     const nombreCompleto = `${student.nombre} ${student.apellido_paterno} ${student.apellido_materno}`.trim();
     setEditName(nombreCompleto);
     setEditControl(student.matricula);
-    setEditGrupo(getGrupoName(student.id_grupo));
+    setEditGrupo(student.id_grupo?.toString() || '');
+    setEditCapacitacion(student.capacitacion || '');
+    setEditTurno(student.turno || '');
     setEditCurp(student.curp || '');
+    setEditFechaNacimiento(student.fecha_nacimiento || '');
     setEditTipoSangre(student.tipo_sangre || '');
     setEditDomicilio(student.direccion || '');
+    setEditTutorNombre(student.tutor_nombre || '');
     setEditTelefonoTutor(student.tutor_telefono || '');
     setEditCorreoTutor('');
     setSelectedStudent(student);
@@ -190,6 +205,11 @@ export default function StudentsPage() {
         direccion: editDomicilio,
         curp: editCurp,
         tipo_sangre: editTipoSangre,
+        capacitacion: editCapacitacion,
+        turno: editTurno,
+        fecha_nacimiento: editFechaNacimiento,
+        tutor_nombre: editTutorNombre,
+        id_grupo: editGrupo ? Number(editGrupo) : undefined,
       });
       setPanelMode("view");
       showToast("Datos del alumno actualizados correctamente");
@@ -214,11 +234,34 @@ export default function StudentsPage() {
     setSelectedStudent(null);
   };
 
-  const handleConfirmSaveAndClose = () => {
-    setShowConfirmClose(false);
-    setPanelMode("view");
-    setSelectedStudent(null);
-    showToast("Datos del alumno actualizados correctamente");
+  const handleConfirmSaveAndClose = async () => {
+    if (!selectedStudent) return;
+    try {
+      const nameParts = editName.split(' ');
+      await alumnosApi.update(selectedStudent.id, {
+        matricula: editControl,
+        nombre: nameParts[0] || '',
+        apellido_paterno: nameParts[1] || '',
+        apellido_materno: nameParts.slice(2).join(' ') || '',
+        telefono: editTelefonoTutor,
+        direccion: editDomicilio,
+        curp: editCurp,
+        tipo_sangre: editTipoSangre,
+        capacitacion: editCapacitacion,
+        turno: editTurno,
+        fecha_nacimiento: editFechaNacimiento,
+        tutor_nombre: editTutorNombre,
+        id_grupo: editGrupo ? Number(editGrupo) : undefined,
+      });
+      setShowConfirmClose(false);
+      setPanelMode("view");
+      setSelectedStudent(null);
+      showToast("Datos del alumno actualizados correctamente");
+      fetchAlumnos();
+    } catch (error) {
+      setShowConfirmClose(false);
+      showToast("Error al actualizar el alumno", "error");
+    }
   };
 
   const resetNewStudentForm = () => {
@@ -257,9 +300,17 @@ export default function StudentsPage() {
         matricula: newControl.trim(),
         nombre: nameParts[0] || '',
         apellido_paterno: nameParts[1] || '',
-        apellido_materno: nameParts[2] || '',
+        apellido_materno: nameParts.slice(2).join(' ') || '',
         telefono: newTelefonoTutor.trim(),
         direccion: newDomicilio.trim(),
+        curp: newCurp.trim(),
+        tipo_sangre: newTipoSangre.trim(),
+        capacitacion: newCapacitacion.trim(),
+        turno: newTurno,
+        cohorte: newCohorte.trim(),
+        fecha_nacimiento: newFechaNacimiento.trim(),
+        tutor_nombre: newTutor.trim(),
+        nss: newNumAfiliacion.trim(),
         id_grupo: newGrupo.trim() ? Number(newGrupo.trim()) : undefined,
       });
       setShowNewStudentModal(false);
@@ -268,6 +319,17 @@ export default function StudentsPage() {
       fetchAlumnos();
     } catch (error) {
       showToast("Error al crear el alumno", "error");
+    }
+  };
+
+  const handleToggleEstatus = async (student: Alumno) => {
+    const nuevoEstatus = student.estatus === "Activo" ? "Inactivo" : "Activo";
+    try {
+      await alumnosApi.update(student.id, { estatus: nuevoEstatus });
+      showToast(nuevoEstatus === "Activo" ? "Alumno reactivado" : "Alumno dado de baja");
+      fetchAlumnos();
+    } catch (error) {
+      showToast("Error al cambiar el estado del alumno", "error");
     }
   };
 
@@ -339,7 +401,7 @@ export default function StudentsPage() {
             const name = String(row[found.colMap.nombre] || "").trim();
             const matricula = String(row[found.colMap.matricula] || "").trim();
             const grupo = String(row[found.colMap.grupo] || "").trim();
-            if (!name || !matricula || matricula === "nan" || matricula === "NaN" || /^\d+\.?\d*$/.test(matricula)) continue;
+            if (!name || !matricula || matricula === "nan" || matricula === "NaN" || /^\d+\.\d+$/.test(matricula)) continue;
             rows.push([name, matricula, grupo]);
           }
           if (rows.length > 0) {
@@ -546,7 +608,7 @@ export default function StudentsPage() {
                     const active = activeFilters.includes(g);
                     return (
                       <button key={g} onClick={() => {
-                        setActiveFilters(prev => active ? prev.filter(f => f !== g) : [...prev, g]);
+                        toggleFilter(g);
                       }} style={{
                         padding: "5px 12px", borderRadius: 16, fontSize: 12, fontWeight: 500, cursor: "pointer",
                         border: active ? "1px solid #EB2466" : "1px solid #E5E3E4",
@@ -568,7 +630,7 @@ export default function StudentsPage() {
                     const active = activeFilters.includes(e);
                     return (
                       <button key={e} onClick={() => {
-                        setActiveFilters(prev => active ? prev.filter(f => f !== e) : [...prev, e]);
+                        toggleFilter(e);
                       }} style={{
                         padding: "5px 14px", borderRadius: 16, fontSize: 12, fontWeight: 500, cursor: "pointer",
                         border: active ? "1px solid #EB2466" : "1px solid #E5E3E4",
@@ -590,7 +652,7 @@ export default function StudentsPage() {
                     const active = activeFilters.includes(t);
                     return (
                       <button key={t} onClick={() => {
-                        setActiveFilters(prev => active ? prev.filter(f => f !== t) : [...prev, t]);
+                        toggleFilter(t);
                       }} style={{
                         padding: "5px 14px", borderRadius: 16, fontSize: 12, fontWeight: 500, cursor: "pointer",
                         border: active ? "1px solid #EB2466" : "1px solid #E5E3E4",
@@ -753,7 +815,7 @@ export default function StudentsPage() {
                     {student.matricula}
                   </td>
                   <td style={{ padding: "12px" }}>{getGrupoName(student.id_grupo)}</td>
-                  <td style={{ padding: "12px" }}>{'---'}</td>
+                  <td style={{ padding: "12px" }}>{student.capacitacion || '---'}</td>
                   <td style={{ padding: "12px" }}>{student.tutor_nombre || '---'}</td>
                   <td style={{ padding: "12px" }}>{student.tutor_telefono || '---'}</td>
                   <td style={{ padding: "12px" }}>
@@ -800,12 +862,14 @@ export default function StudentsPage() {
                         <Edit size={18} />
                       </button>
                       <button
+                        onClick={() => handleToggleEstatus(student)}
+                        title={student.estatus === "Activo" ? "Dar de baja" : "Reactivar"}
                         style={{
                           background: "none",
                           border: "none",
                           cursor: "pointer",
                           padding: 4,
-                          color: "#85787A",
+                          color: student.estatus === "Activo" ? "#85787A" : "#0F8122",
                         }}
                       >
                         <Lock size={18} />
@@ -1004,7 +1068,15 @@ export default function StudentsPage() {
                 <button onClick={() => {
                   setEditName(`${selectedStudent.nombre} ${selectedStudent.apellido_paterno} ${selectedStudent.apellido_materno}`.trim());
                   setEditControl(selectedStudent.matricula);
-                  setEditGrupo(getGrupoName(selectedStudent.id_grupo));
+                  setEditGrupo(selectedStudent.id_grupo?.toString() || '');
+                  setEditCapacitacion(selectedStudent.capacitacion || '');
+                  setEditTurno(selectedStudent.turno || '');
+                  setEditCurp(selectedStudent.curp || '');
+                  setEditFechaNacimiento(selectedStudent.fecha_nacimiento || '');
+                  setEditTipoSangre(selectedStudent.tipo_sangre || '');
+                  setEditDomicilio(selectedStudent.direccion || '');
+                  setEditTutorNombre(selectedStudent.tutor_nombre || '');
+                  setEditTelefonoTutor(selectedStudent.tutor_telefono || '');
                   setPanelMode("edit");
                 }} style={{ display: "flex", alignItems: "center", gap: 6, padding: "8px 14px", border: "none", borderRadius: 8, background: "#AB1748", color: "#fff", fontSize: 13, fontWeight: 500, cursor: "pointer" }}>
                   <Edit size={14} /> Editar
@@ -1029,9 +1101,9 @@ export default function StudentsPage() {
                   <h3 style={{ fontSize: 14, fontWeight: 600, color: "#EB2466", textTransform: "uppercase", marginBottom: 12, letterSpacing: 0.5 }}>Informacion general</h3>
                   <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "8px 24px", fontSize: 14 }}>
                     <div><span style={{ color: "#5F5657", fontSize: 12 }}>Grupo</span><div style={{ fontWeight: 500 }}>{getGrupoName(selectedStudent.id_grupo)}</div></div>
-                    <div><span style={{ color: "#5F5657", fontSize: 12 }}>Capacitacion</span><div style={{ fontWeight: 500 }}>{'---'}</div></div>
-                    <div><span style={{ color: "#5F5657", fontSize: 12 }}>Cohorte</span><div style={{ fontWeight: 500 }}>{'---'}</div></div>
-                    <div><span style={{ color: "#5F5657", fontSize: 12 }}>Turno</span><div style={{ fontWeight: 500 }}>{'---'}</div></div>
+                    <div><span style={{ color: "#5F5657", fontSize: 12 }}>Capacitacion</span><div style={{ fontWeight: 500 }}>{selectedStudent.capacitacion || '---'}</div></div>
+                    <div><span style={{ color: "#5F5657", fontSize: 12 }}>Cohorte</span><div style={{ fontWeight: 500 }}>{selectedStudent.cohorte || '---'}</div></div>
+                    <div><span style={{ color: "#5F5657", fontSize: 12 }}>Turno</span><div style={{ fontWeight: 500 }}>{selectedStudent.turno || '---'}</div></div>
                     <div><span style={{ color: "#5F5657", fontSize: 12 }}>Estado</span><div><span style={{ display: "inline-block", padding: "2px 10px", borderRadius: 12, fontSize: 12, fontWeight: 600, background: selectedStudent.estatus === "Activo" ? "#FEEBEE" : "#F0EFEF", color: selectedStudent.estatus === "Activo" ? "#0F8122" : "#5F5657" }}>{selectedStudent.estatus}</span></div></div>
                   </div>
                 </div>
@@ -1040,9 +1112,8 @@ export default function StudentsPage() {
                   <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "8px 24px", fontSize: 14 }}>
                     <div><span style={{ color: "#5F5657", fontSize: 12 }}>CURP</span><div style={{ fontWeight: 500, fontFamily: "monospace", fontSize: 13 }}>{selectedStudent.curp || '---'}</div></div>
                     <div><span style={{ color: "#5F5657", fontSize: 12 }}>NSS</span><div style={{ fontWeight: 500, fontFamily: "monospace", fontSize: 13 }}>{selectedStudent.nss || '---'}</div></div>
-                    <div><span style={{ color: "#5F5657", fontSize: 12 }}>Fecha de nacimiento</span><div style={{ fontWeight: 500 }}>{'---'}</div></div>
+                    <div><span style={{ color: "#5F5657", fontSize: 12 }}>Fecha de nacimiento</span><div style={{ fontWeight: 500 }}>{selectedStudent.fecha_nacimiento || '---'}</div></div>
                     <div><span style={{ color: "#5F5657", fontSize: 12 }}>Tipo de sangre</span><div style={{ fontWeight: 500 }}>{selectedStudent.tipo_sangre || '---'}</div></div>
-                    <div><span style={{ color: "#5F5657", fontSize: 12 }}>Genero</span><div style={{ fontWeight: 500 }}>{'---'}</div></div>
                   </div>
                 </div>
                 <div style={{ padding: "0 32px", marginBottom: 24 }}>
@@ -1072,7 +1143,12 @@ export default function StudentsPage() {
                     </div>
                     <div>
                       <span style={{ color: "#5F5657", fontSize: 12 }}>Grupo</span>
-                      <input type="text" value={editGrupo} onChange={(e) => setEditGrupo(e.target.value)} style={{ width: "100%", padding: "6px 10px", border: "1px solid #CAC6C7", borderRadius: 6, fontSize: 14, fontWeight: 500, marginTop: 4, fontFamily: "var(--font-sans)" }} />
+                      <select value={editGrupo} onChange={(e) => setEditGrupo(e.target.value)} style={{ width: "100%", padding: "6px 10px", border: "1px solid #CAC6C7", borderRadius: 6, fontSize: 14, fontWeight: 500, marginTop: 4, fontFamily: "var(--font-sans)", background: "#fff" }}>
+                        <option value="">Sin grupo</option>
+                        {gruposList.map((g) => (
+                          <option key={g.id} value={g.id}>{g.nombre}</option>
+                        ))}
+                      </select>
                     </div>
                     <div>
                       <span style={{ color: "#5F5657", fontSize: 12 }}>Capacitacion</span>
@@ -1107,6 +1183,10 @@ export default function StudentsPage() {
                     <div style={{ gridColumn: "span 2" }}>
                       <span style={{ color: "#5F5657", fontSize: 12 }}>Domicilio</span>
                       <input type="text" value={editDomicilio} onChange={(e) => setEditDomicilio(e.target.value)} style={{ width: "100%", padding: "6px 10px", border: "1px solid #CAC6C7", borderRadius: 6, fontSize: 14, fontWeight: 500, marginTop: 4, fontFamily: "var(--font-sans)" }} />
+                    </div>
+                    <div>
+                      <span style={{ color: "#5F5657", fontSize: 12 }}>Nombre tutor</span>
+                      <input type="text" value={editTutorNombre} onChange={(e) => setEditTutorNombre(e.target.value)} style={{ width: "100%", padding: "6px 10px", border: "1px solid #CAC6C7", borderRadius: 6, fontSize: 14, fontWeight: 500, marginTop: 4, fontFamily: "var(--font-sans)" }} />
                     </div>
                     <div>
                       <span style={{ color: "#5F5657", fontSize: 12 }}>Telefono tutor</span>
@@ -1505,7 +1585,12 @@ export default function StudentsPage() {
                     </div>
                     <div>
                       <span style={{ color: "#5F5657", fontSize: 12 }}>Grupo *</span>
-                      <input type="text" value={newGrupo} onChange={(e) => setNewGrupo(e.target.value)} placeholder="Ej: Grupo A" style={{ width: "100%", padding: "8px 10px", border: "1px solid #CAC6C7", borderRadius: 6, fontSize: 14, marginTop: 4, fontFamily: "var(--font-sans)", boxSizing: "border-box" }} />
+                      <select value={newGrupo} onChange={(e) => setNewGrupo(e.target.value)} style={{ width: "100%", padding: "8px 10px", border: "1px solid #CAC6C7", borderRadius: 6, fontSize: 14, marginTop: 4, fontFamily: "var(--font-sans)", background: "#fff", boxSizing: "border-box" }}>
+                        <option value="">Selecciona un grupo</option>
+                        {gruposList.map((g) => (
+                          <option key={g.id} value={g.id}>{g.nombre}</option>
+                        ))}
+                      </select>
                     </div>
                     <div>
                       <span style={{ color: "#5F5657", fontSize: 12 }}>Capacitacion</span>

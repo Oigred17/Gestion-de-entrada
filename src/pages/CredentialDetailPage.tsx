@@ -99,8 +99,22 @@ export default function CredentialDetailPage() {
   };
 
   const handleSaveEdit = () => {
-    setIsEditing(false);
-    showToast('Datos del alumno actualizados correctamente');
+    if (!studentData) return;
+    const parts = editName.trim().split(/\s+/);
+    alumnosApi.update(studentData.id, {
+      nombre: parts[0] ?? '',
+      apellido_paterno: parts[1] ?? '',
+      apellido_materno: parts.slice(2).join(' '),
+      matricula: editControl,
+      id_grupo: editGrupo ? Number(editGrupo) : undefined,
+    }).then((updated) => {
+      setStudentData(updated);
+      setIsEditing(false);
+      showToast('Datos del alumno actualizados correctamente');
+    }).catch((err: unknown) => {
+      const msg = (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail ?? 'Error al actualizar los datos del alumno';
+      showToast(msg, 'error');
+    });
   };
 
   const handleCancelEdit = () => {
@@ -172,8 +186,17 @@ export default function CredentialDetailPage() {
   }, [showToast]);
 
   const handleConfirmReassign = () => {
-    setShowReassignModal(false);
-    showToast(`Chip reasignado correctamente. Nuevo ID: ${newChipId}`);
+    if (!credentialData) return;
+    credencialesApi.update(credentialData.id, { numero: newChipId, estatus: 'Activa' })
+      .then((updated) => {
+        setCredentialData(updated);
+        setShowReassignModal(false);
+        showToast(`Chip reasignado correctamente. Nuevo ID: ${newChipId}`);
+      })
+      .catch((err: unknown) => {
+        const msg = (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail ?? 'Error al reasignar chip NFC';
+        showToast(msg, 'error');
+      });
   };
 
   if (loading) {

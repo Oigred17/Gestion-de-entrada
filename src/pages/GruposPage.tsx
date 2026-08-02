@@ -6,7 +6,7 @@ import { alumnosApi } from '../api/alumnos';
 import { registrosApi } from '../api/registros';
 import { credencialesApi } from '../api/credenciales';
 import { gruposApi } from '../api';
-import type { Alumno, Credencial, RegistroAcceso, Grupo } from '../types';
+import type { Alumno, Credencial, RegistroAcceso } from '../types';
 
 export default function GruposPage() {
   const [search, setSearch] = useState('');
@@ -47,6 +47,8 @@ export default function GruposPage() {
   const getNombreGrupo = (id_grupo?: number | null): string => {
     return id_grupo ? (gruposMap[id_grupo] || String(id_grupo)) : 'Sin grupo';
   };
+
+  const hoy = new Date().toISOString().slice(0, 10);
 
   const grupos = Array.from(new Set(alumnosData.map(s => getNombreGrupo(s.id_grupo))))
     .sort()
@@ -96,15 +98,12 @@ export default function GruposPage() {
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
-      <div style={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'center', flexWrap: 'wrap', gap: 12 }}>
-      </div>
-
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 16 }}>
         {[
           { label: 'Total grupos', value: grupos.length, color: '#EB2466', bg: '#FEEBEE', icon: Building2 },
           { label: 'Total alumnos', value: alumnosData.length, color: '#0F8122', bg: '#E8F5E9', icon: Users },
           { label: 'Credenciales activas', value: credencialesData.filter(c => c.estatus === 'ACTIVA').length, color: '#1792AB', bg: '#DCF5FF', icon: BookOpen },
-          { label: 'Registros hoy', value: registrosData.length, color: '#5F5657', bg: '#F0EFEF', icon: Calendar },
+          { label: 'Registros hoy', value: registrosData.filter(r => r.fecha_hora.startsWith(hoy)).length, color: '#5F5657', bg: '#F0EFEF', icon: Calendar },
         ].map(stat => (
           <div key={stat.label} style={{
             background: '#fff', borderRadius: 12, padding: 20,
@@ -172,9 +171,9 @@ export default function GruposPage() {
                   }}>
                     {g.grupo}
                   </div>
-                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ flex: 1, minWidth: 0 }}>
                     <div style={{ fontSize: 16, fontWeight: 700, color: '#1C1819' }}>
-                      Grupo {g.grupo}
+                      {g.grupo === 'Sin grupo' ? 'Sin grupo' : `Grupo ${g.grupo}`}
                     </div>
                   </div>
                   <div style={{ display: 'flex', gap: 20, alignItems: 'center' }}>
@@ -232,10 +231,10 @@ export default function GruposPage() {
                               <td style={{ padding: '12px 16px' }}>
                                 <span style={{
                                   padding: '3px 10px', borderRadius: 12, fontSize: 12, fontWeight: 600,
-                                  background: s.estatus === 'ACTIVO' ? '#E8F5E9' : '#FEEBEE',
-                                  color: s.estatus === 'ACTIVO' ? '#0F8122' : '#EB2466',
+                                  background: s.estatus === 'Activo' ? '#E8F5E9' : '#FEEBEE',
+                                  color: s.estatus === 'Activo' ? '#0F8122' : '#EB2466',
                                 }}>
-                                  {s.estatus === 'ACTIVO' ? 'Activo' : 'Inactivo'}
+                                  {s.estatus === 'Activo' ? 'Activo' : 'Inactivo'}
                                 </span>
                               </td>
                               <td style={{ padding: '12px 16px' }}>

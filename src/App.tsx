@@ -1,7 +1,7 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider, useAuth } from './context/AuthContext';
 
-export type UserRole = 'Directivo' | 'Prefectura' | 'Servicios Escolares';
+export type UserRole = 'Directivo' | 'Prefectura' | 'Servicios Escolares' | 'Entrada';
 import Layout from './components/Layout';
 import LoginPage from './pages/LoginPage';
 import ScanPage from './pages/ScanPage';
@@ -16,6 +16,7 @@ import ConfigPage from './pages/ConfigPage';
 import GruposPage from './pages/GruposPage';
 import RegulationsPage from './pages/RegulationsPage';
 import ProfesoresPage from './pages/ProfesoresPage';
+import KioscoEntradasPage from './pages/KioscoEntradasPage';
 
 function AppRoutes() {
   const { isAuthenticated, isLoading, user, logout } = useAuth();
@@ -39,6 +40,16 @@ function AppRoutes() {
   }
 
   const userRole = user?.rol || 'Directivo';
+
+  if (userRole === 'Entrada') {
+    return (
+      <BrowserRouter>
+        <Routes>
+          <Route path="*" element={<KioscoEntradasPage />} />
+        </Routes>
+      </BrowserRouter>
+    );
+  }
 
   return (
     <BrowserRouter>

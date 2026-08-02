@@ -1,83 +1,162 @@
 # Cobao NFC - Sistema de Gestion de Entrada
 
-Sistema web para la gestion de entrada y control de acceso mediante credenciales NFC para el centro de capacitacion COBAO.
+Sistema web para la gestion de entrada y control de acceso mediante credenciales NFC para el Colegio de Bachilleres COBAO Plantel 27 Miahuatlan.
 
 ## Tecnologias
 
-- React 19.2
-- TypeScript 6.0
-- Vite 8.1
-- react-router-dom 7.18
-- Lucide React (iconografia)
-- Recharts (graficas)
-- jsPDF (generacion de PDF)
-- SheetJS / xlsx (importacion de archivos Excel)
-- Oxlint (linting)
+- React 19.2 + TypeScript + Vite 8.1
+- react-router-dom 7.18, Lucide React (iconografia), Recharts (graficas)
+- jsPDF (PDF), SheetJS/xlsx (Excel)
+- Backend: FastAPI + SQLAlchemy (async) + PostgreSQL 16
+- Lector NFC ACR122U (protocolo PC/SC)
+- Docker Compose (backend + frontend + BD en un solo contenedor + Postgres)
 
 ## Estructura del proyecto
 
 ```
-src/
-  components/
-    Layout.tsx          -- Layout principal con barra lateral
-  data/
-    mockData.ts         -- Interfaces de tipos y datos de prueba
-  pages/
-    LoginPage.tsx       -- Pagina de inicio de sesion
-    DashboardPage.tsx   -- Panel principal con estadisticas
-    StudentsPage.tsx    -- Gestion de alumnos (lista, agregar, editar, importar)
-    GruposPage.tsx      -- Gestion de grupos
-    CredentialsPage.tsx -- Asignacion y gestion de credenciales NFC
-    CredentialDetailPage.tsx -- Detalle de una credencial
-    PermissionsPage.tsx -- Solicitudes de permiso de alumnos
-    IncidentsPage.tsx   -- Registro de incidentes
-    ReportsPage.tsx     -- Generacion de reportes y asistencia
-    ScanPage.tsx        -- Escaneo NFC y entrada manual
-    ConfigPage.tsx      -- Configuracion del sistema
-  styles/
-    index.css           -- Estilos globales y variables CSS
-  utils/
-    generateStudentListPDF.ts  -- Generacion de PDF con lista de alumnos
-    generateCredentialsPDF.ts  -- Generacion de PDF de credenciales
-  App.tsx               -- Rutas de la aplicacion
-  main.tsx              -- Punto de entrada
+frontend (raiz)
+  src/
+    components/Layout.tsx    -- Layout con barra lateral por rol
+    pages/                   -- Dashboard, Alumnos, Grupos, Credenciales, Permisos,
+                                Incidencias, Reportes, Escaneo NFC, Configuracion,
+                                Login, KioscoEntradas, etc.
+    api/                     -- clientes axios por modulo (alumnos, credenciales,
+                                reposiciones, reportes programados, nfc, auth...)
+    context/AuthContext.tsx  -- Autenticacion (JWT) y rol del usuario
+    utils/                   -- generadores de PDF (credenciales, listas)
+  nfc_reader.py              -- Puente lector USB <-> backend (se ejecuta externo en Windows)
+  iniciar_nfc.bat            -- Arranca el lector (usa nfc_reader.exe si existe, si no Python)
+  iniciar_nfc_silencioso.vbs -- Auto-inicio en Windows (carpeta Inicio)
+  build_nfc_reader.bat       -- Empaqueta nfc_reader.py en nfc_reader.exe (PyInstaller)
+  docker-compose.yml         -- Postgres + contenedor app (FastAPI + SPA + lector)
+
+Backend_Proy_Cobao/
+  app/main.py                -- FastAPI, CORS, SPA, seed de roles/usuarios
+  app/models/, schemas/, crud/, routers/
+  bd_COBAO.sql               -- Esquema inicial (solo aplica en primer arranque de la BD)
+  migraciones/               -- SQL aplicados manualmente a una BD existente
 ```
 
-## Paginas y funcionalidades
+## Roles y usuarios
 
-- **Login**: Autenticacion de usuarios con selector de rol (Administrador, Supervisor, Operador, Capturista).
-- **Dashboard**: Resumen de asistencia, entradas/salidas recientes, asistencia por grupo y alertas.
-- **Alumnos**: Lista paginada con busqueda, creacion manual, importacion desde archivo .xls/.xlsx/.csv, edicion y vista detallada.
-- **Grupos**: Vista de grupos con conteo de alumnos y desglose por estado.
-- **Credenciales NFC**: Asignacion de chips NFC a alumnos mediante proceso de 3 pasos (seleccionar, escribir, verificar), reasignacion y exportacion a PDF.
-- **Permisos**: Solicitudes de salida con aprobacion, codigo de autorizacion y notificacion al tutor.
-- **Incidentes**: Registro de incidentes con nivel de severidad y estados.
-- **Reportes**: Generacion de reportes por grupo, asistencia, graficas de barras y exportacion.
-- **Escaneo NFC**: Modo escaneo por NFC y modo manual para registro de entradas/salidas.
-- **Configuracion**: Ajustes generales, horarios, usuarios del sistema, layout de credencial y subida de logo.
+| Rol | Acceso |
+|---|---|
+| Directivo | Todo el sistema |
+| Servicios Escolares | Todo excepto Reportes |
+| Prefectura | Escaneo NFC, Permisos, Incidencias, Faltas, Profesores, Reportes |
+| Entrada (Kiosco) | Solo registro de entradas y salidas (pantalla tipo kiosco) |
 
-## Como ejecutar
+Usuarios por defecto (creados al arrancar el backend):
+
+| Usuario | Contrasena | Rol |
+|---|---|---|
+| admin | admin | Directivo |
+| prefecto | admin | Prefectura |
+| servicios | admin | Servicios Escolares |
+| entrada | admin | Entrada |
+
+> **IMPORTANTE (seguridad):** cambia estas contrasenas y la `SECRET_KEY` antes de ir a produccion.
+
+## Como ejecutar (desarrollo)
 
 ```bash
-# Instalar dependencias
+# Frontend (necesita el backend corriendo en :8000)
 npm install
+npm run dev          # http://localhost:5173 (proxy de /api a :8000)
 
-# Ejecutar en modo desarrollo
-npm run dev
-
-# Compilar para produccion
-npm run build
-
-# Vista previa de produccion
-npm run preview
-
-# Linting
-npm run lint
+# Backend
+cd Backend_Proy_Cobao
+pip install -r requirements.txt
+# Configura DATABASE_URL y ejecuta uvicorn app.main:app --reload
 ```
 
-## Formato de importacion de alumnos
+## Como ejecutar (Docker - forma recomendada)
 
-Para importar alumnos desde un archivo Excel (.xls, .xlsx o .csv), el archivo debe contener las siguientes columnas:
+```bash
+docker compose up -d --build
+# Aplicacion web:  http://localhost:8000
+# API docs:        http://localhost:8000/docs
+# BD:              localhost:5432 (cobao/cobao_pass, bd cobao_db)
+```
+
+El contenedor sirve el frontend (SPA), el backend y `bd_COBAO.sql` se aplica solo
+en el **primer arranque** del volumen de Postgres.
+
+### Migraciones (BD existente)
+
+Si ya tenias la BD corriendo y agregamos columnas/tablas nuevas, debes aplicarlas
+a mano con PowerShell (no usa `<` de bash):
+
+```powershell
+Get-Content -Raw migraciones/001_alumnos_reposiciones.sql | docker exec -i gestion-de-entrada-db-1 psql -U cobao -d cobao_db
+Get-Content -Raw migraciones/002_reportes_programados.sql | docker exec -i gestion-de-entrada-db-1 psql -U cobao -d cobao_db
+```
+
+## Lector NFC
+
+El lector **no se puede leer desde el navegador**: necesita un "puente" que lea el
+USB y lo mande por HTTP al backend.
+
+- **En Linux (Docker con USB passthrough):** `start.sh` intenta iniciar
+  `nfc_reader.py` dentro del contenedor (requiere `pcscd` y el USB mapeado).
+- **En Windows:** el lector interno falla silenciosamente (esperado); se usa
+  `nfc_reader.py`/`nfc_reader.exe` ejecutado **externamente** apuntando al backend.
+
+### Instalacion del lector en una PC (Windows)
+
+1. Conectar el lector ACR122U e instalar sus drivers.
+2. Copiar `nfc_reader.exe` (ya compilado) o instalar Python + `pip install pyscard requests`.
+3. Ejecutar `iniciar_nfc.bat` (o dejarlo en auto-inicio con `iniciar_nfc_silencioso.vbs`).
+4. Ajustar la URL si el backend no esta en `http://localhost:8000`:
+   `nfc_reader.exe --url https://tu-dominio.com/api/v1/nfc/scan`
+
+### Recompilar el .exe del lector
+
+```bash
+build_nfc_reader.bat    # genera nfc_reader.exe (no requiere Python en la PC destino)
+```
+
+## Produccion (Opcion A: servidor + helper por PC)
+
+La **persona que ve tu pagina web no instala nada**. Solo la PC que tiene el lector
+fisico necesita el helper (`nfc_reader.exe`). Pasos para el dueno de cada PC con lector:
+
+1. Conectar el lector ACR122U + drivers.
+2. Copiar `nfc_reader.exe` a la PC.
+3. Ejecutar: `nfc_reader.exe --url https://tudominio.com/api/v1/nfc/scan`
+   (crear un .bat con esa linea y ponerlo en auto-inicio).
+4. Abrir la pagina web desde cualquier navegador y usar el usuario `entrada` para el
+   registro de entradas/salidas, o el rol que corresponda.
+
+El frontend ya es "same-origin": usa rutas relativas `/api/v1` (configurables con
+`VITE_API_URL`) y el WebSocket NFC se deriva del host actual, por lo que funciona
+detras de un dominio con HTTPS sin puertos hardcodeados.
+
+### Checklist de produccion
+
+- [ ] Dominio + HTTPS (obligatorio para WebSocket `wss://`).
+- [ ] Cambiar `SECRET_KEY` y contrasenas de usuarios (hoy son por defecto).
+- [ ] Configurar `VITE_API_URL` al buildeo si la API no esta en el mismo origen.
+- [ ] Revisar CORS (`allow_origins` hoy es `*`).
+- [ ] No exponer el puerto 5432 de Postgres publicamente.
+
+## Funcionalidades por pagina
+
+- **Login**: autenticacion JWT, roles por usuario.
+- **Dashboard**: resumen de asistencia, entradas/salidas recientes, asistencia por grupo y alertas.
+- **Alumnos**: lista paginada, busqueda, alta manual, importacion .xls/.xlsx/.csv, edicion y detalle.
+- **Grupos**: conteo de alumnos por grupo y desglose por estado.
+- **Credenciales NFC**: asignacion de chips en 3 pasos (seleccionar, escribir, verificar)
+  con captura NFC **automatica** (sin boton "Detectar"), reasignacion de chip, reposiciones
+  y exportacion a PDF.
+- **Permisos**: solicitudes de salida con aprobacion y codigo de autorizacion.
+- **Incidencias**: registro con nivel de severidad y estados.
+- **Reportes**: por grupo, asistencia, graficas, y **reportes programados** (backend completo).
+- **Escaneo NFC**: registro de entradas/salidas por NFC (con WebSocket en tiempo real) o manual.
+- **Kiosco Entradas**: pantalla simple para el rol `Entrada` (solo registrar entradas y salidas).
+- **Configuracion**: ajustes, horarios, usuarios, layout de credencial y logo.
+
+## Formato de importacion de alumnos
 
 | Columna | Obligatoria | Descripcion |
 |---|---|---|
@@ -96,3 +175,15 @@ Para importar alumnos desde un archivo Excel (.xls, .xlsx o .csv), el archivo de
 | Telefono Tutor | No | Numero de telefono del tutor |
 
 Se puede descargar una plantilla desde la interfaz de importacion.
+
+## Notas de arquitectura
+
+- **`/api/v1/nfc/ws`**: WebSocket que notifica en tiempo real cada tarjeta leida
+  (resultado de entrada/salida). El frontend se conecta y recibe los eventos.
+- **`/api/v1/nfc/scan`**: endpoint que recibe el UID desde `nfc_reader` (el puente).
+- **`/api/v1/nfc/capture/start|stop|poll`**: modo captura para asignar/verificar chips.
+- **Reportes programados**: tabla `reportes_programados` con frecuencia, proxima
+  generacion y ultima generacion (ver `migraciones/002_reportes_programados.sql`).
+- **Reposiciones**: tabla `reposiciones` registra cada credencial reimpresa con motivo.
+- **Seed de BD**: roles (Directivo, Prefectura, Servicios Escolares, Entrada) y
+  usuarios por defecto se crean idempotentemente en el arranque de FastAPI.

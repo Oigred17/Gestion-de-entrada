@@ -43,6 +43,10 @@ CREATE TABLE alumnos (
     curp                 CHAR(18) NOT NULL UNIQUE,
     nss                  VARCHAR(11) UNIQUE,
     tipo_sangre          VARCHAR(3) CHECK (tipo_sangre IN ('A+','A-','B+','B-','AB+','AB-','O+','O-')),
+    capacitacion         VARCHAR(100),
+    turno                VARCHAR(20),
+    cohorte              VARCHAR(10),
+    fecha_nacimiento     VARCHAR(20),
     domicilio            TEXT,
     tutor_nombre         VARCHAR(150),
     tutor_telefono       VARCHAR(15),
@@ -125,6 +129,30 @@ CREATE TABLE justificaciones (
 
 CREATE INDEX idx_justificaciones_alumno ON justificaciones(id_alumno, fecha_inicio, fecha_fin);
 CREATE INDEX idx_justificaciones_grupo ON justificaciones(id_grupo, fecha_inicio, fecha_fin);
+
+CREATE TABLE reportes_programados (
+    id_reporte_programado SERIAL PRIMARY KEY,
+    nombre               VARCHAR(150) NOT NULL,
+    frecuencia           VARCHAR(20) NOT NULL,
+    ultima_generacion    DATE,
+    proxima_generacion   DATE,
+    destinatarios        VARCHAR(300),
+    activo               BOOLEAN NOT NULL DEFAULT true,
+    fecha_registro       TIMESTAMP NOT NULL DEFAULT now()
+);
+
+CREATE TABLE reposiciones (
+    id_reposicion      SERIAL PRIMARY KEY,
+    id_alumno          INTEGER NOT NULL REFERENCES alumnos(id_alumno),
+    id_credencial      INTEGER REFERENCES credenciales(id_credencial),
+    motivo             TEXT NOT NULL,
+    fecha_solicitud    DATE NOT NULL DEFAULT current_date,
+    fecha_entrega      DATE,
+    id_usuario_registro INTEGER NOT NULL REFERENCES usuarios(id_usuario),
+    fecha_registro     TIMESTAMP NOT NULL DEFAULT now()
+);
+
+CREATE INDEX idx_reposiciones_alumno ON reposiciones(id_alumno, fecha_solicitud);
 
 CREATE TABLE reportes (
     id_reporte          SERIAL PRIMARY KEY,

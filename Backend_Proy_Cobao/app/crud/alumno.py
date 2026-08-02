@@ -52,6 +52,10 @@ async def create_alumno(db: AsyncSession, data: AlumnoCreate):
         curp=curp,
         nss=data.nss,
         tipo_sangre=data.tipo_sangre,
+        capacitacion=data.capacitacion,
+        turno=data.turno,
+        cohorte=data.cohorte,
+        fecha_nacimiento=data.fecha_nacimiento,
         domicilio=data.direccion,
         tutor_nombre=data.tutor_nombre,
         tutor_telefono=data.tutor_telefono or data.telefono,
@@ -69,7 +73,9 @@ async def update_alumno(db: AsyncSession, id_alumno: int, data: AlumnoUpdate):
     if not alumno:
         return None
     update_data = data.model_dump(exclude_unset=True)
-    update_data.pop("estatus", None)
+    estatus = update_data.pop("estatus", None)
+    if estatus is not None:
+        update_data["activo"] = estatus.lower() not in ("inactivo", "baja")
     direccion = update_data.pop("direccion", None)
     if direccion is not None:
         update_data["domicilio"] = direccion

@@ -14,8 +14,8 @@ import {
   Users,
   Filter,
 } from 'lucide-react';
-import { alumnosApi, registrosApi, retardosApi, gruposApi } from '../api';
-import type { Alumno, RegistroAcceso, Retardo, Grupo } from '../types';
+import { alumnosApi, registrosApi, retardosApi, gruposApi, reportesProgramadosApi } from '../api';
+import type { Alumno, RegistroAcceso, Retardo, Grupo, ReporteProgramado } from '../types';
 
 const COLORS = {
   primary: '#EB2466',
@@ -39,14 +39,8 @@ const reportTypes = [
   { id: 'credenciales', label: 'Credenciales' },
 ];
 
-const mockScheduledReports = [
-  { id: 1, nombre: 'Asistencia Diaria', frecuencia: 'Diaria', ultimaGeneracion: '2026-07-12', proximaGeneracion: '2026-07-13', destinatarios: 'admin@escuela.mx', activo: true },
-  { id: 2, nombre: 'Entradas fuera de horario semanales', frecuencia: 'Semanal', ultimaGeneracion: '2026-07-07', proximaGeneracion: '2026-07-14', destinatarios: 'direccion@escuela.mx', activo: true },
-  { id: 3, nombre: 'Resumen Mensual', frecuencia: 'Mensual', ultimaGeneracion: '2026-06-30', proximaGeneracion: '2026-07-31', destinatarios: 'admin@escuela.mx', activo: false },
-];
-
 const getNombreCompleto = (a: Alumno): string =>
-  `${a.apellido_paterno} ${a.apellido_materno} ${a.nombre}`;
+  `${a.nombre} ${a.apellido_paterno} ${a.apellido_materno}`;
 
 export default function ReportsPage() {
   const [alumnosData, setAlumnosData] = useState<Alumno[]>([]);
@@ -64,7 +58,7 @@ export default function ReportsPage() {
   const [reportMode, setReportMode] = useState<'individual' | 'grupo'>('individual');
   const [reportGenerated, setReportGenerated] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
-  const [scheduledReports, setScheduledReports] = useState(mockScheduledReports);
+  const [scheduledReports, setScheduledReports] = useState<ReporteProgramado[]>([]);
   const [emailToSend, setEmailToSend] = useState('');
   const [sendByEmail, setSendByEmail] = useState(false);
   const [showStudentDropdown, setShowStudentDropdown] = useState(false);
@@ -75,16 +69,18 @@ export default function ReportsPage() {
   useEffect(() => {
     const fetchData = async () => {
       try {
-        const [alumnosRes, registrosRes, retardosRes, gruposRes] = await Promise.all([
+        const [alumnosRes, registrosRes, retardosRes, gruposRes, reportesProgRes] = await Promise.all([
           alumnosApi.getAll(),
           registrosApi.getAll(),
           retardosApi.getAll(),
           gruposApi.getAll(),
+          reportesProgramadosApi.getAll(),
         ]);
         setAlumnosData(alumnosRes);
         setRegistrosData(registrosRes);
         setRetardosData(retardosRes);
         setGruposData(gruposRes);
+        setScheduledReports(reportesProgRes);
       } catch (err) {
         console.error('Error fetching report data:', err);
       } finally {
@@ -149,7 +145,7 @@ export default function ReportsPage() {
     salidas: filteredRecords.filter(r => r.tipo === 'SALIDA').length,
   } : null;
 
-  const groupStats = allGroups.filter(g => g !== 'Todos').map(group => {
+  const groupStats = allGroups.filter(g => g !== 'Todos' && (selectedGroup === 'Todos' || g === selectedGroup)).map(group => {
     const asistencias = registrosData.filter(r => {
       const alumno = r.alumno || alumnoMap[r.alumno_id];
       return alumno && getGrupoNombre(alumno.id_grupo) === group && r.tipo_acceso === 'ENTRADA';
@@ -179,13 +175,41 @@ export default function ReportsPage() {
   };
 
   const handleToggleActive = (id: number) => {
-    setScheduledReports(prev =>
-      prev.map(r => (r.id === id ? { ...r, activo: !r.activo } : r))
-    );
+    const report = scheduledReports.find(r => r.id === id);
+    if (!report) return;
+    reportesProgramadosApi.update(id, { activo: !report.activo })
+      .then(updated => {
+        setScheduledReports(prev => prev.map(r => (r.id === id ? updated : r)));
+      })
+      .catch(err => console.error('Error al actualizar reporte:', err));
   };
 
   const handleDelete = (id: number) => {
-    setScheduledReports(prev => prev.filter(r => r.id !== id));
+    reportesProgramadosApi.delete(id)
+      .then(() => {
+        setScheduledReports(prev => prev.filter(r => r.id !== id));
+        setCurrentPage(1);
+      })
+      .catch(err => console.error('Error al eliminar reporte:', err));
+  };
+
+  const handleRunNow = (id: number) => {
+    const report = scheduledReports.find(r => r.id === id);
+    if (!report) return;
+    const hoy = new Date().toISOString().split('T')[0];
+    let proxima = hoy;
+    if (report.frecuencia === 'Diaria') {
+      const d = new Date(hoy); d.setDate(d.getDate() + 1); proxima = d.toISOString().split('T')[0];
+    } else if (report.frecuencia === 'Semanal') {
+      const d = new Date(hoy); d.setDate(d.getDate() + 7); proxima = d.toISOString().split('T')[0];
+    } else if (report.frecuencia === 'Mensual') {
+      const d = new Date(hoy); d.setMonth(d.getMonth() + 1); proxima = d.toISOString().split('T')[0];
+    }
+    reportesProgramadosApi.update(id, { ultima_generacion: hoy, proxima_generacion: proxima })
+      .then(updated => {
+        setScheduledReports(prev => prev.map(r => (r.id === id ? updated : r)));
+      })
+      .catch(err => console.error('Error al ejecutar reporte:', err));
   };
 
   const tipoBadge = (tipo: string) => {
@@ -796,10 +820,10 @@ export default function ReportsPage() {
                 <tr key={report.id}>
                   <td style={{ ...tdStyle, fontWeight: 600 }}>{report.nombre}</td>
                   <td style={tdStyle}>{report.frecuencia}</td>
-                  <td style={tdStyle}>{report.ultimaGeneracion}</td>
-                  <td style={tdStyle}>{report.proximaGeneracion}</td>
+                  <td style={tdStyle}>{report.ultima_generacion ?? '---'}</td>
+                  <td style={tdStyle}>{report.proxima_generacion ?? '---'}</td>
                   <td style={{ ...tdStyle, fontFamily: 'monospace', fontSize: 13, color: COLORS.textSec }}>
-                    {report.destinatarios}
+                    {report.destinatarios ?? '---'}
                   </td>
                   <td style={tdStyle}>
                     {/* Interruptor */}
@@ -830,7 +854,7 @@ export default function ReportsPage() {
                   </td>
                   <td style={tdStyle}>
                     <div style={{ display: 'flex', gap: 4 }}>
-                      <button title="Ejecutar ahora" style={{
+                      <button title="Ejecutar ahora" onClick={() => handleRunNow(report.id)} style={{
                         display: 'flex', alignItems: 'center', justifyContent: 'center',
                         width: 32, height: 32, borderRadius: 8, border: `1px solid ${COLORS.border}`,
                         background: COLORS.white, color: COLORS.textSec, cursor: 'pointer',

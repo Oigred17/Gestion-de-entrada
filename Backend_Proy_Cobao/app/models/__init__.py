@@ -5,7 +5,9 @@ from app.models.grupo import Grupo
 from app.models.justificacion import Justificacion
 from app.models.profesor import Profesor
 from app.models.registro_acceso import RegistroAcceso
+from app.models.reposicion import Reposicion
 from app.models.reporte import Reporte
+from app.models.reporte_programado import ReporteProgramado
 from app.models.retardo import Retardo
 from app.models.rol import Rol
 from app.models.usuario import Usuario

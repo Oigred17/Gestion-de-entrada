@@ -1,8 +1,8 @@
 import { useState, useCallback, useEffect, useRef } from 'react';
 import { Search, Plus, Eye, Trash2, RefreshCw, Nfc, Check, X, AlertTriangle, Shield, Download, Loader2, User } from 'lucide-react';
-import { credencialesApi, alumnosApi, gruposApi } from '../api';
+import { credencialesApi, alumnosApi, gruposApi, reposicionesApi } from '../api';
 import { nfcApi } from '../api/nfc';
-import type { Credencial, CredencialCreate, Alumno, Grupo } from '../types';
+import type { Credencial, CredencialCreate, Alumno, Grupo, Reposicion } from '../types';
 import { generateCredentialsPDF } from '../utils/generateCredentialsPDF';
 
 type CredencialEstado = 'Activa' | 'Inactiva';
@@ -16,19 +16,6 @@ const tabFilters: { label: string; key: CredencialEstado | 'Todas' }[] = [
   { label: 'Todas', key: 'Todas' },
   { label: 'Activas', key: 'Activa' },
   { label: 'Inactivas', key: 'Inactiva' },
-];
-
-interface Reposition {
-  id: number;
-  alumno: string;
-  motivo: string;
-  fechaSolicitud: string;
-  fechaEntrega: string;
-}
-
-const repositionsData: Reposition[] = [
-  { id: 1, alumno: 'Ana Lopez Martinez', motivo: 'Tarjeta extraviada', fechaSolicitud: '2026-06-28', fechaEntrega: '2026-07-02' },
-  { id: 2, alumno: 'Carlos Hernandez Ruiz', motivo: 'Tarjeta danada por agua', fechaSolicitud: '2026-07-01', fechaEntrega: '---' },
 ];
 
 type ConfirmType = 'simple' | 'password';
@@ -53,6 +40,7 @@ export default function CredentialsPage() {
   const [localStudents, setLocalStudents] = useState<Alumno[]>([]);
   const [creds, setCreds] = useState<Credencial[]>([]);
   const [grupos, setGrupos] = useState<Grupo[]>([]);
+  const [reposiciones, setReposiciones] = useState<Reposicion[]>([]);
   const [search, setSearch] = useState('');
   const [activeTab, setActiveTab] = useState<CredencialEstado | 'Todas'>('Todas');
   const [showAssignModal, setShowAssignModal] = useState(false);
@@ -73,7 +61,7 @@ export default function CredentialsPage() {
   const [batchResults, setBatchResults] = useState<BatchResult[]>([]);
   const [batchWriting, setBatchWriting] = useState(false);
   const [batchWritten, setBatchWritten] = useState(false);
-  const [_batchVerifying, setBatchVerifying] = useState(false);
+  const [batchVerifying, setBatchVerifying] = useState(false);
   const [batchVerified, setBatchVerified] = useState(false);
   const [batchChipId, setBatchChipId] = useState('');
 
@@ -88,6 +76,7 @@ export default function CredentialsPage() {
   const [exportStudentId, setExportStudentId] = useState<string>('none');
   const [exportStudentQuery, setExportStudentQuery] = useState('');
   const [isReposicion, setIsReposicion] = useState(false);
+  const [reposicionMotivo, setReposicionMotivo] = useState('');
   const [selectedCredentialId, setSelectedCredentialId] = useState<number | null>(null);
   const [panelMode, setPanelMode] = useState<'view' | 'reassign'>('view');
   const [reassignStep, setReassignStep] = useState<'confirm' | 'write'>('confirm');
@@ -103,6 +92,8 @@ export default function CredentialsPage() {
   const [nfcStatus, setNfcStatus] = useState<'idle' | 'connecting' | 'waiting' | 'captured'>('idle');
 
   const captureTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const autoCaptureRef = useRef<string>('');
+  const lastRejectedUidRef = useRef<string>('');
 
   const uniqueGroups = Array.from(new Set(grupos.map((g) => g.nombre))).sort();
 
@@ -111,14 +102,16 @@ export default function CredentialsPage() {
   useEffect(() => {
     const fetchData = async () => {
       try {
-        const [alumnosData, credencialesData, gruposData] = await Promise.all([
+        const [alumnosData, credencialesData, gruposData, reposicionesData] = await Promise.all([
           alumnosApi.getAll(),
           credencialesApi.getAll(),
           gruposApi.getAll(),
+          reposicionesApi.getAll(),
         ]);
         setLocalStudents(alumnosData);
         setCreds(credencialesData);
         setGrupos(gruposData);
+        setReposiciones(reposicionesData);
       } catch (error) {
         console.error('Error fetching data:', error);
       }
@@ -311,6 +304,8 @@ export default function CredentialsPage() {
 
   const handleCloseAssignModal = () => {
     cleanupWs();
+    autoCaptureRef.current = '';
+    lastRejectedUidRef.current = '';
     setShowAssignModal(false);
     setAssignStep(1);
     setAssignMode('alumno');
@@ -340,7 +335,11 @@ export default function CredentialsPage() {
         const existing = await credencialesApi.getByUid(uid);
         if (existing) {
           setWriting(false);
-          showToast(`Este chip ya esta asignado a ${existing.alumno?.nombre || `alumno #${existing.alumno_id}`}. Usa otro chip.`, 'error');
+          autoCaptureRef.current = '';
+          if (lastRejectedUidRef.current !== uid) {
+            lastRejectedUidRef.current = uid;
+            showToast(`Este chip ya esta asignado a ${existing.alumno?.nombre || `alumno #${existing.alumno_id}`}. Usa otro chip.`, 'error');
+          }
           return;
         }
       } catch {
@@ -351,6 +350,7 @@ export default function CredentialsPage() {
       onDone(uid);
     } catch (err: unknown) {
       setWriting(false);
+      autoCaptureRef.current = '';
       const msg = err instanceof Error ? err.message : 'Error al detectar tarjeta NFC';
       showToast(msg, 'error');
     }
@@ -366,10 +366,12 @@ export default function CredentialsPage() {
         onDone();
       } else {
         setVerifying(false);
+        autoCaptureRef.current = '';
         showToast(`UID no coincide. Esperado: ${_chipIdToVerify}, Detectado: ${uid}`, 'error');
       }
     } catch (err: unknown) {
       setVerifying(false);
+      autoCaptureRef.current = '';
       const msg = err instanceof Error ? err.message : 'Error al verificar tarjeta NFC';
       showToast(msg, 'error');
     }
@@ -383,6 +385,7 @@ export default function CredentialsPage() {
         const existing = await credencialesApi.getByUid(uid);
         if (existing) {
           setBatchWriting(false);
+          autoCaptureRef.current = '';
           showToast(`Este chip ya esta asignado a ${existing.alumno?.nombre || `alumno #${existing.alumno_id}`}. Usa otro chip.`, 'error');
           return;
         }
@@ -394,6 +397,7 @@ export default function CredentialsPage() {
       onDone(uid);
     } catch (err: unknown) {
       setBatchWriting(false);
+      autoCaptureRef.current = '';
       const msg = err instanceof Error ? err.message : 'Error al detectar tarjeta NFC';
       showToast(msg, 'error');
     }
@@ -409,10 +413,12 @@ export default function CredentialsPage() {
         onDone();
       } else {
         setBatchVerifying(false);
+        autoCaptureRef.current = '';
         showToast(`UID no coincide. Esperado: ${_chipIdToVerify}, Detectado: ${uid}`, 'error');
       }
     } catch (err: unknown) {
       setBatchVerifying(false);
+      autoCaptureRef.current = '';
       const msg = err instanceof Error ? err.message : 'Error al verificar tarjeta NFC';
       showToast(msg, 'error');
     }
@@ -427,6 +433,14 @@ export default function CredentialsPage() {
           groupName: `alumno_${student.matricula}`,
           reposicion: isReposicion,
         });
+        if (isReposicion) {
+          reposicionesApi.create({
+            id_alumno: student.id,
+            motivo: reposicionMotivo || 'Credencial extraviada o danada',
+          }).then(() => {
+            reposicionesApi.getAll().then(setReposiciones);
+          }).catch(() => {});
+        }
         showToast(`PDF generado: ${isReposicion ? 'reposicion' : 'credenciales'}_alumno_${student.matricula}.pdf`);
       }
     } else {
@@ -439,6 +453,16 @@ export default function CredentialsPage() {
         groupName: label,
         reposicion: isReposicion,
       });
+      if (isReposicion) {
+        Promise.all(
+          toExport.map(s => reposicionesApi.create({
+            id_alumno: s.id,
+            motivo: reposicionMotivo || 'Credencial extraviada o danada',
+          }))
+        ).then(() => {
+          reposicionesApi.getAll().then(setReposiciones);
+        }).catch(() => {});
+      }
       showToast(`PDF generado: ${isReposicion ? 'reposicion' : 'credenciales'}_${label}.pdf`);
     }
     setShowExportModal(false);
@@ -471,6 +495,30 @@ export default function CredentialsPage() {
     setBatchResults([]);
     setAssignStep(2);
   };
+
+  useEffect(() => {
+    if (!showAssignModal) return;
+
+    if (assignStep === 2 && assignMode === 'alumno') {
+      if (selectedStudentId && !writing && !written && autoCaptureRef.current !== 'write-alumno') {
+        autoCaptureRef.current = 'write-alumno';
+        handleWriteChip(() => {});
+      }
+    } else if (assignStep === 2 && assignMode === 'grupo') {
+      if (batchWritten && !batchVerifying && !batchVerified && autoCaptureRef.current !== `verify-grupo-${batchIndex}`) {
+        autoCaptureRef.current = `verify-grupo-${batchIndex}`;
+        handleBatchVerifyChip(batchChipId, () => {});
+      } else if (!batchWritten && !batchWriting && !batchComplete && autoCaptureRef.current !== `write-grupo-${batchIndex}`) {
+        autoCaptureRef.current = `write-grupo-${batchIndex}`;
+        handleBatchWriteChip(() => {});
+      }
+    } else if (assignStep === 3 && assignMode === 'alumno') {
+      if (chipId && !verifying && !verified && autoCaptureRef.current !== 'verify-alumno') {
+        autoCaptureRef.current = 'verify-alumno';
+        handleVerifyChip(chipId, () => {});
+      }
+    }
+  }, [showAssignModal, assignStep, assignMode, selectedStudentId, batchComplete, batchIndex, writing, written, batchWriting, batchWritten, batchVerifying, batchVerified, batchChipId, chipId, verifying, verified, handleWriteChip, handleBatchWriteChip, handleBatchVerifyChip, handleVerifyChip]);
 
   const StepIndicator = ({ number, label, currentStep, completed }: { number: number; label: string; currentStep: number; completed: boolean }) => (
     <div style={{ display: 'flex', alignItems: 'center', gap: 8, opacity: currentStep >= number ? 1 : 0.5 }}>
@@ -539,7 +587,7 @@ export default function CredentialsPage() {
           <button className="btn btn--secondary" onClick={handleSimulateScan}>
             <Nfc size={18} /> Escanear credencial
           </button>
-          <button className="btn btn--secondary" onClick={() => { setExportMode('alumno'); setExportStudentId('none'); setExportGroupId('all'); setExportStudentQuery(''); setShowExportModal(true); }}>
+          <button className="btn btn--secondary" onClick={() => { setExportMode('alumno'); setExportStudentId('none'); setExportGroupId('all'); setExportStudentQuery(''); setIsReposicion(false); setReposicionMotivo(''); setShowExportModal(true); }}>
             <Download size={18} /> Exportar PDF
           </button>
         </div>
@@ -598,11 +646,14 @@ export default function CredentialsPage() {
           <table className="table">
             <thead><tr><th>#</th><th>Alumno</th><th>Motivo</th><th>Fecha Solicitud</th><th>Fecha Entrega</th></tr></thead>
             <tbody>
-              {repositionsData.map((repo, i) => (
+              {reposiciones.map((repo, i) => (
                 <tr key={repo.id}>
-                  <td>{i + 1}</td><td style={{ fontWeight: 500 }}>{repo.alumno}</td><td>{repo.motivo}</td><td>{repo.fechaSolicitud}</td><td>{repo.fechaEntrega}</td>
+                  <td>{i + 1}</td><td style={{ fontWeight: 500 }}>{getStudentName(repo.id_alumno)}</td><td>{repo.motivo}</td><td>{repo.fecha_solicitud}</td><td>{repo.fecha_entrega ?? '---'}</td>
                 </tr>
               ))}
+              {reposiciones.length === 0 && (
+                <tr><td colSpan={5} style={{ textAlign: 'center', padding: 24, color: '#5F5657' }}>No hay reposiciones registradas.</td></tr>
+              )}
             </tbody>
           </table>
         </div>
@@ -722,11 +773,6 @@ export default function CredentialsPage() {
                       <span style={{ fontFamily: 'var(--font-mono)', fontWeight: 700, fontSize: 16, color: '#0F8122' }}>{chipId}</span>
                     </div>
                   )}
-                  {!writing && !written && (
-                    <button className="btn btn--primary" onClick={() => handleWriteChip(() => {})} disabled={nfcStatus === 'connecting' || nfcStatus === 'waiting'}>
-                      <Nfc size={18} /> Detectar tarjeta NFC
-                    </button>
-                  )}
                 </div>
               )}
 
@@ -773,11 +819,6 @@ export default function CredentialsPage() {
                           <span style={{ fontFamily: 'var(--font-mono)', fontWeight: 700, fontSize: 16, color: '#0F8122' }}>{batchChipId}</span>
                         </div>
                       )}
-                      {!batchWriting && !batchWritten && (
-                        <button className="btn btn--primary" onClick={() => handleBatchWriteChip(() => {})}>
-                          <Nfc size={18} /> Escribir chip
-                        </button>
-                      )}
                     </div>
                   )}
                 </div>
@@ -808,11 +849,6 @@ export default function CredentialsPage() {
                         Chip: <span style={{ fontFamily: 'var(--font-mono)', fontWeight: 700 }}>{chipId}</span>
                       </div>
                     </div>
-                  )}
-                  {!verifying && !verified && (
-                    <button className="btn btn--primary" onClick={() => handleVerifyChip(chipId, () => {})} disabled={nfcStatus === 'connecting' || nfcStatus === 'waiting'}>
-                      <Nfc size={18} /> Detectar tarjeta para verificar
-                    </button>
                   )}
                 </div>
               )}
@@ -858,13 +894,6 @@ export default function CredentialsPage() {
               {assignStep === 2 && assignMode === 'alumno' && written && (
                 <button className="btn btn--primary" onClick={() => setAssignStep(3)}>
                   Siguiente: Verificar
-                </button>
-              )}
-              {assignStep === 2 && assignMode === 'grupo' && !batchComplete && batchWritten && (
-                <button className="btn btn--primary" onClick={() => {
-                  handleBatchVerifyChip(batchChipId, () => {});
-                }}>
-                  Verificar chip
                 </button>
               )}
               {assignStep === 2 && assignMode === 'grupo' && !batchComplete && batchVerified && (
@@ -1246,6 +1275,19 @@ export default function CredentialsPage() {
                   }} />
                 </button>
               </div>
+
+              {isReposicion && (
+                <div className="input-group" style={{ marginBottom: 16 }}>
+                  <label className="field-label" style={{ marginBottom: 8, display: 'block' }}>Motivo de la reposicion</label>
+                  <input
+                    type="text"
+                    className="input"
+                    placeholder="Ej. Tarjeta extraviada, danada por agua..."
+                    value={reposicionMotivo}
+                    onChange={(e) => setReposicionMotivo(e.target.value)}
+                  />
+                </div>
+              )}
             </div>
             <div className="modal-footer">
               <button className="btn btn--secondary" onClick={() => setShowExportModal(false)}>Cancelar</button>

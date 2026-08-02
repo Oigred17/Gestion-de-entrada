@@ -77,67 +77,59 @@ export default function RegulationsPage({ role }: { role: UserRole }) {
   };
 
   return (
-    <div className="page">
-      <div className="page-header">
-        <h1 className="page-title">Faltas al Reglamento</h1>
-        <button className="btn btn--primary" onClick={() => setModalOpen(true)}>
-          <Plus size={18} /> Nueva falta
-        </button>
-      </div>
-
-      <div className="card" style={{ padding: 16, marginBottom: 16 }}>
-        <div className="search-bar">
-          <Search size={18} />
-          <input
-            type="text"
-            className="input input--search"
-            placeholder="Buscar por motivo, sancion o alumno..."
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-          />
+    <div>
+      <div className="toolbar">
+        <div className="toolbar-center">
+          <div className="input-wrapper">
+            <Search size={18} className="input-icon" />
+            <input type="text" className="input input--search" placeholder="Buscar por motivo, sancion o alumno..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} />
+          </div>
+        </div>
+        <div className="toolbar-right">
+          <button className="btn btn--primary" onClick={() => setModalOpen(true)}>
+            <Plus size={18} /> Nueva falta
+          </button>
         </div>
       </div>
 
-      <div className="card">
-        <div className="table-container">
-          <table className="table">
-            <thead>
-              <tr>
-                <th>#</th><th>Alumno</th><th>Matricula</th><th>Motivo</th><th>Sancion</th><th>Fecha</th><th>Acciones</th>
+      <div className="table-container">
+        <table className="table">
+          <thead>
+            <tr>
+              <th>#</th><th>Alumno</th><th>Matricula</th><th>Motivo</th><th>Sancion</th><th>Fecha</th><th>Acciones</th>
+            </tr>
+          </thead>
+          <tbody>
+            {filtered.map((r, i) => (
+              <tr key={r.id}>
+                <td>{i + 1}</td>
+                <td style={{ fontWeight: 500 }}>
+                  {r.alumno ? `${r.alumno.nombre} ${r.alumno.apellido_paterno} ${r.alumno.apellido_materno}` : `Alumno #${r.id_alumno}`}
+                </td>
+                <td style={{ fontFamily: 'var(--font-mono)' }}>{r.alumno?.matricula ?? '---'}</td>
+                <td>{r.motivo}</td>
+                <td>{r.sancion}</td>
+                <td>{r.fecha}</td>
+                <td>
+                  <button className="table-action" title="Ver detalle" onClick={() => setDetailModal(r)}>
+                    <Eye size={18} />
+                  </button>
+                </td>
               </tr>
-            </thead>
-            <tbody>
-              {filtered.map((r, i) => (
-                <tr key={r.id}>
-                  <td>{i + 1}</td>
-                  <td style={{ fontWeight: 500 }}>
-                    {r.alumno ? `${r.alumno.nombre} ${r.alumno.apellido_paterno} ${r.alumno.apellido_materno}` : `Alumno #${r.id_alumno}`}
-                  </td>
-                  <td style={{ fontFamily: 'var(--font-mono)' }}>{r.alumno?.matricula ?? '---'}</td>
-                  <td>{r.motivo}</td>
-                  <td>{r.sancion}</td>
-                  <td>{r.fecha}</td>
-                  <td>
-                    <button className="btn btn--icon" title="Ver detalle" onClick={() => setDetailModal(r)}>
-                      <Eye size={16} />
-                    </button>
-                  </td>
-                </tr>
-              ))}
-              {filtered.length === 0 && (
-                <tr><td colSpan={7} style={{ textAlign: 'center', padding: 24, color: '#85787A' }}>No hay reportes registrados</td></tr>
-              )}
-            </tbody>
-          </table>
-        </div>
+            ))}
+            {filtered.length === 0 && (
+              <tr><td colSpan={7} style={{ textAlign: 'center', padding: 24, color: '#85787A' }}>No hay reportes registrados</td></tr>
+            )}
+          </tbody>
+        </table>
       </div>
 
       {modalOpen && (
-        <div className="modal-overlay" onClick={() => { setModalOpen(false); resetForm(); }}>
+        <div className="modal-backdrop" onClick={() => { setModalOpen(false); resetForm(); }}>
           <div className="modal" style={{ maxWidth: 520 }} onClick={(e) => e.stopPropagation()}>
             <div className="modal-header">
-              <h2>Registrar falta al reglamento</h2>
-              <button className="btn btn--icon" onClick={() => { setModalOpen(false); resetForm(); }}><X size={20} /></button>
+              <h3>Registrar falta al reglamento</h3>
+              <button className="modal-close" onClick={() => { setModalOpen(false); resetForm(); }}><X size={20} /></button>
             </div>
             <div className="modal-body" style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
               <div>
@@ -184,11 +176,11 @@ export default function RegulationsPage({ role }: { role: UserRole }) {
       )}
 
       {detailModal && (
-        <div className="modal-overlay" onClick={() => setDetailModal(null)}>
+        <div className="modal-backdrop" onClick={() => setDetailModal(null)}>
           <div className="modal" style={{ maxWidth: 480 }} onClick={(e) => e.stopPropagation()}>
             <div className="modal-header">
-              <h2>Detalle de falta</h2>
-              <button className="btn btn--icon" onClick={() => setDetailModal(null)}><X size={20} /></button>
+              <h3>Detalle de falta</h3>
+              <button className="modal-close" onClick={() => setDetailModal(null)}><X size={20} /></button>
             </div>
             <div className="modal-body" style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
               <div><span style={{ color: '#5F5657', fontSize: 12 }}>Alumno</span>

@@ -26,6 +26,8 @@ from app.routers import (
     profesores,
     registros_acceso,
     reportes,
+    reportes_programados,
+    reposiciones,
     retardos,
     roles,
     usuarios,
@@ -55,13 +57,19 @@ USUARIOS_SEED = [
         "password": "admin",
         "rol": "Servicios Escolares",
     },
+    {
+        "nombre_completo": "Entrada COBAO",
+        "username": "entrada",
+        "password": "admin",
+        "rol": "Entrada",
+    },
 ]
 
 
 async def seed_database():
     async with async_session() as db:
         roles_map = {}
-        for rol_nombre in ["Directivo", "Prefectura", "Servicios Escolares"]:
+        for rol_nombre in ["Directivo", "Prefectura", "Servicios Escolares", "Entrada"]:
             result = await db.execute(select(Rol).where(Rol.nombre == rol_nombre))
             rol = result.scalar_one_or_none()
             if not rol:
@@ -69,12 +77,11 @@ async def seed_database():
                 db.add(rol)
                 await db.flush()
             roles_map[rol_nombre] = rol.id_rol
-        result = await db.execute(select(Usuario).limit(1))
-        if result.scalar_one_or_none() is not None:
-            await db.commit()
-            return
-        logger.info("Creando datos iniciales...")
+        logger.info("Creando/verificando datos iniciales...")
         for u in USUARIOS_SEED:
+            result = await db.execute(select(Usuario).where(Usuario.username == u["username"]))
+            if result.scalar_one_or_none() is not None:
+                continue
             db.add(Usuario(
                 nombre_completo=u["nombre_completo"],
                 username=u["username"],
@@ -117,6 +124,8 @@ app.include_router(grupos.router, prefix=API_PREFIX)
 app.include_router(credenciales.router, prefix=API_PREFIX)
 app.include_router(justificaciones.router, prefix=API_PREFIX)
 app.include_router(reportes.router, prefix=API_PREFIX)
+app.include_router(reportes_programados.router, prefix=API_PREFIX)
+app.include_router(reposiciones.router, prefix=API_PREFIX)
 app.include_router(registros_acceso.router, prefix=API_PREFIX)
 app.include_router(retardos.router, prefix=API_PREFIX)
 app.include_router(nfc.router, prefix=API_PREFIX)

@@ -23,6 +23,10 @@ class AlumnoCreate(BaseModel):
     curp: str | None = None
     nss: str | None = None
     tipo_sangre: str | None = None
+    capacitacion: str | None = None
+    turno: str | None = None
+    cohorte: str | None = None
+    fecha_nacimiento: str | None = None
     tutor_nombre: str | None = None
     tutor_telefono: str | None = None
     id_grupo: int | None = None
@@ -49,6 +53,10 @@ class AlumnoUpdate(BaseModel):
     curp: str | None = None
     nss: str | None = None
     tipo_sangre: str | None = None
+    capacitacion: str | None = None
+    turno: str | None = None
+    cohorte: str | None = None
+    fecha_nacimiento: str | None = None
     tutor_nombre: str | None = None
     tutor_telefono: str | None = None
     id_grupo: int | None = None
@@ -69,6 +77,10 @@ class AlumnoResponse(BaseModel):
     curp: str | None = None
     nss: str | None = None
     tipo_sangre: str | None = None
+    capacitacion: str | None = None
+    turno: str | None = None
+    cohorte: str | None = None
+    fecha_nacimiento: str | None = None
     tutor_nombre: str | None = None
     tutor_telefono: str | None = None
     id_grupo: int | None = None
@@ -92,6 +104,10 @@ class AlumnoResponse(BaseModel):
                 "curp": getattr(data, "curp", None),
                 "nss": getattr(data, "nss", None),
                 "tipo_sangre": getattr(data, "tipo_sangre", None),
+                "capacitacion": getattr(data, "capacitacion", None),
+                "turno": getattr(data, "turno", None),
+                "cohorte": getattr(data, "cohorte", None),
+                "fecha_nacimiento": getattr(data, "fecha_nacimiento", None),
                 "tutor_nombre": getattr(data, "tutor_nombre", None),
                 "tutor_telefono": getattr(data, "tutor_telefono", None),
                 "id_grupo": getattr(data, "id_grupo", None),
