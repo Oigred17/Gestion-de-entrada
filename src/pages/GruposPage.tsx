@@ -5,7 +5,8 @@ import {
 import { alumnosApi } from '../api/alumnos';
 import { registrosApi } from '../api/registros';
 import { credencialesApi } from '../api/credenciales';
-import type { Alumno, Credencial, RegistroAcceso } from '../types';
+import { gruposApi } from '../api';
+import type { Alumno, Credencial, RegistroAcceso, Grupo } from '../types';
 
 export default function GruposPage() {
   const [search, setSearch] = useState('');
@@ -14,19 +15,26 @@ export default function GruposPage() {
   const [alumnosData, setAlumnosData] = useState<Alumno[]>([]);
   const [credencialesData, setCredencialesData] = useState<Credencial[]>([]);
   const [registrosData, setRegistrosData] = useState<RegistroAcceso[]>([]);
+  const [gruposMap, setGruposMap] = useState<Record<number, string>>({});
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     async function fetchData() {
       try {
-        const [al, cr, rg] = await Promise.all([
+        const [al, cr, rg, gr] = await Promise.all([
           alumnosApi.getAll(),
           credencialesApi.getAll(),
           registrosApi.getAll(),
+          gruposApi.getAll(),
         ]);
         setAlumnosData(al);
         setCredencialesData(cr);
         setRegistrosData(rg);
+        const map: Record<number, string> = {};
+        for (const g of gr) {
+          if (g.id) map[g.id] = g.nombre;
+        }
+        setGruposMap(map);
       } catch (err) {
         console.error('Error fetching data:', err);
       } finally {
@@ -36,12 +44,15 @@ export default function GruposPage() {
     fetchData();
   }, []);
 
-  const grupos = Array.from(new Set(alumnosData.map(s => s.grupo_nombre || (s.grupo_id ? String(s.grupo_id) : 'Sin grupo'))))
+  const getNombreGrupo = (id_grupo?: number | null): string => {
+    return id_grupo ? (gruposMap[id_grupo] || String(id_grupo)) : 'Sin grupo';
+  };
+
+  const grupos = Array.from(new Set(alumnosData.map(s => getNombreGrupo(s.id_grupo))))
     .sort()
     .map(grupo => {
       const groupStudents = alumnosData.filter(s => {
-        const g = s.grupo_nombre || (s.grupo_id ? String(s.grupo_id) : 'Sin grupo');
-        return g === grupo;
+        return getNombreGrupo(s.id_grupo) === grupo;
       });
       const activos = groupStudents.filter(s => s.estatus === 'Activo').length;
       const groupCreds = credencialesData.filter(c =>

@@ -7,7 +7,7 @@ CREATE TABLE usuarios (
     id_usuario          SERIAL PRIMARY KEY,
     nombre_completo     VARCHAR(150) NOT NULL,
     username            VARCHAR(50) NOT NULL UNIQUE,
-    password_user       VARCHAR(255) NOT NULL, 
+    password_user       VARCHAR(255) NOT NULL,
     id_rol              INTEGER NOT NULL REFERENCES roles(id_rol),
     activo              BOOLEAN NOT NULL DEFAULT true,
     fecha_creacion      TIMESTAMP NOT NULL DEFAULT now()
@@ -38,38 +38,29 @@ CREATE TABLE grupos (
 
 CREATE TABLE alumnos (
     id_alumno           SERIAL PRIMARY KEY,
-    matricula           VARCHAR(20) NOT NULL UNIQUE,
-    nombre_completo     VARCHAR(150) NOT NULL,
-    curp                CHAR(18) NOT NULL UNIQUE,
-    nss                 VARCHAR(11) UNIQUE, 
-    tipo_sangre         VARCHAR(3) CHECK (tipo_sangre IN ('A+','A-','B+','B-','AB+','AB-','O+','O-')),
-    domicilio           TEXT,
-    tutor_nombre        VARCHAR(150),
-    tutor_telefono      VARCHAR(15),
-    activo              BOOLEAN NOT NULL DEFAULT true,
-    fecha_registro      TIMESTAMP NOT NULL DEFAULT now(),
-    grupo_id            INTEGER REFERENCES grupos(id),
-    fecha_nacimiento    DATE,
-    genero              VARCHAR(10)
+    matricula            VARCHAR(20) NOT NULL UNIQUE,
+    nombre_completo      VARCHAR(150) NOT NULL,
+    curp                 CHAR(18) NOT NULL UNIQUE,
+    nss                  VARCHAR(11) UNIQUE,
+    tipo_sangre          VARCHAR(3) CHECK (tipo_sangre IN ('A+','A-','B+','B-','AB+','AB-','O+','O-')),
+    domicilio            TEXT,
+    tutor_nombre         VARCHAR(150),
+    tutor_telefono       VARCHAR(15),
+    id_grupo             INTEGER REFERENCES grupos(id),
+    activo               BOOLEAN NOT NULL DEFAULT true,
+    fecha_registro       TIMESTAMP NOT NULL DEFAULT now()
 );
+
+CREATE INDEX idx_alumnos_grupo ON alumnos(id_grupo);
 
 CREATE TABLE profesores (
     id_profesor         SERIAL PRIMARY KEY,
-    numero_empleado     VARCHAR(20) UNIQUE NOT NULL,
+    num_nomina          INTEGER UNIQUE NOT NULL,
     nombre_completo     VARCHAR(150) NOT NULL,
     telefono            VARCHAR(20),
     domicilio           TEXT,
     activo              BOOLEAN NOT NULL DEFAULT true,
     fecha_registro      TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-);
-
-CREATE TABLE inscripciones (
-    id                  SERIAL PRIMARY KEY,
-    id_alumno           INT NOT NULL REFERENCES alumnos(id_alumno),
-    id_grupo            INT NOT NULL REFERENCES grupos(id),
-    ciclo_escolar_id    INT NOT NULL REFERENCES ciclos_escolares(id),
-    fecha_inscripcion   DATE NOT NULL DEFAULT current_date,
-    UNIQUE (id_alumno, ciclo_escolar_id)
 );
 
 CREATE TABLE credenciales (
@@ -80,10 +71,8 @@ CREATE TABLE credenciales (
     activa              BOOLEAN DEFAULT TRUE,
     id_alumno           INTEGER,
     id_profesor         INTEGER,
-    CONSTRAINT fk_credencial_alumno
-        FOREIGN KEY(id_alumno) REFERENCES alumnos(id_alumno),
-    CONSTRAINT fk_credencial_profesor
-        FOREIGN KEY(id_profesor) REFERENCES profesores(id_profesor),
+    CONSTRAINT fk_credencial_alumno FOREIGN KEY(id_alumno) REFERENCES alumnos(id_alumno),
+    CONSTRAINT fk_credencial_profesor FOREIGN KEY(id_profesor) REFERENCES profesores(id_profesor),
     CHECK (
         (id_alumno IS NOT NULL AND id_profesor IS NULL)
         OR
@@ -116,3 +105,59 @@ CREATE TABLE retardos (
     minutos_retardo      INTEGER NOT NULL CHECK (minutos_retardo >= 0),
     observaciones        TEXT
 );
+
+CREATE TABLE justificaciones (
+    id_justificacion    SERIAL PRIMARY KEY,
+    id_alumno           INTEGER REFERENCES alumnos(id_alumno),
+    id_grupo            INTEGER REFERENCES grupos(id),
+    fecha_inicio         DATE NOT NULL,
+    fecha_fin            DATE NOT NULL,
+    motivo               TEXT NOT NULL,
+    id_usuario_registro  INTEGER NOT NULL REFERENCES usuarios(id_usuario),
+    fecha_registro       TIMESTAMP NOT NULL DEFAULT now(),
+    CHECK (fecha_fin >= fecha_inicio),
+    CHECK (
+        (id_alumno IS NOT NULL AND id_grupo IS NULL)
+        OR
+        (id_alumno IS NULL AND id_grupo IS NOT NULL)
+    )
+);
+
+CREATE INDEX idx_justificaciones_alumno ON justificaciones(id_alumno, fecha_inicio, fecha_fin);
+CREATE INDEX idx_justificaciones_grupo ON justificaciones(id_grupo, fecha_inicio, fecha_fin);
+
+CREATE TABLE reportes (
+    id_reporte          SERIAL PRIMARY KEY,
+    id_alumno           INTEGER NOT NULL REFERENCES alumnos(id_alumno),
+    id_prefecto         INTEGER NOT NULL REFERENCES usuarios(id_usuario),
+    motivo               TEXT NOT NULL,
+    sancion               TEXT NOT NULL,
+    fecha                 DATE NOT NULL DEFAULT current_date,
+    fecha_registro        TIMESTAMP NOT NULL DEFAULT now()
+);
+
+CREATE INDEX idx_reportes_alumno ON reportes(id_alumno, fecha);
+
+CREATE OR REPLACE FUNCTION validar_rol_prefecto()
+RETURNS TRIGGER AS $$
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1
+        FROM usuarios u
+        JOIN roles r ON r.id_rol = u.id_rol
+        WHERE u.id_usuario = NEW.id_prefecto
+          AND r.nombre = 'Prefectura'
+    ) THEN
+        RAISE EXCEPTION 'El usuario % no tiene rol de prefecto y no puede levantar reportes', NEW.id_prefecto;
+    END IF;
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER trg_validar_rol_prefecto
+    BEFORE INSERT OR UPDATE ON reportes
+    FOR EACH ROW EXECUTE FUNCTION validar_rol_prefecto();
+
+-- Seed data
+INSERT INTO ciclos_escolares (nombre, fecha_inicio, fecha_fin, activo)
+VALUES ('2025-2026', '2025-08-15', '2026-07-15', true);

@@ -195,7 +195,7 @@ export default function CredentialsPage() {
     return s ? getFullName(s) : 'Desconocido';
   };
   const getStudentControl = (id: number) => getStudent(id)?.matricula ?? '---';
-  const getStudentGroup = (id: number) => getGrupoNombre(getStudent(id)?.grupo_id);
+  const getStudentGroup = (id: number) => getGrupoNombre(getStudent(id)?.id_grupo);
 
   const filtered = creds.filter((c) => {
     const isActive = c.estatus === 'Activa' || c.estatus === 'ACTIVA';
@@ -432,7 +432,7 @@ export default function CredentialsPage() {
     } else {
       const toExport = exportGroupId === 'all'
         ? localStudents.filter(s => s.estatus === 'Activo')
-        : localStudents.filter(s => getGrupoNombre(s.grupo_id) === exportGroupId && s.estatus === 'Activo');
+        : localStudents.filter(s => getGrupoNombre(s.id_grupo) === exportGroupId && s.estatus === 'Activo');
       const label = exportGroupId === 'all' ? 'general' : `grupo_${exportGroupId}`;
       generateCredentialsPDF({
         students: toExport as any,
@@ -448,23 +448,23 @@ export default function CredentialsPage() {
     ? localStudents.filter(s => s.estatus === 'Activo' && (
         getFullName(s).toLowerCase().includes(exportStudentQuery.toLowerCase()) ||
         s.matricula.toLowerCase().includes(exportStudentQuery.toLowerCase()) ||
-        getGrupoNombre(s.grupo_id).toLowerCase().includes(exportStudentQuery.toLowerCase())
+        getGrupoNombre(s.id_grupo).toLowerCase().includes(exportStudentQuery.toLowerCase())
       ))
     : [];
 
   const filteredStudents = localStudents.filter((s) => {
     if (!studentQuery) return false;
     const q = studentQuery.toLowerCase();
-    return getFullName(s).toLowerCase().includes(q) || s.matricula.toLowerCase().includes(q) || getGrupoNombre(s.grupo_id).toLowerCase().includes(q);
+    return getFullName(s).toLowerCase().includes(q) || s.matricula.toLowerCase().includes(q) || getGrupoNombre(s.id_grupo).toLowerCase().includes(q);
   });
 
-  const canStartGroup = assignGroupId !== '' && localStudents.filter(s => getGrupoNombre(s.grupo_id) === assignGroupId && s.estatus === 'Activo').length > 0;
+  const canStartGroup = assignGroupId !== '' && localStudents.filter(s => getGrupoNombre(s.id_grupo) === assignGroupId && s.estatus === 'Activo').length > 0;
   const currentBatchStudent = batchStudents[batchIndex];
   const batchComplete = batchIndex >= batchStudents.length;
 
   const startBatchProcess = () => {
     const groupStudents = localStudents
-      .filter(s => getGrupoNombre(s.grupo_id) === assignGroupId && s.estatus === 'Activo')
+      .filter(s => getGrupoNombre(s.id_grupo) === assignGroupId && s.estatus === 'Activo')
       .map(s => s.id);
     setBatchStudents(groupStudents);
     setBatchIndex(0);
@@ -656,7 +656,7 @@ export default function CredentialsPage() {
                           {filteredStudents.map((s) => (
                             <div key={s.id} style={{ padding: '10px 16px', cursor: 'pointer', background: selectedStudentId === s.id ? '#FEEBEE' : '#fff', borderBottom: '1px solid #F0EFEF' }} onClick={() => { setSelectedStudentId(s.id); setStudentQuery(getFullName(s)); }}>
                               <div style={{ fontWeight: 600, fontSize: 14 }}>{getFullName(s)}</div>
-                              <div style={{ fontSize: 13, color: '#5F5657' }}>Grupo: {getGrupoNombre(s.grupo_id)} &mdash; Matricula: {s.matricula}</div>
+                              <div style={{ fontSize: 13, color: '#5F5657' }}>Grupo: {getGrupoNombre(s.id_grupo)} &mdash; Matricula: {s.matricula}</div>
                             </div>
                           ))}
                         </div>
@@ -678,7 +678,7 @@ export default function CredentialsPage() {
                         <select className="select" value={assignGroupId} onChange={(e) => setAssignGroupId(e.target.value)}>
                           <option value="">Elegir un grupo</option>
                           {uniqueGroups.map((g) => {
-                            const count = localStudents.filter((s) => getGrupoNombre(s.grupo_id) === g && s.estatus === 'Activo').length;
+                            const count = localStudents.filter((s) => getGrupoNombre(s.id_grupo) === g && s.estatus === 'Activo').length;
                             return <option key={g} value={g}>Grupo {g} ({count} alumnos)</option>;
                           })}
                         </select>
@@ -687,7 +687,7 @@ export default function CredentialsPage() {
                         <div style={{ padding: 16, background: '#F0EFEF', borderRadius: 8 }}>
                           <div style={{ fontSize: 12, color: '#5F5657', marginBottom: 4 }}>Alumnos del grupo</div>
                           <div style={{ fontWeight: 700, fontSize: 16 }}>
-                            {localStudents.filter(s => getGrupoNombre(s.grupo_id) === assignGroupId && s.estatus === 'Activo').length} alumnos activos
+                            {localStudents.filter(s => getGrupoNombre(s.id_grupo) === assignGroupId && s.estatus === 'Activo').length} alumnos activos
                           </div>
                           <div style={{ fontSize: 13, color: '#5F5657', marginTop: 4 }}>
                             Se escribiran y verificaran los chips NFC uno por uno
@@ -1042,11 +1042,11 @@ export default function CredentialsPage() {
                     </div>
                     <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 10 }}>
                       <span style={{ fontSize: 12, color: '#85787A', fontWeight: 600 }}>Grupo</span>
-                      <span style={{ fontSize: 13, color: '#1C1819' }}>{scannedStudent ? getGrupoNombre(scannedStudent.grupo_id) : '---'}</span>
+                      <span style={{ fontSize: 13, color: '#1C1819' }}>{scannedStudent ? getGrupoNombre(scannedStudent.id_grupo) : '---'}</span>
                     </div>
                     <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 10 }}>
                       <span style={{ fontSize: 12, color: '#85787A', fontWeight: 600 }}>Email</span>
-                      <span style={{ fontSize: 13, fontFamily: 'var(--font-mono)', color: '#1C1819' }}>{scannedStudent?.email ?? '---'}</span>
+                      <span style={{ fontSize: 13, fontFamily: 'var(--font-mono)', color: '#1C1819' }}>{'---'}</span>
                     </div>
                     <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                       <span style={{ fontSize: 12, color: '#85787A', fontWeight: 600 }}>Estado</span>
@@ -1175,7 +1175,7 @@ export default function CredentialsPage() {
                           onClick={() => { setExportStudentId(String(s.id)); setExportStudentQuery(getFullName(s)); }}
                         >
                           <div style={{ fontWeight: 600, fontSize: 14 }}>{getFullName(s)}</div>
-                          <div style={{ fontSize: 13, color: '#5F5657' }}>Matricula: {s.matricula} &mdash; Grupo: {getGrupoNombre(s.grupo_id)}</div>
+                          <div style={{ fontSize: 13, color: '#5F5657' }}>Matricula: {s.matricula} &mdash; Grupo: {getGrupoNombre(s.id_grupo)}</div>
                         </div>
                       ))}
                     </div>
@@ -1205,7 +1205,7 @@ export default function CredentialsPage() {
                   >
                     <option value="all">Todos los alumnos activos ({localStudents.filter(s => s.estatus === 'Activo').length})</option>
                     {uniqueGroups.map((g) => {
-                      const count = localStudents.filter((s) => getGrupoNombre(s.grupo_id) === g && s.estatus === 'Activo').length;
+                      const count = localStudents.filter((s) => getGrupoNombre(s.id_grupo) === g && s.estatus === 'Activo').length;
                       return (
                         <option key={g} value={g}>
                           Grupo {g} ({count} alumnos)
@@ -1317,7 +1317,7 @@ export default function CredentialsPage() {
                 <div style={{ flex: 1 }}>
                   <div style={{ fontSize: 18, fontWeight: 700, color: '#1C1819' }}>{getFullName(student)}</div>
                   <div style={{ fontSize: 16, fontFamily: 'monospace', color: '#EB2466', marginTop: 2 }}>{student.matricula}</div>
-                  <div style={{ fontSize: 13, color: '#5F5657', marginTop: 2 }}>Grupo: {getGrupoNombre(student.grupo_id)}</div>
+                  <div style={{ fontSize: 13, color: '#5F5657', marginTop: 2 }}>Grupo: {getGrupoNombre(student.id_grupo)}</div>
                 </div>
               </div>
 
@@ -1329,8 +1329,7 @@ export default function CredentialsPage() {
                     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px 24px', fontSize: 14 }}>
                       <div><span style={{ color: '#5F5657', fontSize: 12 }}>Nombre</span><div style={{ fontWeight: 500 }}>{getFullName(student)}</div></div>
                       <div><span style={{ color: '#5F5657', fontSize: 12 }}>Matricula</span><div style={{ fontWeight: 500, fontFamily: 'monospace' }}>{student.matricula}</div></div>
-                      <div><span style={{ color: '#5F5657', fontSize: 12 }}>Grupo</span><div style={{ fontWeight: 500 }}>{getGrupoNombre(student.grupo_id)}</div></div>
-                      <div><span style={{ color: '#5F5657', fontSize: 12 }}>Email</span><div style={{ fontWeight: 500 }}>{student.email ?? '---'}</div></div>
+                      <div><span style={{ color: '#5F5657', fontSize: 12 }}>Grupo</span><div style={{ fontWeight: 500 }}>{getGrupoNombre(student.id_grupo)}</div></div>
                       <div><span style={{ color: '#5F5657', fontSize: 12 }}>Telefono</span><div style={{ fontWeight: 500 }}>{student.telefono ?? '---'}</div></div>
                       <div><span style={{ color: '#5F5657', fontSize: 12 }}>Estado</span><div><span style={{ display: 'inline-block', padding: '2px 10px', borderRadius: 12, fontSize: 12, fontWeight: 600, background: student.estatus === 'Activo' ? '#FEEBEE' : '#F0EFEF', color: student.estatus === 'Activo' ? '#0F8122' : '#5F5657' }}>{student.estatus === 'Activo' ? 'Activo' : 'Inactivo'}</span></div></div>
                     </div>
@@ -1347,7 +1346,7 @@ export default function CredentialsPage() {
                     <h3 style={{ fontSize: 14, fontWeight: 600, color: '#EB2466', textTransform: 'uppercase', marginBottom: 12, letterSpacing: 0.5 }}>Contacto</h3>
                     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px 24px', fontSize: 14 }}>
                       <div style={{ gridColumn: 'span 2' }}><span style={{ color: '#5F5657', fontSize: 12 }}>Direccion</span><div style={{ fontWeight: 500 }}>{student.direccion ?? '---'}</div></div>
-                      <div><span style={{ color: '#5F5657', fontSize: 12 }}>Email</span><div style={{ fontWeight: 500 }}>{student.email ?? '---'}</div></div>
+                      <div><span style={{ color: '#5F5657', fontSize: 12 }}>Email</span><div style={{ fontWeight: 500 }}>{'---'}</div></div>
                       <div><span style={{ color: '#5F5657', fontSize: 12 }}>Telefono</span><div style={{ fontWeight: 500, fontFamily: 'monospace' }}>{student.telefono ?? '---'}</div></div>
                     </div>
                   </div>

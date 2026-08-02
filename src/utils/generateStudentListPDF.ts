@@ -76,7 +76,7 @@ export function generateStudentListPDF(options: GenerateListOptions) {
       String(idx + 1),
       `${s.nombre} ${s.apellido_paterno} ${s.apellido_materno}`,
       s.matricula,
-      s.grupo_id ? String(s.grupo_id) : 'S/I',
+      s.id_grupo ? String(s.id_grupo) : 'S/I',
       s.estatus === 'Activo' ? 'Activo' : 'De baja',
     ];
 

@@ -3,7 +3,7 @@ import { useLocation, useNavigate } from 'react-router-dom';
 import {
   LayoutDashboard, Users, Building2, CreditCard, FileText,
   CalendarCheck, AlertTriangle, Settings, LogOut, Bell, Menu, X,
-  ScanLine, ChevronLeft, ChevronRight,
+  ScanLine, ChevronLeft, ChevronRight, Shield, UserCheck,
 } from 'lucide-react';
 import type { UserRole } from '../App';
 import { useAuth } from '../context/AuthContext';
@@ -19,10 +19,12 @@ const directivoMenu = [
   { icon: LayoutDashboard, label: 'Dashboard', path: '/dashboard' },
   { icon: Users, label: 'Alumnos', path: '/alumnos' },
   { icon: Building2, label: 'Grupos', path: '/grupos' },
+  { icon: UserCheck, label: 'Profesores', path: '/profesores' },
   { icon: CreditCard, label: 'Credenciales', path: '/credenciales' },
   { icon: FileText, label: 'Reportes', path: '/reportes' },
   { icon: CalendarCheck, label: 'Permisos', path: '/permisos' },
   { icon: AlertTriangle, label: 'Incidencias', path: '/incidencias' },
+  { icon: Shield, label: 'Faltas al Reglamento', path: '/faltas' },
   { icon: Settings, label: 'Configuracion', path: '/configuracion' },
 ];
 
@@ -30,8 +32,10 @@ const serviciosEscolaresMenu = [
   { icon: LayoutDashboard, label: 'Dashboard', path: '/dashboard' },
   { icon: Users, label: 'Alumnos', path: '/alumnos' },
   { icon: Building2, label: 'Grupos', path: '/grupos' },
+  { icon: UserCheck, label: 'Profesores', path: '/profesores' },
   { icon: CreditCard, label: 'Credenciales', path: '/credenciales' },
   { icon: CalendarCheck, label: 'Permisos', path: '/permisos' },
+  { icon: Shield, label: 'Faltas al Reglamento', path: '/faltas' },
   { icon: Settings, label: 'Configuracion', path: '/configuracion' },
 ];
 
@@ -39,6 +43,7 @@ const prefectoMenu = [
   { icon: ScanLine, label: 'Dashboard', path: '/escaneo' },
   { icon: CalendarCheck, label: 'Permisos', path: '/permisos' },
   { icon: AlertTriangle, label: 'Incidencias', path: '/incidencias' },
+  { icon: Shield, label: 'Faltas al Reglamento', path: '/faltas' },
   { icon: FileText, label: 'Reportes', path: '/reportes' },
 ];
 

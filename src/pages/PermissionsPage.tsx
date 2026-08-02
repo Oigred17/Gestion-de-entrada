@@ -23,8 +23,6 @@ interface AlumnoData {
   activo: boolean;
   tutorNombre: string;
   tutorTelefono: string;
-  capacitacion: string;
-  turno: string;
 }
 
 interface Permission {
@@ -91,12 +89,10 @@ export default function PermissionsPage({ role }: PermissionsPageProps) {
           id: a.id,
           matricula: a.matricula,
           nombreCompleto: `${a.nombre} ${a.apellido_paterno} ${a.apellido_materno}`,
-          grupo: a.grupo_id ? `Grupo ${a.grupo_id}` : 'Sin grupo',
+          grupo: a.id_grupo ? `Grupo ${a.id_grupo}` : 'Sin grupo',
           activo: a.estatus === 'activo',
           tutorNombre: 'No disponible',
           tutorTelefono: 'No disponible',
-          capacitacion: 'No disponible',
-          turno: 'No disponible',
         }));
         setAlumnos(mapped);
       } catch (error) {
@@ -570,14 +566,6 @@ export default function PermissionsPage({ role }: PermissionsPageProps) {
                 <div>
                   <span style={{ color: "#5F5657" }}>Grupo</span>
                   <div style={{ fontWeight: 500 }}>{selectedPermission.alumno.grupo}</div>
-                </div>
-                <div>
-                  <span style={{ color: "#5F5657" }}>Capacitacion</span>
-                  <div style={{ fontWeight: 500 }}>{selectedPermission.alumno.capacitacion}</div>
-                </div>
-                <div>
-                  <span style={{ color: "#5F5657" }}>Turno</span>
-                  <div style={{ fontWeight: 500 }}>{selectedPermission.alumno.turno}</div>
                 </div>
               </div>
             </div>

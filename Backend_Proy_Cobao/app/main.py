@@ -21,10 +21,11 @@ from app.routers import (
     ciclos_escolares,
     credenciales,
     grupos,
-    inscripciones,
+    justificaciones,
     nfc,
     profesores,
     registros_acceso,
+    reportes,
     retardos,
     roles,
     usuarios,
@@ -113,8 +114,9 @@ app.include_router(ciclos_escolares.router, prefix=API_PREFIX)
 app.include_router(alumnos.router, prefix=API_PREFIX)
 app.include_router(profesores.router, prefix=API_PREFIX)
 app.include_router(grupos.router, prefix=API_PREFIX)
-app.include_router(inscripciones.router, prefix=API_PREFIX)
 app.include_router(credenciales.router, prefix=API_PREFIX)
+app.include_router(justificaciones.router, prefix=API_PREFIX)
+app.include_router(reportes.router, prefix=API_PREFIX)
 app.include_router(registros_acceso.router, prefix=API_PREFIX)
 app.include_router(retardos.router, prefix=API_PREFIX)
 app.include_router(nfc.router, prefix=API_PREFIX)

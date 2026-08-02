@@ -40,24 +40,11 @@ async def create_alumno(db: AsyncSession, data: AlumnoCreate):
     if not curp:
         curp = f"SIN{uuid.uuid4().hex[:15].upper()}"
 
-    from datetime import date as _date
-
-    fecha_nac = None
-    if data.fecha_nacimiento:
-        try:
-            fecha_nac = _date.fromisoformat(data.fecha_nacimiento)
-        except ValueError:
-            try:
-                from datetime import datetime as _dt
-                fecha_nac = _dt.strptime(data.fecha_nacimiento, "%d/%m/%Y").date()
-            except ValueError:
-                pass
-
-    grupo_id = data.grupo_id
-    if grupo_id is not None:
-        result = await db.execute(select(Grupo.id).where(Grupo.id == grupo_id))
+    id_grupo = data.id_grupo
+    if id_grupo is not None:
+        result = await db.execute(select(Grupo.id).where(Grupo.id == id_grupo))
         if result.scalar_one_or_none() is None:
-            grupo_id = None
+            id_grupo = None
 
     alumno = Alumno(
         matricula=data.matricula,
@@ -69,13 +56,7 @@ async def create_alumno(db: AsyncSession, data: AlumnoCreate):
         tutor_nombre=data.tutor_nombre,
         tutor_telefono=data.tutor_telefono or data.telefono,
         activo=data.activo,
-        grupo_id=grupo_id,
-        fecha_nacimiento=fecha_nac,
-        genero=data.genero,
-        capacitacion=data.capacitacion,
-        cohorte=data.cohorte,
-        turno=data.turno,
-        grupo_nombre=data.grupo_nombre,
+        id_grupo=id_grupo,
     )
     db.add(alumno)
     await db.flush()
@@ -88,26 +69,13 @@ async def update_alumno(db: AsyncSession, id_alumno: int, data: AlumnoUpdate):
     if not alumno:
         return None
     update_data = data.model_dump(exclude_unset=True)
-    update_data.pop("email", None)
     update_data.pop("estatus", None)
-    update_data.pop("grupo_id", None)
     direccion = update_data.pop("direccion", None)
     if direccion is not None:
         update_data["domicilio"] = direccion
     telefono = update_data.pop("telefono", None)
     if telefono is not None:
         update_data["tutor_telefono"] = telefono
-    fn = update_data.pop("fecha_nacimiento", None)
-    if fn is not None:
-        from datetime import date as _date
-        try:
-            update_data["fecha_nacimiento"] = _date.fromisoformat(fn)
-        except (ValueError, TypeError):
-            try:
-                from datetime import datetime as _dt
-                update_data["fecha_nacimiento"] = _dt.strptime(fn, "%d/%m/%Y").date()
-            except (ValueError, TypeError):
-                pass
     nombre_parts = []
     if "nombre" in update_data or "apellido_paterno" in update_data or "apellido_materno" in update_data:
         nombre = update_data.pop("nombre", None)

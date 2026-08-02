@@ -1,4 +1,4 @@
-from sqlalchemy import Boolean, Column, Date, DateTime, ForeignKey, Integer, String, Text
+from sqlalchemy import Boolean, Column, DateTime, ForeignKey, Integer, String, Text
 from sqlalchemy.sql import func
 
 from app.database import Base
@@ -16,12 +16,6 @@ class Alumno(Base):
     domicilio = Column(Text, nullable=True)
     tutor_nombre = Column(String(150), nullable=True)
     tutor_telefono = Column(String(15), nullable=True)
+    id_grupo = Column(Integer, ForeignKey("grupos.id"), nullable=True)
     activo = Column(Boolean, nullable=False, default=True)
     fecha_registro = Column(DateTime(timezone=True), nullable=False, server_default=func.now())
-    grupo_id = Column(Integer, ForeignKey("grupos.id"), nullable=True)
-    fecha_nacimiento = Column(Date, nullable=True)
-    genero = Column(String(10), nullable=True)
-    capacitacion = Column(String(100), nullable=True)
-    cohorte = Column(String(50), nullable=True)
-    turno = Column(String(20), nullable=True)
-    grupo_nombre = Column(String(50), nullable=True)

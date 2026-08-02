@@ -35,3 +35,4 @@ __pycache__/
 
 # Sensitive / large files
 plantilla_alumnos_completa.xlsx
+*.xlsx

@@ -228,7 +228,7 @@ export default function ScanPage() {
       tipo: r.tipo_acceso,
       time: r.fecha_hora?.split('T')[1] ?? '',
       alumnoNombre: alumno ? getFullName(alumno) : 'Desconocido',
-      alumnoGrupo: alumno?.grupo_id ? String(alumno.grupo_id) : '---',
+      alumnoGrupo: alumno?.id_grupo ? String(alumno.id_grupo) : '---',
     };
   });
 
@@ -292,7 +292,7 @@ export default function ScanPage() {
                   <div key={s.id} onClick={() => { setManualSelected(s); setManualQuery(getFullName(s)); setShowManualDropdown(false); }} style={{ padding: '10px 14px', cursor: 'pointer', borderBottom: '1px solid #f0efef' }}
                     onMouseEnter={(e) => (e.currentTarget.style.background = '#f8f7f7')} onMouseLeave={(e) => (e.currentTarget.style.background = '#fff')}>
                     <div style={{ fontWeight: 600, fontSize: 13, color: '#1C1819' }}>{getFullName(s)}</div>
-                    <div style={{ fontSize: 11, color: '#85787A' }}>{s.matricula} · Grupo {s.grupo_id ?? '---'}</div>
+                    <div style={{ fontSize: 11, color: '#85787A' }}>{s.matricula} · Grupo {s.id_grupo ?? '---'}</div>
                   </div>
                 ))}
               </div>
@@ -302,7 +302,7 @@ export default function ScanPage() {
                 <CheckCircle size={16} />
                 <div>
                   <div style={{ fontWeight: 600 }}>{getFullName(manualSelected)}</div>
-                  <div style={{ fontSize: 11, opacity: 0.8 }}>{manualSelected.matricula} · Grupo {manualSelected.grupo_id ?? '---'}</div>
+                  <div style={{ fontSize: 11, opacity: 0.8 }}>{manualSelected.matricula} · Grupo {manualSelected.id_grupo ?? '---'}</div>
                 </div>
               </div>
             )}
@@ -327,7 +327,7 @@ export default function ScanPage() {
             <div className="scan-result-info">
               <div className="scan-result-name">{scanResult.studentName}</div>
               {scanResult.student && <div className="scan-result-control">{scanResult.student.matricula}</div>}
-              {scanResult.student && <div className="scan-result-group">Grupo {scanResult.student.grupo_id ?? '---'}</div>}
+              {scanResult.student && <div className="scan-result-group">Grupo {scanResult.student.id_grupo ?? '---'}</div>}
               <div className="scan-result-time">{scanResult.time}</div>
               <div className={`scan-result-status ${scanResult.type}`}>
                 {scanResult.type === 'entry' && <><CheckCircle size={18} color="#0F8122" /> <span style={{ color: '#0F8122' }}>ENTRADA REGISTRADA</span></>}

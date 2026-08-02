@@ -76,15 +76,15 @@ export default function DashboardPage() {
     })),
   ].sort((a, b) => b.fecha.localeCompare(a.fecha) || b.hora.localeCompare(a.hora));
 
-  const attendanceByGroup = Array.from(new Set(alumnosData.map(s => s.grupo_id ? `Grupo ${s.grupo_id}` : 'Sin grupo'))).map(group => {
-    const groupStudents = alumnosData.filter(s => s.grupo_id ? `Grupo ${s.grupo_id}` === group : 'Sin grupo' === group);
+  const attendanceByGroup = Array.from(new Set(alumnosData.map(s => s.id_grupo ? `Grupo ${s.id_grupo}` : 'Sin grupo'))).map(group => {
+    const groupStudents = alumnosData.filter(s => s.id_grupo ? `Grupo ${s.id_grupo}` === group : 'Sin grupo' === group);
     const groupRegistros = registros.filter(r => {
       const alumno = r.alumno || alumnoMap[r.alumno_id];
-      return alumno?.grupo_id ? `Grupo ${alumno.grupo_id}` === group : 'Sin grupo' === group;
+      return alumno?.id_grupo ? `Grupo ${alumno.id_grupo}` === group : 'Sin grupo' === group;
     });
     const groupRetardos = retardosData.filter(r => {
       const alumno = r.alumno || alumnoMap[r.alumno_id];
-      return alumno?.grupo_id ? `Grupo ${alumno.grupo_id}` === group : 'Sin grupo' === group;
+      return alumno?.id_grupo ? `Grupo ${alumno.id_grupo}` === group : 'Sin grupo' === group;
     });
     return {
       group,
@@ -196,10 +196,10 @@ export default function DashboardPage() {
                         {record.alumno?.matricula ?? '---'}
                       </td>
                       <td style={{ padding: '12px 16px', fontSize: 14, color: '#5F5657' }}>
-                        {record.alumno?.grupo_id ?? '---'}
+                        {record.alumno?.id_grupo ?? '---'}
                       </td>
                       <td style={{ padding: '12px 16px', fontSize: 13, color: '#85787A' }}>
-                        {record.alumno?.email ?? '---'}
+                        {'---'}
                       </td>
                       <td style={{ padding: '12px 16px' }}>
                         <span style={{

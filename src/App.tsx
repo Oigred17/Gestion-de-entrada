@@ -14,6 +14,8 @@ import IncidentsPage from './pages/IncidentsPage';
 import ReportsPage from './pages/ReportsPage';
 import ConfigPage from './pages/ConfigPage';
 import GruposPage from './pages/GruposPage';
+import RegulationsPage from './pages/RegulationsPage';
+import ProfesoresPage from './pages/ProfesoresPage';
 
 function AppRoutes() {
   const { isAuthenticated, isLoading, user, logout } = useAuth();
@@ -53,6 +55,8 @@ function AppRoutes() {
               <Route path="/permisos" element={<PermissionsPage role={userRole as UserRole} />} />
               <Route path="/incidencias" element={<IncidentsPage role={userRole as UserRole} />} />
               <Route path="/reportes" element={<ReportsPage />} />
+              <Route path="/faltas" element={<RegulationsPage role={userRole as UserRole} />} />
+              <Route path="/profesores" element={<ProfesoresPage />} />
               <Route path="/configuracion" element={<ConfigPage />} />
               <Route path="*" element={<Navigate to="/dashboard" replace />} />
             </>
@@ -65,6 +69,8 @@ function AppRoutes() {
               <Route path="/credenciales" element={<CredentialsPage />} />
               <Route path="/credenciales/:id" element={<CredentialDetailPage />} />
               <Route path="/permisos" element={<PermissionsPage role={userRole as UserRole} />} />
+              <Route path="/faltas" element={<RegulationsPage role={userRole as UserRole} />} />
+              <Route path="/profesores" element={<ProfesoresPage />} />
               <Route path="/configuracion" element={<ConfigPage role={userRole as UserRole} />} />
               <Route path="*" element={<Navigate to="/dashboard" replace />} />
             </>
@@ -74,6 +80,8 @@ function AppRoutes() {
               <Route path="/escaneo" element={<ScanPage />} />
               <Route path="/permisos" element={<PermissionsPage role={userRole as UserRole} />} />
               <Route path="/incidencias" element={<IncidentsPage role={userRole as UserRole} />} />
+              <Route path="/faltas" element={<RegulationsPage role={userRole as UserRole} />} />
+              <Route path="/profesores" element={<ProfesoresPage />} />
               <Route path="/reportes" element={<ReportsPage />} />
               <Route path="*" element={<Navigate to="/escaneo" replace />} />
             </>

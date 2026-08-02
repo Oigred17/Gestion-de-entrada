@@ -16,14 +16,15 @@ import {
   FileSpreadsheet,
 } from "lucide-react";
 import * as XLSX from "xlsx";
-import { alumnosApi } from "../api";
-import type { Alumno } from "../types";
+import { alumnosApi, gruposApi, ciclosApi } from "../api";
+import type { Alumno, Grupo } from "../types";
 import { generateStudentListPDF } from "../utils/generateStudentListPDF";
 
 const ROWS_PER_PAGE_OPTIONS = [10, 25, 50, 100];
 
 export default function StudentsPage() {
   const [alumnosData, setAlumnosData] = useState<Alumno[]>([]);
+  const [gruposMap, setGruposMap] = useState<Record<number, string>>({});
   const [search, setSearch] = useState("");
   const [activeFilters, setActiveFilters] = useState<string[]>([]);
   const [showFilterDropdown, setShowFilterDropdown] = useState(false);
@@ -65,7 +66,7 @@ export default function StudentsPage() {
   const [newNumAfiliacion, setNewNumAfiliacion] = useState("");
   const [newCohorte, setNewCohorte] = useState("");
   const [uploadFile, setUploadFile] = useState<File | null>(null);
-  const [uploadPreview, setUploadPreview] = useState<{ headers: string[]; rows: string[][] } | null>(null);
+  const [uploadPreview, setUploadPreview] = useState<{ sheet: string; headers: string[]; rows: string[][] }[] | null>(null);
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [uploadProgress, setUploadProgress] = useState<{ current: number; total: number; success: number; failed: number; done: boolean; errors: string[] } | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -77,10 +78,15 @@ export default function StudentsPage() {
 
   const fetchAlumnos = async () => {
     try {
-      const data = await alumnosApi.getAll();
+      const [data, grupos] = await Promise.all([alumnosApi.getAll(), gruposApi.getAll()]);
       setAlumnosData(data);
+      const map: Record<number, string> = {};
+      for (const g of grupos) {
+        if (g.id) map[g.id] = g.nombre;
+      }
+      setGruposMap(map);
     } catch (error) {
-      console.error('Error fetching alumnos:', error);
+      console.error('Error fetching data:', error);
       showToast("Error al cargar los alumnos", "error");
     }
   };
@@ -96,7 +102,11 @@ export default function StudentsPage() {
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, [showFilterDropdown]);
 
-  const uniqueGroups = Array.from(new Set(alumnosData.map((s) => s.grupo_nombre || (s.grupo_id ? String(s.grupo_id) : 'Sin grupo')))).sort();
+  const getGrupoName = (id_grupo?: number | null): string => {
+    return id_grupo ? (gruposMap[id_grupo] || String(id_grupo)) : 'Sin grupo';
+  };
+
+  const uniqueGroups = Array.from(new Set(alumnosData.map((s) => getGrupoName(s.id_grupo)))).sort();
 
   const filteredStudents = alumnosData.filter((s) => {
     const nombreCompleto = `${s.nombre} ${s.apellido_paterno} ${s.apellido_materno}`.trim();
@@ -105,12 +115,12 @@ export default function StudentsPage() {
       const matchSearch =
         nombreCompleto.toLowerCase().includes(q) ||
         s.matricula.toLowerCase().includes(q) ||
-        (s.grupo_nombre || (s.grupo_id ? String(s.grupo_id) : 'Sin grupo')).toLowerCase().includes(q);
+        getGrupoName(s.id_grupo).toLowerCase().includes(q);
       if (!matchSearch) return false;
     }
     if (activeFilters.length > 0) {
       const matchFilters = activeFilters.every((f) => {
-        if (uniqueGroups.includes(f)) return (s.grupo_nombre || (s.grupo_id ? String(s.grupo_id) : 'Sin grupo')) === f;
+        if (uniqueGroups.includes(f)) return getGrupoName(s.id_grupo) === f;
         if (f === "Activo") return s.estatus === "Activo";
         if (f === "Inactivo") return s.estatus !== "Activo";
         return true;
@@ -124,7 +134,7 @@ export default function StudentsPage() {
     const toExport =
       exportGroupId === "all"
         ? filteredStudents
-        : alumnosData.filter((s) => (s.grupo_nombre || (s.grupo_id ? String(s.grupo_id) : 'Sin grupo')) === exportGroupId);
+        : alumnosData.filter((s) => getGrupoName(s.id_grupo) === exportGroupId);
     const label = exportGroupId === "all" ? "general" : `grupo_${exportGroupId}`;
     generateStudentListPDF({
       students: toExport,
@@ -152,15 +162,12 @@ export default function StudentsPage() {
     const nombreCompleto = `${student.nombre} ${student.apellido_paterno} ${student.apellido_materno}`.trim();
     setEditName(nombreCompleto);
     setEditControl(student.matricula);
-    setEditGrupo(student.grupo_nombre || (student.grupo_id ? String(student.grupo_id) : ''));
-    setEditCapacitacion(student.capacitacion || '');
-    setEditTurno(student.turno || '');
+    setEditGrupo(getGrupoName(student.id_grupo));
     setEditCurp(student.curp || '');
-    setEditFechaNacimiento(student.fecha_nacimiento || '');
     setEditTipoSangre(student.tipo_sangre || '');
     setEditDomicilio(student.direccion || '');
     setEditTelefonoTutor(student.tutor_telefono || '');
-    setEditCorreoTutor(student.email);
+    setEditCorreoTutor('');
     setSelectedStudent(student);
     setShowConfirmEdit(true);
   };
@@ -179,15 +186,10 @@ export default function StudentsPage() {
         nombre: nameParts[0] || '',
         apellido_paterno: nameParts[1] || '',
         apellido_materno: nameParts.slice(2).join(' ') || '',
-        email: editCorreoTutor,
         telefono: editTelefonoTutor,
-        fecha_nacimiento: editFechaNacimiento,
         direccion: editDomicilio,
         curp: editCurp,
         tipo_sangre: editTipoSangre,
-        grupo_nombre: editGrupo,
-        capacitacion: editCapacitacion,
-        turno: editTurno,
       });
       setPanelMode("view");
       showToast("Datos del alumno actualizados correctamente");
@@ -256,11 +258,9 @@ export default function StudentsPage() {
         nombre: nameParts[0] || '',
         apellido_paterno: nameParts[1] || '',
         apellido_materno: nameParts[2] || '',
-        email: `${newControl.trim()}@cobao.edu.mx`,
         telefono: newTelefonoTutor.trim(),
-        fecha_nacimiento: newFechaNacimiento.trim(),
         direccion: newDomicilio.trim(),
-        grupo_id: newGrupo.trim() ? Number(newGrupo.trim()) : undefined,
+        id_grupo: newGrupo.trim() ? Number(newGrupo.trim()) : undefined,
       });
       setShowNewStudentModal(false);
       showToast(`Alumno "${newName.trim()}" agregado correctamente`);
@@ -273,14 +273,30 @@ export default function StudentsPage() {
 
   const handleDownloadTemplate = () => {
     const headers = [
-      "Nombre", "No. Control", "Grupo", "Capacitacion", "Cohorte",
-      "Turno", "CURP", "Fecha Nacimiento", "Tipo de Sangre",
-      "Num Afiliacion", "Domicilio", "Tutor", "Telefono Tutor",
+      "NOMBRE DEL ESTUDIANTE", "MATRICULA", "GRUPO",
     ];
     const ws = XLSX.utils.aoa_to_sheet([headers]);
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, "Alumnos");
     XLSX.writeFile(wb, "plantilla_alumnos.xlsx");
+  };
+
+  const findHeaderRow = (data: (string | undefined)[][]): { headerRowIdx: number; colMap: Record<string, number> } | null => {
+    for (let i = 0; i < data.length; i++) {
+      const row = data[i];
+      if (!row) continue;
+      const colMap: Record<string, number> = {};
+      for (let j = 0; j < row.length; j++) {
+        const val = String(row[j] || "").toLowerCase().trim();
+        if (val.includes("nombre")) colMap.nombre = j;
+        if (val.includes("matricula") || val.includes("matr")) colMap.matricula = j;
+        if (val === "grupo" || val === "grupo " || val.match(/^grupo/i)) colMap.grupo = j;
+      }
+      if (colMap.nombre !== undefined && colMap.matricula !== undefined && colMap.grupo !== undefined) {
+        return { headerRowIdx: i, colMap };
+      }
+    }
+    return null;
   };
 
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -303,17 +319,39 @@ export default function StudentsPage() {
       try {
         const data = new Uint8Array(evt.target?.result as ArrayBuffer);
         const workbook = XLSX.read(data, { type: "array" });
-        const sheetName = workbook.SheetNames[0];
-        const sheet = workbook.Sheets[sheetName];
-        const jsonData = XLSX.utils.sheet_to_json<string[]>(sheet, { header: 1 });
-        if (jsonData.length < 2) {
-          setUploadError("El archivo esta vacio o no tiene datos");
+        const sheetsData: { sheet: string; headers: string[]; rows: string[][] }[] = [];
+        for (const sheetName of workbook.SheetNames) {
+          const sheet = workbook.Sheets[sheetName];
+          const jsonData = XLSX.utils.sheet_to_json<string[]>(sheet, { header: 1 }) as (string | undefined)[][];
+          if (jsonData.length < 2) continue;
+          const found = findHeaderRow(jsonData);
+          if (!found) continue;
+          const rawHeaders = jsonData[found.headerRowIdx];
+          const headers = [
+            String(rawHeaders[found.colMap.nombre] || "NOMBRE DEL ESTUDIANTE"),
+            String(rawHeaders[found.colMap.matricula] || "MATRICULA"),
+            String(rawHeaders[found.colMap.grupo] || "GRUPO"),
+          ];
+          const rows: string[][] = [];
+          for (let r = found.headerRowIdx + 1; r < jsonData.length; r++) {
+            const row = jsonData[r];
+            if (!row) continue;
+            const name = String(row[found.colMap.nombre] || "").trim();
+            const matricula = String(row[found.colMap.matricula] || "").trim();
+            const grupo = String(row[found.colMap.grupo] || "").trim();
+            if (!name || !matricula || matricula === "nan" || matricula === "NaN" || /^\d+\.?\d*$/.test(matricula)) continue;
+            rows.push([name, matricula, grupo]);
+          }
+          if (rows.length > 0) {
+            sheetsData.push({ sheet: sheetName, headers, rows });
+          }
+        }
+        if (sheetsData.length === 0) {
+          setUploadError("No se encontraron datos validos en ninguna hoja. Busque columnas: NOMBRE, MATRICULA, GRUPO.");
           setUploadFile(null);
           return;
         }
-        const headers = jsonData[0].map((h) => String(h || ""));
-        const rows = jsonData.slice(1).filter((row) => row.some((cell) => cell !== undefined && cell !== ""));
-        setUploadPreview({ headers, rows: rows as string[][] });
+        setUploadPreview(sheetsData);
       } catch {
         setUploadError("Error al leer el archivo. Verifique el formato.");
         setUploadFile(null);
@@ -322,89 +360,64 @@ export default function StudentsPage() {
     reader.readAsArrayBuffer(file);
   };
 
+  const resolveGroupId = async (claveGrupo: number, groups: Grupo[]): Promise<number | null> => {
+    const existing = groups.find((g) => g.clave_grupo === claveGrupo);
+    if (existing) return existing.id;
+    try {
+      const ciclos = await ciclosApi.getAll();
+      const cicloActivo = ciclos.find((c) => c.estatus === "Activo") || ciclos[0];
+      const newGroup = await gruposApi.create({
+        nombre: String(claveGrupo),
+        clave_grupo: claveGrupo,
+        ciclo_escolar_id: cicloActivo?.id,
+      });
+      groups.push(newGroup);
+      return newGroup.id;
+    } catch {
+      return null;
+    }
+  };
+
   const handleConfirmUpload = async () => {
     if (!uploadPreview) return;
-    const headerMap: Record<string, number> = {};
-    uploadPreview.headers.forEach((h, i) => {
-      const normalized = h.toLowerCase().trim();
-      if (normalized.includes("nombre")) headerMap[i] = 0;
-      else if (normalized.includes("control")) headerMap[i] = 1;
-      else if (normalized.includes("grupo")) headerMap[i] = 2;
-      else if (normalized.includes("curp")) headerMap[i] = 3;
-      else if (normalized.includes("nacimiento")) headerMap[i] = 4;
-      else if (normalized.includes("sangre")) headerMap[i] = 5;
-      else if (normalized.includes("afiliacion")) headerMap[i] = 6;
-      else if (normalized.includes("domicilio") || normalized.includes("direc")) headerMap[i] = 7;
-      else if (normalized.includes("tutor") && normalized.includes("tel")) headerMap[i] = 8;
-      else if (normalized.includes("tutor") && !normalized.includes("tel")) headerMap[i] = 9;
-      else if (normalized.includes("telefono") || normalized.includes("tel")) headerMap[i] = 8;
-      else if (normalized.includes("capacitacion")) headerMap[i] = 10;
-      else if (normalized.includes("cohorte")) headerMap[i] = 11;
-      else if (normalized.includes("turno")) headerMap[i] = 12;
-    });
-    const requiredFields = ["Nombre", "No. Control", "Grupo"];
-    const missingHeaders = requiredFields.filter((f) => {
-      const idx = Object.values(headerMap).findIndex((v) => requiredFields.indexOf(f) === v);
-      return idx === -1;
-    });
-    if (missingHeaders.length > 0) {
-      showToast(`Faltan columnas requeridas: ${missingHeaders.join(", ")}`, "error");
+    let allRows: { name: string; matricula: string; grupo: string }[] = [];
+    for (const sheet of uploadPreview) {
+      for (const row of sheet.rows) {
+        allRows.push({ name: row[0], matricula: row[1], grupo: row[2] });
+      }
+    }
+    const total = allRows.length;
+    if (total === 0) {
+      showToast("No hay registros para importar", "error");
       return;
     }
-    const rowsToImport = uploadPreview.rows.filter((row) => {
-      const getVal = (fieldIdx: number) => {
-        const colIdx = Object.keys(headerMap).find((k) => headerMap[Number(k)] === fieldIdx);
-        return colIdx ? String(row[Number(colIdx)] || "").trim() : "";
-      };
-      const matricula = getVal(1);
-      return getVal(0) && matricula && matricula !== "nan" && matricula !== "NaN" && !/^\d+\.?\d*$/.test(matricula);
-    });
-    const total = rowsToImport.length;
+    let groups: Grupo[] = [];
+    try {
+      groups = await gruposApi.getAll();
+    } catch {
+      showToast("Error al cargar grupos", "error");
+      return;
+    }
     let added = 0;
     let failed = 0;
     const errors: string[] = [];
     setUploadProgress({ current: 0, total, success: 0, failed: 0, done: false, errors: [] });
-    for (let i = 0; i < rowsToImport.length; i++) {
-      const row = rowsToImport[i];
-      const getVal = (fieldIdx: number) => {
-        const colIdx = Object.keys(headerMap).find((k) => headerMap[Number(k)] === fieldIdx);
-        return colIdx ? String(row[Number(colIdx)] || "").trim() : "";
-      };
-
-      const nombreCompleto = getVal(0);
-      const matricula = getVal(1);
-      const grupo = getVal(2);
-      const curp = getVal(3);
-      const fechaNac = getVal(4);
-      const tipoSangre = getVal(5);
-      const nss = getVal(6);
-      const domicilio = getVal(7);
-      const telefonoTutor = getVal(8);
-      const tutor = getVal(9);
-      const capacitacion = getVal(10);
-      const cohorte = getVal(11);
-      const turno = getVal(12);
-
-      const nameParts = nombreCompleto.split(' ');
+    for (let i = 0; i < allRows.length; i++) {
+      const { name: nombreCompleto, matricula, grupo: grupoStr } = allRows[i];
+      const nameParts = nombreCompleto.replace(/\\n/g, " ").replace(/\s+/g, " ").trim().split(' ');
+      let id_grupo: number | undefined;
+      const claveGrupo = Number(grupoStr);
+      if (!isNaN(claveGrupo) && grupoStr.trim()) {
+        const resolved = await resolveGroupId(claveGrupo, groups);
+        if (resolved !== null) id_grupo = resolved;
+      }
       try {
         await alumnosApi.create({
-          matricula,
+          matricula: matricula.trim(),
           nombre: nameParts[0] || '',
           apellido_paterno: nameParts[1] || '',
           apellido_materno: nameParts.slice(2).join(' ') || '',
-          email: `${matricula}@cobao.edu.mx`,
-          curp: curp || undefined,
-          fecha_nacimiento: fechaNac || undefined,
-          tipo_sangre: tipoSangre || undefined,
-          nss: nss || undefined,
-          direccion: domicilio || undefined,
-          tutor_telefono: telefonoTutor || undefined,
-          tutor_nombre: tutor || undefined,
-          grupo_id: grupo ? Number(grupo) : undefined,
-          grupo_nombre: grupo || undefined,
-          capacitacion: capacitacion || undefined,
-          cohorte: cohorte || undefined,
-          turno: turno || undefined,
+          id_grupo,
         });
         added++;
       } catch (err: unknown) {
@@ -739,8 +752,8 @@ export default function StudentsPage() {
                   >
                     {student.matricula}
                   </td>
-                  <td style={{ padding: "12px" }}>{student.grupo_nombre || (student.grupo_id ? String(student.grupo_id) : 'Sin grupo')}</td>
-                  <td style={{ padding: "12px" }}>{student.capacitacion || '---'}</td>
+                  <td style={{ padding: "12px" }}>{getGrupoName(student.id_grupo)}</td>
+                  <td style={{ padding: "12px" }}>{'---'}</td>
                   <td style={{ padding: "12px" }}>{student.tutor_nombre || '---'}</td>
                   <td style={{ padding: "12px" }}>{student.tutor_telefono || '---'}</td>
                   <td style={{ padding: "12px" }}>
@@ -985,13 +998,13 @@ export default function StudentsPage() {
               <div style={{ flex: 1 }}>
                 <div style={{ fontSize: 18, fontWeight: 700, color: "#1C1819" }}>{`${selectedStudent.nombre} ${selectedStudent.apellido_paterno} ${selectedStudent.apellido_materno}`}</div>
                 <div style={{ fontSize: 16, fontFamily: "monospace", color: "#EB2466", marginTop: 2 }}>{selectedStudent.matricula}</div>
-                <div style={{ fontSize: 13, color: "#5F5657", marginTop: 2 }}>Grupo: {selectedStudent.grupo_nombre || (selectedStudent.grupo_id ? String(selectedStudent.grupo_id) : 'Sin grupo')}</div>
+                <div style={{ fontSize: 13, color: "#5F5657", marginTop: 2 }}>Grupo: {getGrupoName(selectedStudent.id_grupo)}</div>
               </div>
               {panelMode === "view" && (
                 <button onClick={() => {
                   setEditName(`${selectedStudent.nombre} ${selectedStudent.apellido_paterno} ${selectedStudent.apellido_materno}`.trim());
                   setEditControl(selectedStudent.matricula);
-                  setEditGrupo(selectedStudent.grupo_id ? String(selectedStudent.grupo_id) : '');
+                  setEditGrupo(getGrupoName(selectedStudent.id_grupo));
                   setPanelMode("edit");
                 }} style={{ display: "flex", alignItems: "center", gap: 6, padding: "8px 14px", border: "none", borderRadius: 8, background: "#AB1748", color: "#fff", fontSize: 13, fontWeight: 500, cursor: "pointer" }}>
                   <Edit size={14} /> Editar
@@ -1015,10 +1028,10 @@ export default function StudentsPage() {
                 <div style={{ padding: "0 32px", marginBottom: 24 }}>
                   <h3 style={{ fontSize: 14, fontWeight: 600, color: "#EB2466", textTransform: "uppercase", marginBottom: 12, letterSpacing: 0.5 }}>Informacion general</h3>
                   <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "8px 24px", fontSize: 14 }}>
-                    <div><span style={{ color: "#5F5657", fontSize: 12 }}>Grupo</span><div style={{ fontWeight: 500 }}>{selectedStudent.grupo_nombre || (selectedStudent.grupo_id ? String(selectedStudent.grupo_id) : 'Sin grupo')}</div></div>
-                    <div><span style={{ color: "#5F5657", fontSize: 12 }}>Capacitacion</span><div style={{ fontWeight: 500 }}>{selectedStudent.capacitacion || '---'}</div></div>
-                    <div><span style={{ color: "#5F5657", fontSize: 12 }}>Cohorte</span><div style={{ fontWeight: 500 }}>{selectedStudent.cohorte || '---'}</div></div>
-                    <div><span style={{ color: "#5F5657", fontSize: 12 }}>Turno</span><div style={{ fontWeight: 500 }}>{selectedStudent.turno || '---'}</div></div>
+                    <div><span style={{ color: "#5F5657", fontSize: 12 }}>Grupo</span><div style={{ fontWeight: 500 }}>{getGrupoName(selectedStudent.id_grupo)}</div></div>
+                    <div><span style={{ color: "#5F5657", fontSize: 12 }}>Capacitacion</span><div style={{ fontWeight: 500 }}>{'---'}</div></div>
+                    <div><span style={{ color: "#5F5657", fontSize: 12 }}>Cohorte</span><div style={{ fontWeight: 500 }}>{'---'}</div></div>
+                    <div><span style={{ color: "#5F5657", fontSize: 12 }}>Turno</span><div style={{ fontWeight: 500 }}>{'---'}</div></div>
                     <div><span style={{ color: "#5F5657", fontSize: 12 }}>Estado</span><div><span style={{ display: "inline-block", padding: "2px 10px", borderRadius: 12, fontSize: 12, fontWeight: 600, background: selectedStudent.estatus === "Activo" ? "#FEEBEE" : "#F0EFEF", color: selectedStudent.estatus === "Activo" ? "#0F8122" : "#5F5657" }}>{selectedStudent.estatus}</span></div></div>
                   </div>
                 </div>
@@ -1027,9 +1040,9 @@ export default function StudentsPage() {
                   <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "8px 24px", fontSize: 14 }}>
                     <div><span style={{ color: "#5F5657", fontSize: 12 }}>CURP</span><div style={{ fontWeight: 500, fontFamily: "monospace", fontSize: 13 }}>{selectedStudent.curp || '---'}</div></div>
                     <div><span style={{ color: "#5F5657", fontSize: 12 }}>NSS</span><div style={{ fontWeight: 500, fontFamily: "monospace", fontSize: 13 }}>{selectedStudent.nss || '---'}</div></div>
-                    <div><span style={{ color: "#5F5657", fontSize: 12 }}>Fecha de nacimiento</span><div style={{ fontWeight: 500 }}>{selectedStudent.fecha_nacimiento || '---'}</div></div>
+                    <div><span style={{ color: "#5F5657", fontSize: 12 }}>Fecha de nacimiento</span><div style={{ fontWeight: 500 }}>{'---'}</div></div>
                     <div><span style={{ color: "#5F5657", fontSize: 12 }}>Tipo de sangre</span><div style={{ fontWeight: 500 }}>{selectedStudent.tipo_sangre || '---'}</div></div>
-                    <div><span style={{ color: "#5F5657", fontSize: 12 }}>Genero</span><div style={{ fontWeight: 500 }}>{selectedStudent.genero || '---'}</div></div>
+                    <div><span style={{ color: "#5F5657", fontSize: 12 }}>Genero</span><div style={{ fontWeight: 500 }}>{'---'}</div></div>
                   </div>
                 </div>
                 <div style={{ padding: "0 32px", marginBottom: 24 }}>
@@ -1173,7 +1186,7 @@ export default function StudentsPage() {
               >
                 <option value="all">Todos los alumnos ({filteredStudents.length})</option>
                 {uniqueGroups.map((g) => {
-                  const count = alumnosData.filter((s) => (s.grupo_nombre || (s.grupo_id ? String(s.grupo_id) : 'Sin grupo')) === g).length;
+                  const count = alumnosData.filter((s) => getGrupoName(s.id_grupo) === g).length;
                   return (
                     <option key={g} value={g}>
                       Grupo {g} ({count} alumnos)
@@ -1592,7 +1605,7 @@ export default function StudentsPage() {
             {newStudentMode === "upload" && (
               <>
                 <div style={{ padding: "12px 16px", borderRadius: 8, background: "#F0EFEF", marginBottom: 20, fontSize: 13, color: "#5F5657", lineHeight: 1.6 }}>
-                  <strong>Formato requerido:</strong> El archivo debe contener columnas: <strong>Nombre</strong>, <strong>No. Control</strong>, <strong>Grupo</strong> (obligatorias), y opcionales: Capacitacion, Cohorte, Turno, CURP, Fecha Nacimiento, Tipo de Sangre, Num Afiliacion, Domicilio, Tutor, Telefono Tutor.
+                  <strong>Formato requerido:</strong> El archivo debe contener columnas: <strong>NOMBRE DEL ESTUDIANTE</strong>, <strong>MATRICULA</strong>, <strong>GRUPO</strong>. Soporta archivos con multiples hojas (cada hoja = un grupo). Compatible con los formatos de LISTAS CAPACITACIÓN y LISTAS PROPEDEUTICO.
                 </div>
 
                 <div style={{ display: "flex", gap: 12, marginBottom: 20 }}>
@@ -1656,33 +1669,40 @@ export default function StudentsPage() {
                 {uploadPreview && (
                   <div style={{ marginBottom: 20 }}>
                     <div style={{ fontSize: 13, fontWeight: 600, color: "#5F5657", marginBottom: 8 }}>
-                      Vista previa ({uploadPreview.rows.length} registros):
+                      Vista previa ({uploadPreview.reduce((acc, s) => acc + s.rows.length, 0)} registros en {uploadPreview.length} hoja(s)):
                     </div>
-                    <div style={{ border: "1px solid #F0EFEF", borderRadius: 8, overflow: "hidden", maxHeight: 200, overflowY: "auto" }}>
-                      <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}>
-                        <thead>
-                          <tr style={{ background: "#F0EFEF" }}>
-                            {uploadPreview.headers.map((h, i) => (
-                              <th key={i} style={{ padding: "6px 10px", textAlign: "left", fontWeight: 600, color: "#5F5657", whiteSpace: "nowrap" }}>{h}</th>
-                            ))}
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {uploadPreview.rows.slice(0, 5).map((row, i) => (
-                            <tr key={i} style={{ borderTop: "1px solid #F0EFEF", background: i % 2 === 0 ? "#fff" : "#FAFAFA" }}>
-                              {row.map((cell, j) => (
-                                <td key={j} style={{ padding: "6px 10px", whiteSpace: "nowrap" }}>{String(cell || "")}</td>
+                    {uploadPreview.map((sheet, si) => (
+                      <div key={si} style={{ marginBottom: 12 }}>
+                        <div style={{ fontSize: 12, fontWeight: 700, color: "#EB2466", marginBottom: 4 }}>
+                          {sheet.sheet} ({sheet.rows.length} registros)
+                        </div>
+                        <div style={{ border: "1px solid #F0EFEF", borderRadius: 8, overflow: "hidden", maxHeight: 150, overflowY: "auto" }}>
+                          <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}>
+                            <thead>
+                              <tr style={{ background: "#F0EFEF" }}>
+                                {sheet.headers.map((h, i) => (
+                                  <th key={i} style={{ padding: "6px 10px", textAlign: "left", fontWeight: 600, color: "#5F5657", whiteSpace: "nowrap" }}>{h}</th>
+                                ))}
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {sheet.rows.slice(0, 3).map((row, i) => (
+                                <tr key={i} style={{ borderTop: "1px solid #F0EFEF", background: i % 2 === 0 ? "#fff" : "#FAFAFA" }}>
+                                  {row.map((cell, j) => (
+                                    <td key={j} style={{ padding: "6px 10px", whiteSpace: "nowrap" }}>{String(cell || "")}</td>
+                                  ))}
+                                </tr>
                               ))}
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
-                    {uploadPreview.rows.length > 5 && (
-                      <div style={{ fontSize: 12, color: "#85787A", marginTop: 4 }}>
-                        ... y {uploadPreview.rows.length - 5} registros mas
+                            </tbody>
+                          </table>
+                        </div>
+                        {sheet.rows.length > 3 && (
+                          <div style={{ fontSize: 11, color: "#85787A", marginTop: 2 }}>
+                            ... y {sheet.rows.length - 3} registros mas
+                          </div>
+                        )}
                       </div>
-                    )}
+                    ))}
                   </div>
                 )}
 

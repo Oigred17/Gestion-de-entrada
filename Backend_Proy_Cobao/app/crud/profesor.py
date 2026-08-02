@@ -20,7 +20,7 @@ async def get_profesor(db: AsyncSession, id_profesor: int):
 
 async def create_profesor(db: AsyncSession, data: ProfesorCreate):
     profesor = Profesor(
-        numero_empleado=data.resolved_numero_empleado,
+        num_nomina=data.num_nomina,
         nombre_completo=data.nombre_completo,
         telefono=data.telefono,
         domicilio=data.domicilio,
@@ -41,24 +41,6 @@ async def update_profesor(db: AsyncSession, id_profesor: int, data: ProfesorUpda
         estatus = update_data.pop("estatus")
         if estatus is not None:
             update_data["activo"] = estatus.lower() not in ("inactivo", "baja")
-    nombre_parts = []
-    if "nombre" in update_data or "apellido_paterno" in update_data or "apellido_materno" in update_data:
-        nombre = update_data.pop("nombre", None)
-        ap = update_data.pop("apellido_paterno", None)
-        am = update_data.pop("apellido_materno", None)
-        if nombre is not None:
-            nombre_parts.append(nombre)
-        elif profesor.nombre_completo:
-            nombre_parts.append(profesor.nombre_completo.split()[0] if profesor.nombre_completo.split() else "")
-        if ap is not None:
-            nombre_parts.append(ap)
-        elif profesor.nombre_completo and len(profesor.nombre_completo.split()) > 1:
-            nombre_parts.append(profesor.nombre_completo.split()[1])
-        if am is not None:
-            nombre_parts.append(am)
-        elif profesor.nombre_completo and len(profesor.nombre_completo.split()) > 2:
-            nombre_parts.extend(profesor.nombre_completo.split()[2:])
-        update_data["nombre_completo"] = " ".join(p for p in nombre_parts if p)
     for key, value in update_data.items():
         if hasattr(profesor, key):
             setattr(profesor, key, value)

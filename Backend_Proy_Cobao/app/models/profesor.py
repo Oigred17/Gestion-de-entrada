@@ -8,7 +8,7 @@ class Profesor(Base):
     __tablename__ = "profesores"
 
     id_profesor = Column(Integer, primary_key=True, index=True)
-    numero_empleado = Column(String(20), unique=True, nullable=False)
+    num_nomina = Column(Integer, unique=True, nullable=False)
     nombre_completo = Column(String(150), nullable=False)
     telefono = Column(String(20), nullable=True)
     domicilio = Column(Text, nullable=True)

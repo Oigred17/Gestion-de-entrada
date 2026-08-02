@@ -4,12 +4,8 @@ export interface Alumno {
   nombre: string;
   apellido_paterno: string;
   apellido_materno: string;
-  email: string;
   telefono?: string;
-  fecha_nacimiento?: string;
-  genero?: string;
   direccion?: string;
-  grupo_id?: number;
   estatus: string;
   created_at?: string;
   updated_at?: string;
@@ -18,10 +14,7 @@ export interface Alumno {
   tipo_sangre?: string;
   tutor_nombre?: string;
   tutor_telefono?: string;
-  capacitacion?: string;
-  cohorte?: string;
-  turno?: string;
-  grupo_nombre?: string;
+  id_grupo?: number;
 }
 
 export interface AlumnoCreate {
@@ -29,22 +22,15 @@ export interface AlumnoCreate {
   nombre: string;
   apellido_paterno: string;
   apellido_materno: string;
-  email: string;
   telefono?: string;
-  fecha_nacimiento?: string;
-  genero?: string;
   direccion?: string;
-  grupo_id?: number;
   estatus?: string;
   curp?: string;
   nss?: string;
   tipo_sangre?: string;
   tutor_nombre?: string;
   tutor_telefono?: string;
-  capacitacion?: string;
-  cohorte?: string;
-  turno?: string;
-  grupo_nombre?: string;
+  id_grupo?: number;
 }
 
 export interface AlumnoUpdate {
@@ -52,50 +38,39 @@ export interface AlumnoUpdate {
   nombre?: string;
   apellido_paterno?: string;
   apellido_materno?: string;
-  email?: string;
   telefono?: string;
-  fecha_nacimiento?: string;
-  genero?: string;
   direccion?: string;
-  grupo_id?: number;
   estatus?: string;
   curp?: string;
   nss?: string;
   tipo_sangre?: string;
   tutor_nombre?: string;
   tutor_telefono?: string;
-  capacitacion?: string;
-  cohorte?: string;
-  turno?: string;
-  grupo_nombre?: string;
+  id_grupo?: number;
 }
 
 export interface Profesor {
   id: number;
-  nombre: string;
-  apellido_paterno: string;
-  apellido_materno: string;
-  email: string;
+  num_nomina: number;
+  nombre_completo: string;
   telefono?: string;
-  especialidad?: string;
-  estatus: string;
-  created_at?: string;
-  updated_at?: string;
+  domicilio?: string;
+  activo: boolean;
+  fecha_registro?: string;
 }
 
 export interface ProfesorCreate {
-  nombre: string;
-  apellido_paterno: string;
-  apellido_materno: string;
-  email: string;
+  num_nomina: number;
+  nombre_completo: string;
   telefono?: string;
-  especialidad?: string;
+  domicilio?: string;
   estatus?: string;
 }
 
 export interface Grupo {
   id: number;
   nombre: string;
+  clave_grupo?: number;
   descripcion?: string;
   ciclo_escolar_id?: number;
   profesor_id?: number;
@@ -106,6 +81,7 @@ export interface Grupo {
 
 export interface GrupoCreate {
   nombre: string;
+  clave_grupo?: number;
   descripcion?: string;
   ciclo_escolar_id?: number;
   profesor_id?: number;
@@ -196,26 +172,45 @@ export interface CicloEscolarCreate {
   estatus?: string;
 }
 
-export interface Inscripcion {
+export interface Justificacion {
   id: number;
-  alumno_id: number;
-  ciclo_escolar_id: number;
-  grupo_id?: number;
-  fecha_inscripcion: string;
-  estatus: string;
-  created_at?: string;
-  updated_at?: string;
+  id_alumno?: number;
+  id_grupo?: number;
+  fecha_inicio: string;
+  fecha_fin: string;
+  motivo: string;
+  id_usuario_registro: number;
+  fecha_registro?: string;
   alumno?: Alumno;
-  ciclo_escolar?: CicloEscolar;
-  grupo?: Grupo;
 }
 
-export interface InscripcionCreate {
-  alumno_id: number;
-  ciclo_escolar_id: number;
-  grupo_id?: number;
-  fecha_inscripcion?: string;
-  estatus?: string;
+export interface JustificacionCreate {
+  id_alumno?: number;
+  id_grupo?: number;
+  fecha_inicio: string;
+  fecha_fin: string;
+  motivo: string;
+  id_usuario_registro: number;
+}
+
+export interface Reporte {
+  id: number;
+  id_alumno: number;
+  id_prefecto: number;
+  motivo: string;
+  sancion: string;
+  fecha: string;
+  fecha_registro?: string;
+  alumno?: Alumno;
+  prefecto?: Usuario;
+}
+
+export interface ReporteCreate {
+  id_alumno: number;
+  id_prefecto: number;
+  motivo: string;
+  sancion: string;
+  fecha?: string;
 }
 
 export interface Usuario {
@@ -242,10 +237,14 @@ export interface Rol {
 
 export interface Permiso {
   id: number;
-  nombre: string;
-  descripcion?: string;
-  modulo: string;
+  alumno_id: number;
+  tipo: string;
+  descripcion: string;
+  fecha: string;
   estatus: string;
+  created_at?: string;
+  updated_at?: string;
+  alumno?: Alumno;
 }
 
 export interface Incidencia {

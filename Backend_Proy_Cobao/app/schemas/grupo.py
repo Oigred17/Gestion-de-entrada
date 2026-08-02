@@ -24,6 +24,7 @@ class GrupoResponse(BaseModel):
 
     id: int
     nombre: str
+    clave_grupo: int | None = None
     descripcion: str = ""
     ciclo_escolar_id: int | None = None
     profesor_id: int | None = None
@@ -36,11 +37,10 @@ class GrupoResponse(BaseModel):
     def _from_db(cls, data):
         if hasattr(data, "clave_grupo"):
             clave = getattr(data, "clave_grupo", 0)
-            semestre = clave // 100 if clave else 0
-            nombre = f"{semestre}ro - {clave}"
             return {
                 "id": data.id,
-                "nombre": nombre,
+                "nombre": str(clave),
+                "clave_grupo": clave,
                 "descripcion": "",
                 "ciclo_escolar_id": getattr(data, "ciclo_escolar_id", None),
                 "profesor_id": None,

@@ -114,7 +114,7 @@ export default function ReportsPage() {
     }
     if (reportMode === 'grupo' && selectedGroup !== 'Todos') {
       const alumno = alumnosData.find(a => a.id === alumnoId);
-      if (alumno && getGrupoNombre(alumno.grupo_id) !== selectedGroup) return false;
+      if (alumno && getGrupoNombre(alumno.id_grupo) !== selectedGroup) return false;
     }
     return true;
   };
@@ -142,7 +142,7 @@ export default function ReportsPage() {
 
   const studentStats = reportMode === 'individual' && selectedStudent ? {
     nombre: getNombreCompleto(selectedStudent),
-    grupo: getGrupoNombre(selectedStudent.grupo_id),
+    grupo: getGrupoNombre(selectedStudent.id_grupo),
     totalRegistros: filteredRecords.length,
     entradas: filteredRecords.filter(r => r.tipo === 'ENTRADA').length,
     retardos: filteredRecords.filter(r => r.tipo === 'retardo').length,
@@ -152,14 +152,14 @@ export default function ReportsPage() {
   const groupStats = allGroups.filter(g => g !== 'Todos').map(group => {
     const asistencias = registrosData.filter(r => {
       const alumno = r.alumno || alumnoMap[r.alumno_id];
-      return alumno && getGrupoNombre(alumno.grupo_id) === group && r.tipo_acceso === 'ENTRADA';
+      return alumno && getGrupoNombre(alumno.id_grupo) === group && r.tipo_acceso === 'ENTRADA';
     }).length;
     const retardosCount = retardosData.filter(r => {
-      return r.alumno && getGrupoNombre(r.alumno.grupo_id) === group;
+      return r.alumno && getGrupoNombre(r.alumno.id_grupo) === group;
     }).length;
     const salidas = registrosData.filter(r => {
       const alumno = r.alumno || alumnoMap[r.alumno_id];
-      return alumno && getGrupoNombre(alumno.grupo_id) === group && r.tipo_acceso === 'SALIDA';
+      return alumno && getGrupoNombre(alumno.id_grupo) === group && r.tipo_acceso === 'SALIDA';
     }).length;
     return { group, asistencias, retardos: retardosCount, salidas };
   });
@@ -415,7 +415,7 @@ export default function ReportsPage() {
                     >
                       <strong>{getNombreCompleto(s)}</strong>
                       <span style={{ fontSize: 12, color: COLORS.textMuted, marginLeft: 8 }}>
-                        {s.matricula} - {getGrupoNombre(s.grupo_id)}
+                        {s.matricula} - {getGrupoNombre(s.id_grupo)}
                       </span>
                     </button>
                   ))}
@@ -434,7 +434,7 @@ export default function ReportsPage() {
                 }}>
                   <User size={16} color={COLORS.primary} />
                   <strong style={{ color: COLORS.text }}>{getNombreCompleto(selectedStudent)}</strong>
-                  <span style={{ color: COLORS.textSec }}>- {getGrupoNombre(selectedStudent.grupo_id)} - {selectedStudent.matricula}</span>
+                  <span style={{ color: COLORS.textSec }}>- {getGrupoNombre(selectedStudent.id_grupo)} - {selectedStudent.matricula}</span>
                   <button
                     onClick={() => { setSelectedStudentId(null); setSearchStudent(''); setReportGenerated(false); }}
                     style={{

@@ -70,7 +70,7 @@ export default function IncidentsPage({ role }: IncidentsPageProps) {
         idAlumno: a.id,
         nombreCompleto: `${a.apellido_paterno} ${a.apellido_materno} ${a.nombre}`.trim(),
         matricula: a.matricula,
-        grupo: a.grupo_id?.toString() ?? '',
+        grupo: a.id_grupo?.toString() ?? '',
       })));
     }).catch(console.error);
   }, []);

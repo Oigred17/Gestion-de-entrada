@@ -79,7 +79,7 @@ export default function CredentialDetailPage() {
     if (studentData) {
       setEditName(nombreCompleto(studentData));
       setEditControl(studentData.matricula);
-      setEditGrupo(studentData.grupo_id?.toString() ?? '');
+      setEditGrupo(studentData.id_grupo?.toString() ?? '');
     }
   }, [studentData]);
 
@@ -107,7 +107,7 @@ export default function CredentialDetailPage() {
     if (studentData) {
       setEditName(nombreCompleto(studentData));
       setEditControl(studentData.matricula);
-      setEditGrupo(studentData.grupo_id?.toString() ?? '');
+      setEditGrupo(studentData.id_grupo?.toString() ?? '');
     }
     setIsEditing(false);
   };
@@ -232,7 +232,7 @@ export default function CredentialDetailPage() {
           <div style={{ flex: 1 }}>
             <div style={{ fontSize: 18, fontWeight: 700, color: '#1C1819' }}>{nombreCompleto(studentData)}</div>
             <div style={{ fontSize: 16, fontFamily: 'monospace', color: '#EB2466', marginTop: 2 }}>{studentData.matricula}</div>
-            <div style={{ fontSize: 13, color: '#5F5657', marginTop: 2 }}>Grupo: {studentData.grupo_id ?? '-'}</div>
+            <div style={{ fontSize: 13, color: '#5F5657', marginTop: 2 }}>Grupo: {studentData.id_grupo ?? '-'}</div>
           </div>
           {!isEditing ? (
             <button onClick={() => setIsEditing(true)} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '8px 14px', border: 'none', borderRadius: 8, background: '#AB1748', color: '#fff', fontSize: 13, fontWeight: 500, cursor: 'pointer' }}>
@@ -278,7 +278,7 @@ export default function CredentialDetailPage() {
                 <input type="text" value={editGrupo} onChange={(e) => setEditGrupo(e.target.value)}
                   style={{ width: '100%', padding: '6px 10px', border: '1px solid #CAC6C7', borderRadius: 6, fontSize: 14, fontWeight: 500, marginTop: 4, fontFamily: 'var(--font-sans)' }} />
               ) : (
-                <FieldValue>{studentData.grupo_id ?? '-'}</FieldValue>
+                <FieldValue>{studentData.id_grupo ?? '-'}</FieldValue>
               )}
             </div>
             <div>
