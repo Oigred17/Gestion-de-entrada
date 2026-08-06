@@ -2,13 +2,15 @@ from datetime import date
 
 from pydantic import BaseModel, model_validator
 
+from app.validators import CicloNombreStr, EstatusStr
+
 
 class CicloEscolarCreate(BaseModel):
-    nombre: str
+    nombre: CicloNombreStr
     fecha_inicio: date
     fecha_fin: date
     activo: bool | None = None
-    estatus: str | None = None
+    estatus: EstatusStr | None = None
 
     @property
     def resolved_activo(self) -> bool:
@@ -20,11 +22,11 @@ class CicloEscolarCreate(BaseModel):
 
 
 class CicloEscolarUpdate(BaseModel):
-    nombre: str | None = None
+    nombre: CicloNombreStr | None = None
     fecha_inicio: date | None = None
     fecha_fin: date | None = None
     activo: bool | None = None
-    estatus: str | None = None
+    estatus: EstatusStr | None = None
 
 
 class CicloEscolarResponse(BaseModel):

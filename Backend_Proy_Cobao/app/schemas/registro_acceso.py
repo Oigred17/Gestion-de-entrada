@@ -2,16 +2,18 @@ from datetime import datetime
 
 from pydantic import BaseModel, model_validator
 
+from app.validators import EstatusStr, TextoLibreStr
+
 
 class RegistroAccesoCreate(BaseModel):
     id_credencial: int | None = None
     credencial_id: int | None = None
-    tipo_evento: str | None = None
-    tipo_acceso: str | None = None
+    tipo_evento: EstatusStr | None = None
+    tipo_acceso: EstatusStr | None = None
     alumno_id: int | None = None
     fecha_hora: datetime | None = None
-    ubicacion: str | None = None
-    estatus: str | None = None
+    ubicacion: TextoLibreStr | None = None
+    estatus: EstatusStr | None = None
 
     @property
     def resolved_credencial_id(self) -> int:

@@ -2,16 +2,18 @@ from datetime import date, datetime, time
 
 from pydantic import BaseModel, model_validator
 
+from app.validators import EstatusStr, HoraStr, TextoLibreStr
+
 
 class RetardoCreate(BaseModel):
     alumno_id: int | None = None
     id_alumno: int | None = None
     fecha: date
     minutos_retardo: int | None = None
-    hora_llegada: str | None = None
-    hora_esperada: str | None = None
-    observaciones: str | None = None
-    estatus: str | None = None
+    hora_llegada: HoraStr | None = None
+    hora_esperada: HoraStr | None = None
+    observaciones: TextoLibreStr | None = None
+    estatus: EstatusStr | None = None
 
     @property
     def resolved_id_alumno(self) -> int:
@@ -33,9 +35,9 @@ class RetardoCreate(BaseModel):
 
 class RetardoUpdate(BaseModel):
     minutos_retardo: int | None = None
-    hora_llegada: str | None = None
-    observaciones: str | None = None
-    estatus: str | None = None
+    hora_llegada: HoraStr | None = None
+    observaciones: TextoLibreStr | None = None
+    estatus: EstatusStr | None = None
 
 
 class RetardoResponse(BaseModel):

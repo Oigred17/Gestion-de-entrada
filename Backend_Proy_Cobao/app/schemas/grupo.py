@@ -1,22 +1,24 @@
 from pydantic import BaseModel, model_validator
 
+from app.validators import EstatusStr, MatriculaStr, TextoLibreStr
+
 
 class GrupoCreate(BaseModel):
-    nombre: str | None = None
+    nombre: MatriculaStr | None = None
     clave_grupo: int | None = None
-    descripcion: str | None = None
+    descripcion: TextoLibreStr | None = None
     ciclo_escolar_id: int | None = None
     profesor_id: int | None = None
-    estatus: str | None = None
+    estatus: EstatusStr | None = None
 
 
 class GrupoUpdate(BaseModel):
-    nombre: str | None = None
+    nombre: MatriculaStr | None = None
     clave_grupo: int | None = None
-    descripcion: str | None = None
+    descripcion: TextoLibreStr | None = None
     ciclo_escolar_id: int | None = None
     profesor_id: int | None = None
-    estatus: str | None = None
+    estatus: EstatusStr | None = None
 
 
 class GrupoResponse(BaseModel):

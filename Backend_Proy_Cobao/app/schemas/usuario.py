@@ -3,19 +3,20 @@ from datetime import datetime
 from pydantic import BaseModel, model_validator
 
 from app.schemas.alumno import _split_nombre
+from app.validators import EmailStr, EstatusStr, NombreStr, UsernameStr
 
 
 class UsuarioCreate(BaseModel):
-    username: str
+    username: UsernameStr
     password_user: str
-    nombre: str = ""
-    apellido_paterno: str = ""
-    apellido_materno: str = ""
-    nombre_completo: str | None = None
-    email: str | None = None
+    nombre: NombreStr = ""
+    apellido_paterno: NombreStr = ""
+    apellido_materno: NombreStr = ""
+    nombre_completo: NombreStr | None = None
+    email: EmailStr | None = None
     rol_id: int | None = None
     id_rol: int | None = None
-    estatus: str | None = None
+    estatus: EstatusStr | None = None
     activo: bool = True
 
     @property
@@ -36,16 +37,16 @@ class UsuarioCreate(BaseModel):
 
 
 class UsuarioUpdate(BaseModel):
-    username: str | None = None
+    username: UsernameStr | None = None
     password_user: str | None = None
-    nombre: str | None = None
-    apellido_paterno: str | None = None
-    apellido_materno: str | None = None
-    nombre_completo: str | None = None
-    email: str | None = None
+    nombre: NombreStr | None = None
+    apellido_paterno: NombreStr | None = None
+    apellido_materno: NombreStr | None = None
+    nombre_completo: NombreStr | None = None
+    email: EmailStr | None = None
     rol_id: int | None = None
     id_rol: int | None = None
-    estatus: str | None = None
+    estatus: EstatusStr | None = None
     activo: bool | None = None
 
 

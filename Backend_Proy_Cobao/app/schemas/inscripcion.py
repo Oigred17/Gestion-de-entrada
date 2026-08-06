@@ -2,6 +2,8 @@ from datetime import date
 
 from pydantic import BaseModel, model_validator
 
+from app.validators import EstatusStr
+
 
 class InscripcionCreate(BaseModel):
     alumno_id: int | None = None
@@ -10,7 +12,7 @@ class InscripcionCreate(BaseModel):
     id_grupo: int | None = None
     ciclo_escolar_id: int
     fecha_inscripcion: str | None = None
-    estatus: str | None = None
+    estatus: EstatusStr | None = None
 
     @property
     def resolved_alumno_id(self) -> int:
@@ -25,7 +27,7 @@ class InscripcionUpdate(BaseModel):
     grupo_id: int | None = None
     id_grupo: int | None = None
     ciclo_escolar_id: int | None = None
-    estatus: str | None = None
+    estatus: EstatusStr | None = None
 
 
 class InscripcionResponse(BaseModel):

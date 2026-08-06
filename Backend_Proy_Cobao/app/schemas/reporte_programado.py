@@ -2,22 +2,24 @@ from datetime import date
 
 from pydantic import BaseModel, model_validator
 
+from app.validators import DestinatariosStr, NombreStr
+
 
 class ReporteProgramadoCreate(BaseModel):
-    nombre: str
-    frecuencia: str
+    nombre: NombreStr
+    frecuencia: NombreStr
     ultima_generacion: date | None = None
     proxima_generacion: date | None = None
-    destinatarios: str | None = None
+    destinatarios: DestinatariosStr | None = None
     activo: bool = True
 
 
 class ReporteProgramadoUpdate(BaseModel):
-    nombre: str | None = None
-    frecuencia: str | None = None
+    nombre: NombreStr | None = None
+    frecuencia: NombreStr | None = None
     ultima_generacion: date | None = None
     proxima_generacion: date | None = None
-    destinatarios: str | None = None
+    destinatarios: DestinatariosStr | None = None
     activo: bool | None = None
 
 

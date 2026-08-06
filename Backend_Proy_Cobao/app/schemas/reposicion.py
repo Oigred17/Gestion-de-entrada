@@ -2,11 +2,13 @@ from datetime import date
 
 from pydantic import BaseModel, model_validator
 
+from app.validators import TextoLibreStr
+
 
 class ReposicionCreate(BaseModel):
     id_alumno: int
     id_credencial: int | None = None
-    motivo: str
+    motivo: TextoLibreStr
     fecha_solicitud: date | None = None
     fecha_entrega: date | None = None
     id_usuario_registro: int | None = None
@@ -14,7 +16,7 @@ class ReposicionCreate(BaseModel):
 
 class ReposicionUpdate(BaseModel):
     id_credencial: int | None = None
-    motivo: str | None = None
+    motivo: TextoLibreStr | None = None
     fecha_solicitud: date | None = None
     fecha_entrega: date | None = None
 

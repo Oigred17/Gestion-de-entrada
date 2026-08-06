@@ -2,6 +2,18 @@ from datetime import datetime
 
 from pydantic import BaseModel, model_validator
 
+from app.validators import (
+    CurpStr,
+    DireccionStr,
+    EstatusStr,
+    FechaStr,
+    MatriculaStr,
+    NombreStr,
+    NssStr,
+    TelefonoStr,
+    TipoSangreStr,
+)
+
 
 def _split_nombre(nombre_completo: str) -> dict:
     parts = (nombre_completo or "").split()
@@ -13,22 +25,22 @@ def _split_nombre(nombre_completo: str) -> dict:
 
 
 class AlumnoCreate(BaseModel):
-    matricula: str
-    nombre: str
-    apellido_paterno: str
-    apellido_materno: str
-    telefono: str | None = None
-    direccion: str | None = None
-    estatus: str | None = None
-    curp: str | None = None
-    nss: str | None = None
-    tipo_sangre: str | None = None
-    capacitacion: str | None = None
-    turno: str | None = None
-    cohorte: str | None = None
-    fecha_nacimiento: str | None = None
-    tutor_nombre: str | None = None
-    tutor_telefono: str | None = None
+    matricula: MatriculaStr
+    nombre: NombreStr
+    apellido_paterno: NombreStr
+    apellido_materno: NombreStr
+    telefono: TelefonoStr | None = None
+    direccion: DireccionStr | None = None
+    estatus: EstatusStr | None = None
+    curp: CurpStr | None = None
+    nss: NssStr | None = None
+    tipo_sangre: TipoSangreStr | None = None
+    capacitacion: NombreStr | None = None
+    turno: NombreStr | None = None
+    cohorte: MatriculaStr | None = None
+    fecha_nacimiento: FechaStr | None = None
+    tutor_nombre: NombreStr | None = None
+    tutor_telefono: TelefonoStr | None = None
     id_grupo: int | None = None
 
     @property
@@ -43,22 +55,22 @@ class AlumnoCreate(BaseModel):
 
 
 class AlumnoUpdate(BaseModel):
-    matricula: str | None = None
-    nombre: str | None = None
-    apellido_paterno: str | None = None
-    apellido_materno: str | None = None
-    telefono: str | None = None
-    direccion: str | None = None
-    estatus: str | None = None
-    curp: str | None = None
-    nss: str | None = None
-    tipo_sangre: str | None = None
-    capacitacion: str | None = None
-    turno: str | None = None
-    cohorte: str | None = None
-    fecha_nacimiento: str | None = None
-    tutor_nombre: str | None = None
-    tutor_telefono: str | None = None
+    matricula: MatriculaStr | None = None
+    nombre: NombreStr | None = None
+    apellido_paterno: NombreStr | None = None
+    apellido_materno: NombreStr | None = None
+    telefono: TelefonoStr | None = None
+    direccion: DireccionStr | None = None
+    estatus: EstatusStr | None = None
+    curp: CurpStr | None = None
+    nss: NssStr | None = None
+    tipo_sangre: TipoSangreStr | None = None
+    capacitacion: NombreStr | None = None
+    turno: NombreStr | None = None
+    cohorte: MatriculaStr | None = None
+    fecha_nacimiento: FechaStr | None = None
+    tutor_nombre: NombreStr | None = None
+    tutor_telefono: TelefonoStr | None = None
     id_grupo: int | None = None
 
 

@@ -2,18 +2,20 @@ from datetime import date
 
 from pydantic import BaseModel, model_validator
 
+from app.validators import TextoLibreStr
+
 
 class ReporteCreate(BaseModel):
     id_alumno: int
     id_prefecto: int
-    motivo: str
-    sancion: str
+    motivo: TextoLibreStr
+    sancion: TextoLibreStr
     fecha: date | None = None
 
 
 class ReporteUpdate(BaseModel):
-    motivo: str | None = None
-    sancion: str | None = None
+    motivo: TextoLibreStr | None = None
+    sancion: TextoLibreStr | None = None
 
 
 class ReporteResponse(BaseModel):

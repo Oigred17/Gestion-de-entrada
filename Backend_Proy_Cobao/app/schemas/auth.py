@@ -1,8 +1,10 @@
 from pydantic import BaseModel
 
+from app.validators import UsernameStr
+
 
 class LoginRequest(BaseModel):
-    username: str
+    username: UsernameStr
     password: str
 
 

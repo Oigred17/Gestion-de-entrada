@@ -1,12 +1,14 @@
 from pydantic import BaseModel, model_validator
 
+from app.validators import DireccionStr, EstatusStr, NombreStr, TelefonoStr
+
 
 class ProfesorCreate(BaseModel):
     num_nomina: int
-    nombre_completo: str
-    telefono: str | None = None
-    domicilio: str | None = None
-    estatus: str | None = None
+    nombre_completo: NombreStr
+    telefono: TelefonoStr | None = None
+    domicilio: DireccionStr | None = None
+    estatus: EstatusStr | None = None
 
     @property
     def resolved_activo(self) -> bool:
@@ -21,10 +23,10 @@ class ProfesorCreate(BaseModel):
 
 class ProfesorUpdate(BaseModel):
     num_nomina: int | None = None
-    nombre_completo: str | None = None
-    telefono: str | None = None
-    domicilio: str | None = None
-    estatus: str | None = None
+    nombre_completo: NombreStr | None = None
+    telefono: TelefonoStr | None = None
+    domicilio: DireccionStr | None = None
+    estatus: EstatusStr | None = None
 
 
 class ProfesorResponse(BaseModel):

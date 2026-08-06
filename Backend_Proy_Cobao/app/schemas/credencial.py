@@ -2,15 +2,17 @@ from datetime import date
 
 from pydantic import BaseModel, model_validator
 
+from app.validators import EstatusStr, UidNfcStr
+
 
 class CredencialCreate(BaseModel):
-    numero: str | None = None
-    uid_nfc: str | None = None
+    numero: UidNfcStr | None = None
+    uid_nfc: UidNfcStr | None = None
     alumno_id: int | None = None
     id_alumno: int | None = None
     id_profesor: int | None = None
-    tipo: str | None = None
-    estatus: str | None = None
+    tipo: EstatusStr | None = None
+    estatus: EstatusStr | None = None
     fecha_emision: date | None = None
     fecha_expiracion: date | None = None
     fecha_vencimiento: date | None = None
@@ -35,10 +37,10 @@ class CredencialCreate(BaseModel):
 
 
 class CredencialUpdate(BaseModel):
-    uid_nfc: str | None = None
-    numero: str | None = None
+    uid_nfc: UidNfcStr | None = None
+    numero: UidNfcStr | None = None
     activa: bool | None = None
-    estatus: str | None = None
+    estatus: EstatusStr | None = None
     id_alumno: int | None = None
     alumno_id: int | None = None
     fecha_vencimiento: date | None = None

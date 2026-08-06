@@ -1,14 +1,16 @@
 from pydantic import BaseModel, model_validator
 
+from app.validators import NombreStr, TextoLibreStr
+
 
 class RolCreate(BaseModel):
-    nombre: str
-    descripcion: str | None = None
+    nombre: NombreStr
+    descripcion: TextoLibreStr | None = None
 
 
 class RolUpdate(BaseModel):
-    nombre: str | None = None
-    descripcion: str | None = None
+    nombre: NombreStr | None = None
+    descripcion: TextoLibreStr | None = None
 
 
 class RolResponse(BaseModel):

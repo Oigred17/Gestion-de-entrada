@@ -13,6 +13,7 @@ from app.database import async_session
 from app.models.registro_acceso import RegistroAcceso
 from app.nfc_manager import nfc_manager
 from app.schemas.registro_acceso import RegistroAccesoCreate
+from app.validators import UidNfcStr
 
 logger = logging.getLogger(__name__)
 
@@ -20,12 +21,12 @@ router = APIRouter(prefix="/nfc", tags=["NFC"])
 
 
 class NFCScanRequest(BaseModel):
-    uid_nfc: str
+    uid_nfc: UidNfcStr
     tipo: str = "auto"
 
 
 class NFCWriteRequest(BaseModel):
-    uid_nfc: str
+    uid_nfc: UidNfcStr
     credencial_id: int
 
 
