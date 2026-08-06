@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.credencial import Credencial
@@ -53,6 +53,13 @@ async def get_registro(db: AsyncSession, id_registro: int):
         select(RegistroAcceso).where(RegistroAcceso.id_registro == id_registro)
     )
     return result.scalar_one_or_none()
+
+
+async def count_registros_by_credencial(db: AsyncSession, id_credencial: int) -> int:
+    result = await db.execute(
+        select(func.count()).where(RegistroAcceso.id_credencial == id_credencial)
+    )
+    return result.scalar() or 0
 
 
 async def create_registro(db: AsyncSession, data: RegistroAccesoCreate):

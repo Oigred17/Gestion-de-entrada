@@ -161,6 +161,31 @@ async def write_card(data: NFCWriteRequest):
         if not credencial:
             return {"status": "error", "message": "Credencial no encontrada"}
 
+        otro = await crud_credencial.get_credencial_by_uid_excluding(
+            db, data.uid_nfc, data.credencial_id
+        )
+        if otro:
+            return {
+                "status": "error",
+                "message": "Este chip NFC ya esta asignado a otra credencial. Usa un chip diferente.",
+            }
+
+        if credencial.id_alumno is not None:
+            activa_existente = (
+                await crud_credencial.get_credencial_activa_by_alumno(
+                    db, credencial.id_alumno
+                )
+            )
+            if activa_existente and activa_existente.id_credencial != data.credencial_id:
+                return {
+                    "status": "error",
+                    "message": (
+                        "El alumno ya tiene una credencial activa (UID: "
+                        f"{activa_existente.uid_nfc}). Para escribir los datos en "
+                        "un nuevo chip primero da de baja o elimina la credencial anterior."
+                    ),
+                }
+
         credencial.uid_nfc = data.uid_nfc
         await db.commit()
 

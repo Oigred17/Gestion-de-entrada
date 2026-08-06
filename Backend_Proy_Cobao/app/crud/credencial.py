@@ -36,6 +36,28 @@ async def get_credencial_by_uid(db: AsyncSession, uid_nfc: str):
     return result.scalar_one_or_none()
 
 
+async def get_credencial_by_uid_excluding(
+    db: AsyncSession, uid_nfc: str, exclude_id: int
+):
+    result = await db.execute(
+        select(Credencial).where(
+            Credencial.uid_nfc == uid_nfc,
+            Credencial.id_credencial != exclude_id,
+        )
+    )
+    return result.scalar_one_or_none()
+
+
+async def get_credencial_activa_by_alumno(db: AsyncSession, id_alumno: int):
+    result = await db.execute(
+        select(Credencial).where(
+            Credencial.id_alumno == id_alumno,
+            Credencial.activa == True,
+        )
+    )
+    return result.scalar_one_or_none()
+
+
 async def create_credencial(db: AsyncSession, data: CredencialCreate):
     credencial = Credencial(
         uid_nfc=data.resolved_uid_nfc,
