@@ -7,6 +7,7 @@ export interface UsuarioCreate {
   nombre?: string;
   apellido_paterno?: string;
   apellido_materno?: string;
+  email?: string;
   id_rol: number;
   activo?: boolean;
 }

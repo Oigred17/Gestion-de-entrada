@@ -70,10 +70,11 @@ class UsuarioResponse(BaseModel):
         if hasattr(data, "id_usuario"):
             parts = _split_nombre(getattr(data, "nombre_completo", "") or "")
             activo = getattr(data, "activo", True)
+            email = getattr(data, "email", None)
             return {
                 "id": data.id_usuario,
                 "username": data.username,
-                "email": f"{data.username}@cobao.edu.mx",
+                "email": email or f"{data.username}@cobao.edu.mx",
                 "nombre": parts["nombre"],
                 "apellido_paterno": parts["apellido_paterno"],
                 "apellido_materno": parts["apellido_materno"],

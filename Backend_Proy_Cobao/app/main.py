@@ -10,7 +10,7 @@ from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
-from sqlalchemy import select
+from sqlalchemy import select, text
 
 from app.database import async_session, engine
 from app.models.rol import Rol
@@ -66,6 +66,14 @@ USUARIOS_SEED = [
 ]
 
 
+async def migrate_database():
+    """Migraciones ligeras e idempotentes para bases existentes."""
+    async with engine.begin() as conn:
+        await conn.execute(
+            text("ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS email VARCHAR(120)")
+        )
+
+
 async def seed_database():
     async with async_session() as db:
         roles_map = {}
@@ -95,6 +103,7 @@ async def seed_database():
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    await migrate_database()
     await seed_database()
     yield
     await engine.dispose()

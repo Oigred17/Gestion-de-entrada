@@ -27,6 +27,7 @@ async def create_usuario(db: AsyncSession, data: UsuarioCreate):
     usuario = Usuario(
         username=data.username,
         password_user=hashed,
+        email=data.email,
         nombre_completo=data.resolved_nombre_completo,
         id_rol=data.resolved_id_rol,
         activo=data.resolved_activo,
@@ -64,7 +65,6 @@ async def update_usuario(db: AsyncSession, id_usuario: int, data: UsuarioUpdate)
         elif usuario.nombre_completo and len(usuario.nombre_completo.split()) > 2:
             nombre_parts.extend(usuario.nombre_completo.split()[2:])
         update_data["nombre_completo"] = " ".join(p for p in nombre_parts if p)
-    update_data.pop("email", None)
     if "rol_id" in update_data:
         update_data["id_rol"] = update_data.pop("rol_id")
     for key, value in update_data.items():

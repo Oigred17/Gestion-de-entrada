@@ -322,6 +322,18 @@ export interface LoginResponse {
   token_type: string;
 }
 
+export interface RecoveryResponse {
+  status: string;
+  email?: string;
+  message?: string;
+}
+
+export interface ResetPasswordRequest {
+  username: string;
+  code: string;
+  new_password: string;
+}
+
 export interface User {
   id: number;
   username: string;

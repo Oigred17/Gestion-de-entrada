@@ -4,14 +4,21 @@ import bcrypt
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer
 from jose import JWTError, jwt
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
 from app.database import get_db
 from app.models.rol import Rol
 from app.models.usuario import Usuario
-from app.schemas.auth import LoginRequest, TokenResponse, UserResponse
+from app.schemas.auth import (
+    LoginRequest,
+    RecoverRequest,
+    ResetPasswordRequest,
+    TokenResponse,
+    UserResponse,
+)
+from app.services import email_service, recovery
 
 router = APIRouter(prefix="/auth", tags=["Auth"])
 
@@ -109,3 +116,102 @@ async def get_me(
         apellido_materno=name_parts[2] if len(name_parts) > 2 else "",
         rol=rol_nombre,
     )
+
+
+@router.post("/recover/request")
+async def request_recovery(
+    data: RecoverRequest, db: AsyncSession = Depends(get_db)
+):
+    """Solicita el envio de un codigo de verificacion al correo del usuario."""
+    username = data.username.strip()
+    resultado = {
+        "status": "ok",
+        "message": (
+            "Si el usuario existe y tiene un correo registrado, "
+            "se envio un codigo de verificacion."
+        ),
+    }
+
+    result = await db.execute(
+        select(Usuario).where(func.lower(Usuario.username) == username.lower())
+    )
+    usuario = result.scalar_one_or_none()
+
+    if not usuario or not usuario.email:
+        return resultado
+
+    if not email_service.smtp_configured():
+        return {
+            "status": "error",
+            "email": recovery.mask_email(usuario.email),
+            "message": (
+                "El envio de correo no esta configurado en el servidor. "
+                "Contacta al administrador para configurar SMTP."
+            ),
+        }
+
+    code = recovery.create_code(usuario.username)
+    subject = "COBAO - Codigo de recuperacion de contrasena"
+    body = (
+        f"Hola {usuario.nombre_completo},\n\n"
+        f"Recibimos una solicitud para restablecer la contrasena de tu cuenta "
+        f"'{usuario.username}'.\n\n"
+        f"Tu codigo de verificacion es: {code}\n\n"
+        f"Este codigo es valido por {settings.RECOVERY_CODE_EXPIRE_MINUTES} minutos. "
+        f"Si no solicitaste este cambio, ignora este correo.\n\n"
+        f"COBAO Plantel 27 Miahuatlan"
+    )
+    sent = email_service.send_email(usuario.email, subject, body)
+
+    if not sent:
+        return {
+            "status": "error",
+            "email": recovery.mask_email(usuario.email),
+            "message": "No se pudo enviar el correo. Verifica la configuracion SMTP e intenta de nuevo.",
+        }
+
+    return {
+        "status": "ok",
+        "email": recovery.mask_email(usuario.email),
+        "message": "Se envio un codigo de verificacion a tu correo.",
+    }
+
+
+@router.post("/recover/reset")
+async def reset_password(
+    data: ResetPasswordRequest, db: AsyncSession = Depends(get_db)
+):
+    """Valida el codigo y establece la nueva contrasena."""
+    username = data.username.strip()
+    code = data.code.strip()
+
+    if len(data.new_password) < 4:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="La contrasena debe tener al menos 4 caracteres.",
+        )
+
+    if not code.isdigit() or len(code) != 6:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="El codigo debe ser de 6 digitos.",
+        )
+
+    result = await db.execute(
+        select(Usuario).where(func.lower(Usuario.username) == username.lower())
+    )
+    usuario = result.scalar_one_or_none()
+
+    if not usuario or not recovery.consume_code(usuario.username, code):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Codigo invalido o expirado.",
+        )
+
+    usuario.password_user = hash_password(data.new_password)
+    await db.commit()
+
+    return {
+        "status": "ok",
+        "message": "Contrasena actualizada correctamente. Ya puedes iniciar sesion.",
+    }

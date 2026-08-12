@@ -8,6 +8,7 @@ CREATE TABLE usuarios (
     nombre_completo     VARCHAR(150) NOT NULL,
     username            VARCHAR(50) NOT NULL UNIQUE,
     password_user       VARCHAR(255) NOT NULL,
+    email               VARCHAR(120),
     id_rol              INTEGER NOT NULL REFERENCES roles(id_rol),
     activo              BOOLEAN NOT NULL DEFAULT true,
     fecha_creacion      TIMESTAMP NOT NULL DEFAULT now()

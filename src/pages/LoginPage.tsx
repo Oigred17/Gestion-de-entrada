@@ -1,6 +1,7 @@
 import { useState } from 'react';
-import { Eye, EyeOff } from 'lucide-react';
+import { Eye, EyeOff, Mail, KeyRound, ShieldCheck, ArrowLeft } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
+import { authApi } from '../api';
 
 export default function LoginPage() {
   const { login } = useAuth();
@@ -10,6 +11,17 @@ export default function LoginPage() {
   const [remember, setRemember] = useState(false);
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+
+  // Estado del flujo de recuperacion de contrasena
+  const [recoverOpen, setRecoverOpen] = useState(false);
+  const [recoverStep, setRecoverStep] = useState<'ask' | 'username' | 'code' | 'done'>('ask');
+  const [recoverUsername, setRecoverUsername] = useState('');
+  const [recoverEmail, setRecoverEmail] = useState('');
+  const [recoverCode, setRecoverCode] = useState('');
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [recoverMsg, setRecoverMsg] = useState<{ type: 'ok' | 'error'; text: string } | null>(null);
+  const [recoverLoading, setRecoverLoading] = useState(false);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -22,6 +34,88 @@ export default function LoginPage() {
       setError('Credenciales incorrectas. Intenta de nuevo.');
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  const openRecover = () => {
+    setRecoverOpen(true);
+    setRecoverStep('ask');
+    setRecoverUsername(username);
+    setRecoverEmail('');
+    setRecoverCode('');
+    setNewPassword('');
+    setConfirmPassword('');
+    setRecoverMsg(null);
+  };
+
+  const closeRecover = () => {
+    setRecoverOpen(false);
+    setRecoverMsg(null);
+  };
+
+  const sendRecoveryCode = async (uname: string) => {
+    setRecoverLoading(true);
+    setRecoverMsg(null);
+    try {
+      const res = await authApi.requestRecoveryCode(uname);
+      if (res.status === 'ok') {
+        setRecoverEmail(res.email || '');
+        setRecoverMsg({ type: 'ok', text: res.message || 'Se envio el codigo a tu correo.' });
+        setRecoverStep('code');
+      } else {
+        setRecoverMsg({ type: 'error', text: res.message || 'No se pudo enviar el correo.' });
+      }
+    } catch (err: any) {
+      const detail = err?.response?.data?.detail;
+      const text = typeof detail === 'string' ? detail : 'No se pudo enviar el correo. Intenta de nuevo.';
+      setRecoverMsg({ type: 'error', text });
+    } finally {
+      setRecoverLoading(false);
+    }
+  };
+
+  const handleRecoverSubmit = async () => {
+    if (recoverStep === 'ask') {
+      if (recoverUsername.trim()) {
+        await sendRecoveryCode(recoverUsername.trim());
+      } else {
+        setRecoverStep('username');
+      }
+      return;
+    }
+    if (recoverStep === 'username') {
+      await sendRecoveryCode(recoverUsername.trim());
+      return;
+    }
+    if (recoverStep === 'code') {
+      if (!/^\d{6}$/.test(recoverCode.trim())) {
+        setRecoverMsg({ type: 'error', text: 'Ingresa el codigo de 6 digitos recibido por correo.' });
+        return;
+      }
+      if (newPassword.length < 4) {
+        setRecoverMsg({ type: 'error', text: 'La nueva contrasena debe tener al menos 4 caracteres.' });
+        return;
+      }
+      if (newPassword !== confirmPassword) {
+        setRecoverMsg({ type: 'error', text: 'Las contrasenas no coinciden.' });
+        return;
+      }
+      setRecoverLoading(true);
+      setRecoverMsg(null);
+      try {
+        await authApi.resetPassword({
+          username: recoverUsername.trim(),
+          code: recoverCode.trim(),
+          new_password: newPassword,
+        });
+        setRecoverStep('done');
+      } catch (err: any) {
+        const detail = err?.response?.data?.detail;
+        const text = typeof detail === 'string' ? detail : 'No se pudo restablecer la contrasena.';
+        setRecoverMsg({ type: 'error', text });
+      } finally {
+        setRecoverLoading(false);
+      }
     }
   };
 
@@ -414,17 +508,23 @@ export default function LoginPage() {
                 />
                 Recordar sesion
               </label>
-              <a
-                href="#"
+              <button
+                type="button"
+                onClick={openRecover}
                 style={{
                   fontSize: 13,
                   color: '#EB2466',
                   textDecoration: 'none',
                   fontWeight: 600,
+                  background: 'none',
+                  border: 'none',
+                  cursor: 'pointer',
+                  padding: 0,
+                  fontFamily: 'var(--font-sans)',
                 }}
               >
                 Olvidaste tu contrasena
-              </a>
+              </button>
             </div>
 
             <button
@@ -481,6 +581,339 @@ export default function LoginPage() {
       >
         Colegio de Bachilleres del Estado de Oaxaca. Todos los derechos reservados.
       </div>
+
+      {/* Modal de recuperacion de contrasena */}
+      {recoverOpen && (
+        <>
+          <div
+            onClick={closeRecover}
+            style={{
+              position: 'fixed',
+              inset: 0,
+              background: 'rgba(28,24,25,0.5)',
+              zIndex: 1000,
+              backdropFilter: 'blur(2px)',
+            }}
+          />
+          <div
+            style={{
+              position: 'fixed',
+              top: '50%',
+              left: '50%',
+              transform: 'translate(-50%, -50%)',
+              width: '90%',
+              maxWidth: 420,
+              background: '#fff',
+              borderRadius: 16,
+              zIndex: 1001,
+              boxShadow: '0 20px 60px rgba(28,24,25,0.3)',
+              padding: '32px 28px',
+              fontFamily: 'var(--font-sans)',
+            }}
+          >
+            <div style={{ textAlign: 'center', marginBottom: 20 }}>
+              <div
+                style={{
+                  width: 56,
+                  height: 56,
+                  margin: '0 auto 12px',
+                  borderRadius: '50%',
+                  background: '#FEEBEE',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                }}
+              >
+                {recoverStep === 'done' ? (
+                  <ShieldCheck size={26} color="#0F8122" />
+                ) : (
+                  <KeyRound size={26} color="#EB2466" />
+                )}
+              </div>
+              <h2 style={{ margin: 0, fontSize: 20, fontWeight: 700, color: '#1C1819' }}>
+                Recuperar contrasena
+              </h2>
+            </div>
+
+            {recoverStep === 'ask' && (
+              <>
+                <p
+                  style={{
+                    fontSize: 14,
+                    color: '#5F5657',
+                    lineHeight: 1.6,
+                    textAlign: 'center',
+                    margin: '0 0 24px',
+                  }}
+                >
+                  {recoverUsername.trim() ? (
+                    <>Se enviara un codigo de verificacion al correo electronico registrado del usuario <b>{recoverUsername.trim()}</b>. Continuar?</>
+                  ) : (
+                    <>Se enviara un codigo de verificacion al correo electronico registrado de tu cuenta.</>
+                  )}
+                </p>
+                <div style={{ display: 'flex', gap: 12 }}>
+                  <button
+                    onClick={closeRecover}
+                    style={{
+                      flex: 1,
+                      padding: '12px 0',
+                      borderRadius: 10,
+                      border: '1.5px solid #CAC6C7',
+                      background: '#fff',
+                      color: '#5F5657',
+                      fontSize: 14,
+                      fontWeight: 600,
+                      cursor: 'pointer',
+                      fontFamily: 'var(--font-sans)',
+                    }}
+                  >
+                    No
+                  </button>
+                  <button
+                    onClick={() => handleRecoverSubmit()}
+                    disabled={recoverLoading}
+                    style={{
+                      flex: 1,
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      gap: 8,
+                      padding: '12px 0',
+                      borderRadius: 10,
+                      border: 'none',
+                      background: '#EB2466',
+                      color: '#fff',
+                      fontSize: 14,
+                      fontWeight: 700,
+                      cursor: recoverLoading ? 'not-allowed' : 'pointer',
+                      opacity: recoverLoading ? 0.7 : 1,
+                      fontFamily: 'var(--font-sans)',
+                    }}
+                  >
+                    <Mail size={16} />
+                    Si, enviar
+                  </button>
+                </div>
+              </>
+            )}
+
+            {recoverStep === 'username' && (
+              <>
+                <p style={{ fontSize: 14, color: '#5F5657', lineHeight: 1.6, textAlign: 'center', margin: '0 0 16px' }}>
+                  Ingresa tu usuario para enviar el codigo al correo registrado.
+                </p>
+                <input
+                  type="text"
+                  placeholder="Ingresa tu usuario"
+                  value={recoverUsername}
+                  onChange={(e) => setRecoverUsername(e.target.value)}
+                  style={{
+                    width: '100%',
+                    boxSizing: 'border-box',
+                    padding: '12px 16px',
+                    borderRadius: 10,
+                    border: '1.5px solid #CAC6C7',
+                    background: '#F0EFEF',
+                    fontSize: 14,
+                    color: '#1C1819',
+                    outline: 'none',
+                    marginBottom: 16,
+                    fontFamily: 'var(--font-sans)',
+                  }}
+                  onFocus={(e) => (e.currentTarget.style.borderColor = '#EB2466')}
+                  onBlur={(e) => (e.currentTarget.style.borderColor = '#CAC6C7')}
+                />
+                {recoverMsg && (
+                  <div style={{
+                    padding: '10px 12px',
+                    borderRadius: 10,
+                    background: recoverMsg.type === 'ok' ? '#E8F5E9' : '#FEEBEE',
+                    color: recoverMsg.type === 'ok' ? '#0F8122' : '#EB2466',
+                    fontSize: 13,
+                    marginBottom: 16,
+                    border: `1px solid ${recoverMsg.type === 'ok' ? '#0F8122' : '#EB2466'}`,
+                  }}>
+                    {recoverMsg.text}
+                  </div>
+                )}
+                <button
+                  onClick={() => handleRecoverSubmit()}
+                  disabled={recoverLoading || !recoverUsername.trim()}
+                  style={{
+                    width: '100%',
+                    padding: '12px 0',
+                    borderRadius: 10,
+                    border: 'none',
+                    background: recoverLoading || !recoverUsername.trim() ? '#CAC6C7' : '#EB2466',
+                    color: '#fff',
+                    fontSize: 15,
+                    fontWeight: 700,
+                    cursor: recoverLoading || !recoverUsername.trim() ? 'not-allowed' : 'pointer',
+                    fontFamily: 'var(--font-sans)',
+                  }}
+                >
+                  {recoverLoading ? 'Enviando...' : 'Enviar codigo'}
+                </button>
+              </>
+            )}
+
+            {recoverStep === 'code' && (
+              <>
+                <p style={{ fontSize: 14, color: '#5F5657', lineHeight: 1.6, textAlign: 'center', margin: '0 0 16px' }}>
+                  {recoverEmail && (
+                    <>Se envio un codigo de verificacion a <b>{recoverEmail}</b>.</>
+                  )}
+                  <br />
+                  Ingresa el codigo y define tu nueva contrasena.
+                </p>
+                <input
+                  type="text"
+                  inputMode="numeric"
+                  maxLength={6}
+                  placeholder="Codigo de verificacion"
+                  value={recoverCode}
+                  onChange={(e) => setRecoverCode(e.target.value.replace(/\D/g, ''))}
+                  style={{
+                    width: '100%',
+                    boxSizing: 'border-box',
+                    textAlign: 'center',
+                    letterSpacing: 6,
+                    fontSize: 18,
+                    fontWeight: 700,
+                    padding: '12px 16px',
+                    borderRadius: 10,
+                    border: '1.5px solid #CAC6C7',
+                    background: '#F0EFEF',
+                    color: '#1C1819',
+                    outline: 'none',
+                    marginBottom: 12,
+                    fontFamily: "'Roboto Mono', monospace",
+                  }}
+                />
+                <input
+                  type="password"
+                  placeholder="Nueva contrasena"
+                  value={newPassword}
+                  onChange={(e) => setNewPassword(e.target.value)}
+                  style={{
+                    width: '100%',
+                    boxSizing: 'border-box',
+                    padding: '12px 16px',
+                    borderRadius: 10,
+                    border: '1.5px solid #CAC6C7',
+                    background: '#F0EFEF',
+                    fontSize: 14,
+                    color: '#1C1819',
+                    outline: 'none',
+                    marginBottom: 12,
+                    fontFamily: 'var(--font-sans)',
+                  }}
+                />
+                <input
+                  type="password"
+                  placeholder="Confirmar nueva contrasena"
+                  value={confirmPassword}
+                  onChange={(e) => setConfirmPassword(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') handleRecoverSubmit();
+                  }}
+                  style={{
+                    width: '100%',
+                    boxSizing: 'border-box',
+                    padding: '12px 16px',
+                    borderRadius: 10,
+                    border: '1.5px solid #CAC6C7',
+                    background: '#F0EFEF',
+                    fontSize: 14,
+                    color: '#1C1819',
+                    outline: 'none',
+                    marginBottom: 16,
+                    fontFamily: 'var(--font-sans)',
+                  }}
+                />
+                {recoverMsg && (
+                  <div style={{
+                    padding: '10px 12px',
+                    borderRadius: 10,
+                    background: recoverMsg.type === 'ok' ? '#E8F5E9' : '#FEEBEE',
+                    color: recoverMsg.type === 'ok' ? '#0F8122' : '#EB2466',
+                    fontSize: 13,
+                    marginBottom: 16,
+                    border: `1px solid ${recoverMsg.type === 'ok' ? '#0F8122' : '#EB2466'}`,
+                  }}>
+                    {recoverMsg.text}
+                  </div>
+                )}
+                <button
+                  onClick={() => handleRecoverSubmit()}
+                  disabled={recoverLoading}
+                  style={{
+                    width: '100%',
+                    padding: '12px 0',
+                    borderRadius: 10,
+                    border: 'none',
+                    background: recoverLoading ? '#CAC6C7' : '#EB2466',
+                    color: '#fff',
+                    fontSize: 15,
+                    fontWeight: 700,
+                    cursor: recoverLoading ? 'not-allowed' : 'pointer',
+                    fontFamily: 'var(--font-sans)',
+                  }}
+                >
+                  {recoverLoading ? 'Restableciendo...' : 'Restablecer contrasena'}
+                </button>
+              </>
+            )}
+
+            {recoverStep === 'done' && (
+              <>
+                <p style={{ fontSize: 14, color: '#0F8122', lineHeight: 1.6, textAlign: 'center', margin: '0 0 20px', fontWeight: 500 }}>
+                  Tu contrasena se actualizo correctamente. Ya puedes iniciar sesion con la nueva contrasena.
+                </p>
+                <button
+                  onClick={closeRecover}
+                  style={{
+                    width: '100%',
+                    padding: '12px 0',
+                    borderRadius: 10,
+                    border: 'none',
+                    background: '#EB2466',
+                    color: '#fff',
+                    fontSize: 15,
+                    fontWeight: 700,
+                    cursor: 'pointer',
+                    fontFamily: 'var(--font-sans)',
+                  }}
+                >
+                  Volver al inicio de sesion
+                </button>
+              </>
+            )}
+
+            {recoverStep !== 'done' && recoverStep !== 'ask' && (
+              <button
+                onClick={() => { setRecoverStep('ask'); setRecoverMsg(null); }}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 6,
+                  margin: '16px auto 0',
+                  background: 'none',
+                  border: 'none',
+                  color: '#85787A',
+                  fontSize: 13,
+                  cursor: 'pointer',
+                  fontFamily: 'var(--font-sans)',
+                }}
+              >
+                <ArrowLeft size={14} />
+                Volver
+              </button>
+            )}
+          </div>
+        </>
+      )}
     </div>
   );
 }

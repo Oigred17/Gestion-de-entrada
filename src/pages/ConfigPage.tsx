@@ -124,7 +124,7 @@ export default function ConfigPage({ role }: ConfigPageProps) {
 
   const [usuarios, setUsuarios] = useState<Usuario[]>([]);
   const [showUsuarioModal, setShowUsuarioModal] = useState(false);
-  const [nuevoUsuario, setNuevoUsuario] = useState({ username: '', nombre: '', contrasena: '', rol_id: 2, enviarCorreo: true });
+  const [nuevoUsuario, setNuevoUsuario] = useState({ username: '', nombre: '', email: '', contrasena: '', rol_id: 2, enviarCorreo: true });
   const [showPassword, setShowPassword] = useState(false);
   const [autoGenerate, setAutoGenerate] = useState(true);
 
@@ -241,13 +241,14 @@ export default function ConfigPage({ role }: ConfigPageProps) {
         username: nuevoUsuario.username,
         password_user: nuevoUsuario.contrasena,
         nombre: nuevoUsuario.nombre,
+        email: nuevoUsuario.email || undefined,
         id_rol: nuevoUsuario.rol_id,
         activo: true,
       });
       const updated = await usuariosApi.getAll();
       setUsuarios(updated);
       setShowUsuarioModal(false);
-      setNuevoUsuario({ username: '', nombre: '', contrasena: '', rol_id: 2, enviarCorreo: true });
+      setNuevoUsuario({ username: '', nombre: '', email: '', contrasena: '', rol_id: 2, enviarCorreo: true });
     } catch (err) {
       console.error('Error creating user:', err);
     }
@@ -547,6 +548,10 @@ export default function ConfigPage({ role }: ConfigPageProps) {
             <div style={s.field}>
               <label style={s.label}>Nombre de usuario</label>
               <input style={s.input} value={nuevoUsuario.username} onChange={e => setNuevoUsuario({ ...nuevoUsuario, username: e.target.value })} onFocus={handleInputFocus} onBlur={handleInputBlur} placeholder="Ej: jperez" />
+            </div>
+            <div style={s.field}>
+              <label style={s.label}>Correo electronico</label>
+              <input type="email" style={s.input} value={nuevoUsuario.email} onChange={e => setNuevoUsuario({ ...nuevoUsuario, email: e.target.value })} onFocus={handleInputFocus} onBlur={handleInputBlur} placeholder="usuario@cobao.edu.mx" />
             </div>
             <div style={s.field}>
               <label style={s.label}>Rol</label>
