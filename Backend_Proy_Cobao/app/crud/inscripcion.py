@@ -24,7 +24,7 @@ async def get_inscripciones(
 
 async def get_inscripcion(db: AsyncSession, inscripcion_id: int):
     result = await db.execute(
-        select(Inscripcion).where(Inscripcion.id == inscripcion_id)
+        select(Inscripcion).where(Inscripcion.id_inscripcion == inscripcion_id)
     )
     return result.scalar_one_or_none()
 

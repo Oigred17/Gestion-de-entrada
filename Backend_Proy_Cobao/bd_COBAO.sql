@@ -1,7 +1,20 @@
+-- Esquema COBAO: base tomada de bd_cobao (esquema oficial) más
+-- funcionalidades propias del proyecto (email de usuarios, campos
+-- extra de alumnos, reportes programados y reposiciones).
+
 CREATE TABLE roles (
     id_rol      SERIAL PRIMARY KEY,
     nombre      VARCHAR(30) UNIQUE NOT NULL
 );
+
+CREATE TABLE configuracion_asistencia (
+    id                      SMALLINT PRIMARY KEY DEFAULT 1,
+    hora_entrada_limite     TIME NOT NULL DEFAULT '07:00:00',
+    minutos_tolerancia      SMALLINT NOT NULL DEFAULT 10,
+    segundos_antirebote     SMALLINT NOT NULL DEFAULT 15,   -- ignora taps repetidos en este lapso
+    CHECK (id = 1)
+);
+INSERT INTO configuracion_asistencia (id) VALUES (1) ON CONFLICT (id) DO nothing;
 
 CREATE TABLE usuarios (
     id_usuario          SERIAL PRIMARY KEY,
@@ -57,6 +70,19 @@ CREATE TABLE alumnos (
 );
 
 CREATE INDEX idx_alumnos_grupo ON alumnos(id_grupo);
+
+CREATE TABLE inscripciones (
+    id_inscripcion       SERIAL PRIMARY KEY,
+    id_alumno            INTEGER NOT NULL REFERENCES alumnos(id_alumno),
+    id_grupo             INTEGER NOT NULL REFERENCES grupos(id),
+    ciclo_escolar_id     INTEGER NOT NULL REFERENCES ciclos_escolares(id),
+    fecha_inscripcion    DATE NOT NULL DEFAULT CURRENT_DATE,
+    activo               BOOLEAN NOT NULL DEFAULT TRUE,
+    UNIQUE (id_alumno, ciclo_escolar_id)
+);
+
+CREATE INDEX idx_inscripciones_alumno ON inscripciones(id_alumno);
+CREATE INDEX idx_inscripciones_grupo ON inscripciones(id_grupo);
 
 CREATE TABLE profesores (
     id_profesor         SERIAL PRIMARY KEY,
@@ -131,6 +157,7 @@ CREATE TABLE justificaciones (
 CREATE INDEX idx_justificaciones_alumno ON justificaciones(id_alumno, fecha_inicio, fecha_fin);
 CREATE INDEX idx_justificaciones_grupo ON justificaciones(id_grupo, fecha_inicio, fecha_fin);
 
+-- Tabla propia del proyecto (no existe en el esquema oficial)
 CREATE TABLE reportes_programados (
     id_reporte_programado SERIAL PRIMARY KEY,
     nombre               VARCHAR(150) NOT NULL,
@@ -142,6 +169,7 @@ CREATE TABLE reportes_programados (
     fecha_registro       TIMESTAMP NOT NULL DEFAULT now()
 );
 
+-- Tabla propia del proyecto (no existe en el esquema oficial)
 CREATE TABLE reposiciones (
     id_reposicion      SERIAL PRIMARY KEY,
     id_alumno          INTEGER NOT NULL REFERENCES alumnos(id_alumno),
@@ -167,6 +195,10 @@ CREATE TABLE reportes (
 
 CREATE INDEX idx_reportes_alumno ON reportes(id_alumno, fecha);
 
+-- Funciones
+
+-- Adaptado al proyecto: el rol de prefecto se llama "Prefectura" en el seed,
+-- pero tambien se acepta "prefecto" por compatibilidad con el esquema oficial.
 CREATE OR REPLACE FUNCTION validar_rol_prefecto()
 RETURNS TRIGGER AS $$
 BEGIN
@@ -175,7 +207,7 @@ BEGIN
         FROM usuarios u
         JOIN roles r ON r.id_rol = u.id_rol
         WHERE u.id_usuario = NEW.id_prefecto
-          AND r.nombre = 'Prefectura'
+          AND LOWER(r.nombre) IN ('prefecto', 'prefectura')
     ) THEN
         RAISE EXCEPTION 'El usuario % no tiene rol de prefecto y no puede levantar reportes', NEW.id_prefecto;
     END IF;
@@ -186,6 +218,243 @@ $$ LANGUAGE plpgsql;
 CREATE TRIGGER trg_validar_rol_prefecto
     BEFORE INSERT OR UPDATE ON reportes
     FOR EACH ROW EXECUTE FUNCTION validar_rol_prefecto();
+
+CREATE OR REPLACE FUNCTION registrar_acceso(p_uid_nfc VARCHAR)
+RETURNS TABLE (
+    resultado       VARCHAR,
+    nombre          VARCHAR,
+    tipo_persona    VARCHAR,
+    tipo_evento     VARCHAR,
+    fecha_hora      TIMESTAMP
+) AS $$
+DECLARE
+    v_credencial    credenciales%ROWTYPE;
+    v_ultimo_dia    registros_acceso%ROWTYPE;
+    v_ultimo_todos  registros_acceso%ROWTYPE;
+    v_config        configuracion_asistencia%ROWTYPE;
+    v_nuevo_tipo    VARCHAR(10);
+    v_nombre        VARCHAR(150);
+    v_tipo_persona  VARCHAR(10);
+BEGIN
+    SELECT * INTO v_credencial FROM credenciales WHERE uid_nfc = p_uid_nfc AND activa = true;
+    IF NOT FOUND THEN
+        RETURN QUERY SELECT 'ERROR: credencial no encontrada o inactiva'::VARCHAR,
+                            NULL::VARCHAR, NULL::VARCHAR, NULL::VARCHAR, NULL::TIMESTAMP;
+        RETURN;
+    END IF;
+
+    IF v_credencial.fecha_vencimiento IS NOT NULL AND v_credencial.fecha_vencimiento < current_date THEN
+        RETURN QUERY SELECT 'ERROR: credencial vencida'::VARCHAR,
+                            NULL::VARCHAR, NULL::VARCHAR, NULL::VARCHAR, NULL::TIMESTAMP;
+        RETURN;
+    END IF;
+
+    SELECT * INTO v_config FROM configuracion_asistencia WHERE id = 1;
+
+    -- Anti-rebote: si el último tap de esta credencial fue hace muy poco, se ignora
+    SELECT * INTO v_ultimo_todos
+    FROM registros_acceso
+    WHERE id_credencial = v_credencial.id_credencial
+    ORDER BY fecha_hora DESC
+    LIMIT 1;
+
+    IF FOUND AND (now() - v_ultimo_todos.fecha_hora) < make_interval(secs => v_config.segundos_antirebote) THEN
+        RETURN QUERY SELECT 'IGNORADO: lectura duplicada'::VARCHAR, NULL::VARCHAR, NULL::VARCHAR,
+                            v_ultimo_todos.tipo_evento, v_ultimo_todos.fecha_hora;
+        RETURN;
+    END IF;
+
+    SELECT * INTO v_ultimo_dia
+    FROM registros_acceso
+    WHERE id_credencial = v_credencial.id_credencial
+      AND fecha_hora::date = current_date
+    ORDER BY fecha_hora DESC
+    LIMIT 1;
+
+    IF NOT FOUND OR v_ultimo_dia.tipo_evento = 'SALIDA' THEN
+        v_nuevo_tipo := 'ENTRADA';
+    ELSE
+        v_nuevo_tipo := 'SALIDA';
+    END IF;
+
+    INSERT INTO registros_acceso (id_credencial, tipo_evento)
+    VALUES (v_credencial.id_credencial, v_nuevo_tipo);
+
+    IF v_credencial.id_alumno IS NOT NULL THEN
+        v_tipo_persona := 'alumno';
+        SELECT nombre_completo INTO v_nombre FROM alumnos WHERE id_alumno = v_credencial.id_alumno;
+
+        -- Retardo automático: solo en la entrada, solo una vez al día, solo si pasó la tolerancia
+        IF v_nuevo_tipo = 'ENTRADA'
+           AND localtime > (v_config.hora_entrada_limite + make_interval(mins => v_config.minutos_tolerancia))
+           AND NOT EXISTS (
+                SELECT 1 FROM retardos
+                WHERE id_alumno = v_credencial.id_alumno AND fecha = current_date
+           )
+        THEN
+            INSERT INTO retardos (id_alumno, fecha, minutos_retardo)
+            VALUES (
+                v_credencial.id_alumno,
+                current_date,
+                ROUND(EXTRACT(EPOCH FROM (localtime - v_config.hora_entrada_limite)) / 60)::INTEGER
+            );
+        END IF;
+    ELSE
+        v_tipo_persona := 'profesor';
+        SELECT nombre_completo INTO v_nombre FROM profesores WHERE id_profesor = v_credencial.id_profesor;
+    END IF;
+
+    RETURN QUERY SELECT 'OK'::VARCHAR, v_nombre, v_tipo_persona, v_nuevo_tipo, now()::TIMESTAMP;
+END;
+$$ LANGUAGE plpgsql;
+
+-- SELECT * FROM registrar_acceso('04A3B2C1D0');
+
+-- -------------------------------------------------
+-- FUNCIÓN: reemplazar_credencial
+CREATE OR REPLACE FUNCTION reemplazar_credencial(
+    p_nuevo_uid     VARCHAR,
+    p_id_alumno     INTEGER DEFAULT NULL,
+    p_id_profesor   INTEGER DEFAULT NULL
+) RETURNS INTEGER AS $$
+DECLARE
+    v_nuevo_id INTEGER;
+BEGIN
+    IF (p_id_alumno IS NULL AND p_id_profesor IS NULL)
+       OR (p_id_alumno IS NOT NULL AND p_id_profesor IS NOT NULL) THEN
+        RAISE EXCEPTION 'Debe indicar exactamente un alumno o un profesor';
+    END IF;
+
+    UPDATE credenciales
+    SET activa = false
+    WHERE activa = true
+      AND ( (p_id_alumno IS NOT NULL AND id_alumno = p_id_alumno)
+         OR (p_id_profesor IS NOT NULL AND id_profesor = p_id_profesor) );
+
+    INSERT INTO credenciales (uid_nfc, id_alumno, id_profesor)
+    VALUES (p_nuevo_uid, p_id_alumno, p_id_profesor)
+    RETURNING id_credencial INTO v_nuevo_id;
+
+    RETURN v_nuevo_id;
+END;
+$$ LANGUAGE plpgsql;
+
+-- SELECT reemplazar_credencial('04FFEEDD01', p_id_alumno => 123);
+
+-- 3. TRIGGER: evitar credenciales activas duplicadas por seguridad extra
+CREATE OR REPLACE FUNCTION validar_credencial_unica_activa()
+RETURNS TRIGGER AS $$
+BEGIN
+    IF NEW.activa = true THEN
+        IF NEW.id_alumno IS NOT NULL AND EXISTS (
+            SELECT 1 FROM credenciales
+            WHERE id_alumno = NEW.id_alumno AND activa = true AND id_credencial <> NEW.id_credencial
+        ) THEN
+            RAISE EXCEPTION 'El alumno % ya tiene una credencial activa, dala de baja antes de crear otra', NEW.id_alumno;
+        END IF;
+        IF NEW.id_profesor IS NOT NULL AND EXISTS (
+            SELECT 1 FROM credenciales
+            WHERE id_profesor = NEW.id_profesor AND activa = true AND id_credencial <> NEW.id_credencial
+        ) THEN
+            RAISE EXCEPTION 'El profesor % ya tiene una credencial activa, dala de baja antes de crear otra', NEW.id_profesor;
+        END IF;
+    END IF;
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER trg_validar_credencial_unica_activa
+    BEFORE INSERT OR UPDATE ON credenciales
+    FOR EACH ROW EXECUTE FUNCTION validar_credencial_unica_activa();
+
+-- VISTA: esta vista muestra quién está dentro/fuera del plantel
+CREATE VIEW vista_estado_actual AS
+SELECT
+    COALESCE(a.id_alumno, p.id_profesor)                           AS id_persona,
+    CASE WHEN a.id_alumno IS NOT NULL THEN 'alumno' ELSE 'profesor' END AS tipo_persona,
+    COALESCE(a.nombre_completo, p.nombre_completo)                 AS nombre_completo,
+    COALESCE(a.matricula, p.num_nomina::text)                      AS clave,
+    ultimo.tipo_evento                                             AS estado,
+    ultimo.fecha_hora                                              AS ultima_actividad
+FROM credenciales c
+LEFT JOIN alumnos a    ON a.id_alumno = c.id_alumno
+LEFT JOIN profesores p ON p.id_profesor = c.id_profesor
+JOIN LATERAL (
+    SELECT tipo_evento, fecha_hora
+    FROM registros_acceso ra
+    WHERE ra.id_credencial = c.id_credencial
+      AND ra.fecha_hora::date = current_date
+    ORDER BY fecha_hora DESC
+    LIMIT 1
+) ultimo ON true
+WHERE c.activa = true;
+
+-- VISTA: asistencia diaria (primera entrada / última salida por día)
+CREATE VIEW vista_asistencia_diaria AS
+SELECT
+    COALESCE(a.id_alumno, p.id_profesor)                           AS id_persona,
+    CASE WHEN a.id_alumno IS NOT NULL THEN 'alumno' ELSE 'profesor' END AS tipo_persona,
+    COALESCE(a.nombre_completo, p.nombre_completo)                 AS nombre_completo,
+    ra.fecha_hora::date                                            AS fecha,
+    MIN(ra.fecha_hora) FILTER (WHERE ra.tipo_evento = 'ENTRADA')   AS primera_entrada,
+    MAX(ra.fecha_hora) FILTER (WHERE ra.tipo_evento = 'SALIDA')    AS ultima_salida
+FROM registros_acceso ra
+JOIN credenciales c     ON c.id_credencial = ra.id_credencial
+LEFT JOIN alumnos a     ON a.id_alumno = c.id_alumno
+LEFT JOIN profesores p  ON p.id_profesor = c.id_profesor
+GROUP BY COALESCE(a.id_alumno, p.id_profesor), tipo_persona, COALESCE(a.nombre_completo, p.nombre_completo), ra.fecha_hora::date;
+
+-- VISTA: resumen disciplinario por alumno (reportes + retardos)
+CREATE VIEW vista_resumen_disciplina AS
+SELECT
+    al.id_alumno,
+    al.matricula,
+    al.nombre_completo,
+    g.clave_grupo,
+    COUNT(DISTINCT r.id_reporte)   AS total_reportes,
+    COUNT(DISTINCT rt.id_retardo)  AS total_retardos
+FROM alumnos al
+LEFT JOIN inscripciones i  ON i.id_alumno = al.id_alumno AND i.activo = true
+LEFT JOIN ciclos_escolares ce ON ce.id = i.ciclo_escolar_id AND ce.activo = true
+LEFT JOIN grupos g         ON g.id = i.id_grupo
+LEFT JOIN reportes r  ON r.id_alumno = al.id_alumno
+LEFT JOIN retardos rt ON rt.id_alumno = al.id_alumno
+GROUP BY al.id_alumno, al.matricula, al.nombre_completo, g.clave_grupo;
+
+CREATE INDEX idx_reportes_prefecto ON reportes(id_prefecto);
+CREATE INDEX idx_justificaciones_usuario ON justificaciones(id_usuario_registro);
+CREATE INDEX idx_credenciales_alumno ON credenciales(id_alumno);
+CREATE INDEX idx_credenciales_profesor ON credenciales(id_profesor);
+
+-- Grupo actual de cada alumno (según el ciclo escolar activo)
+CREATE VIEW vista_grupo_actual AS
+SELECT
+    a.id_alumno,
+    a.matricula,
+    a.nombre_completo,
+    g.clave_grupo,
+    g.semestre,
+    ce.nombre AS ciclo_escolar
+FROM alumnos a
+JOIN inscripciones i     ON i.id_alumno = a.id_alumno AND i.activo = true
+JOIN ciclos_escolares ce ON ce.id = i.ciclo_escolar_id AND ce.activo = true
+JOIN grupos g            ON g.id = i.id_grupo;
+
+-- Historial completo: todos los grupos que ha cursado un alumno
+CREATE VIEW vista_historial_grupos AS
+SELECT
+    i.id_alumno,
+    a.matricula,
+    a.nombre_completo,
+    g.clave_grupo,
+    g.semestre,
+    ce.nombre AS ciclo_escolar,
+    i.fecha_inscripcion
+FROM inscripciones i
+JOIN alumnos a           ON a.id_alumno = i.id_alumno
+JOIN grupos g            ON g.id = i.id_grupo
+JOIN ciclos_escolares ce ON ce.id = i.ciclo_escolar_id
+ORDER BY i.id_alumno, ce.fecha_inicio;
 
 -- Seed data
 INSERT INTO ciclos_escolares (nombre, fecha_inicio, fecha_fin, activo)

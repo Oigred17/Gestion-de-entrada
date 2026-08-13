@@ -48,14 +48,14 @@ class InscripcionResponse(BaseModel):
     @model_validator(mode="before")
     @classmethod
     def _from_db(cls, data):
-        if hasattr(data, "id"):
+        if hasattr(data, "id_inscripcion"):
             return {
-                "id": data.id,
+                "id": data.id_inscripcion,
                 "alumno_id": data.id_alumno,
                 "grupo_id": getattr(data, "id_grupo", None),
                 "ciclo_escolar_id": data.ciclo_escolar_id,
                 "fecha_inscripcion": data.fecha_inscripcion,
-                "estatus": "Activo",
+                "estatus": "Activo" if getattr(data, "activo", True) else "Inactivo",
                 "created_at": None,
                 "updated_at": None,
                 "alumno": None,

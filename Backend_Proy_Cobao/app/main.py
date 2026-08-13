@@ -21,6 +21,7 @@ from app.routers import (
     ciclos_escolares,
     credenciales,
     grupos,
+    inscripciones,
     justificaciones,
     nfc,
     profesores,
@@ -71,6 +72,52 @@ async def migrate_database():
     async with engine.begin() as conn:
         await conn.execute(
             text("ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS email VARCHAR(120)")
+        )
+        await conn.execute(
+            text(
+                """
+                CREATE TABLE IF NOT EXISTS configuracion_asistencia (
+                    id                      SMALLINT PRIMARY KEY DEFAULT 1,
+                    hora_entrada_limite     TIME NOT NULL DEFAULT '07:00:00',
+                    minutos_tolerancia      SMALLINT NOT NULL DEFAULT 10,
+                    segundos_antirebote     SMALLINT NOT NULL DEFAULT 15,
+                    CHECK (id = 1)
+                )
+                """
+            )
+        )
+        await conn.execute(
+            text(
+                "INSERT INTO configuracion_asistencia (id) VALUES (1) "
+                "ON CONFLICT (id) DO NOTHING"
+            )
+        )
+        await conn.execute(
+            text(
+                """
+                CREATE TABLE IF NOT EXISTS inscripciones (
+                    id_inscripcion       SERIAL PRIMARY KEY,
+                    id_alumno            INTEGER NOT NULL REFERENCES alumnos(id_alumno),
+                    id_grupo             INTEGER NOT NULL REFERENCES grupos(id),
+                    ciclo_escolar_id     INTEGER NOT NULL REFERENCES ciclos_escolares(id),
+                    fecha_inscripcion    DATE NOT NULL DEFAULT CURRENT_DATE,
+                    activo               BOOLEAN NOT NULL DEFAULT TRUE,
+                    UNIQUE (id_alumno, ciclo_escolar_id)
+                )
+                """
+            )
+        )
+        await conn.execute(
+            text(
+                "ALTER TABLE inscripciones ADD COLUMN IF NOT EXISTS "
+                "activo BOOLEAN NOT NULL DEFAULT TRUE"
+            )
+        )
+        await conn.execute(
+            text("CREATE INDEX IF NOT EXISTS idx_inscripciones_alumno ON inscripciones(id_alumno)")
+        )
+        await conn.execute(
+            text("CREATE INDEX IF NOT EXISTS idx_inscripciones_grupo ON inscripciones(id_grupo)")
         )
 
 
@@ -130,6 +177,7 @@ app.include_router(ciclos_escolares.router, prefix=API_PREFIX)
 app.include_router(alumnos.router, prefix=API_PREFIX)
 app.include_router(profesores.router, prefix=API_PREFIX)
 app.include_router(grupos.router, prefix=API_PREFIX)
+app.include_router(inscripciones.router, prefix=API_PREFIX)
 app.include_router(credenciales.router, prefix=API_PREFIX)
 app.include_router(justificaciones.router, prefix=API_PREFIX)
 app.include_router(reportes.router, prefix=API_PREFIX)
