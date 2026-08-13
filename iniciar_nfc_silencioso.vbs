@@ -1,3 +1,6 @@
 Set WshShell = CreateObject("WScript.Shell")
-WshShell.Run chr(34) & "C:\Users\Dergi\OneDrive\Escritorio\Gestion-de-entrada\iniciar_nfc.bat" & chr(34), 0
+Set fso = CreateObject("Scripting.FileSystemObject")
+sPath = fso.GetParentFolderName(WScript.ScriptFullName)
+WshShell.Run chr(34) & sPath & "\iniciar_nfc.bat" & chr(34), 0
 Set WshShell = Nothing
+Set fso = Nothing
