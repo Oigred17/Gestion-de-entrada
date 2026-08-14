@@ -1,7 +1,7 @@
 import asyncio
 import json
 import logging
-from datetime import datetime
+import time
 from typing import Any
 
 from fastapi import WebSocket
@@ -16,6 +16,8 @@ class NFCConnectionManager:
         self.capture_mode = False
         self.capture_event = asyncio.Event()
         self.captured_uid: str | None = None
+        self.last_seen_uid: str | None = None
+        self.last_seen_at: float = 0.0
 
     async def connect(self, websocket: WebSocket):
         await websocket.accept()
@@ -40,6 +42,10 @@ class NFCConnectionManager:
                     disconnected.append(connection)
             for conn in disconnected:
                 self.active_connections.remove(conn)
+
+    def note_uid(self, uid_nfc: str) -> None:
+        self.last_seen_uid = uid_nfc
+        self.last_seen_at = time.time()
 
     def start_capture(self):
         self.capture_mode = True

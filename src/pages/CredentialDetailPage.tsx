@@ -4,6 +4,9 @@ import { Edit, Check, X, RefreshCw, Nfc, Loader2, AlertTriangle, User } from 'lu
 import { credencialesApi, alumnosApi } from '../api';
 import { nfcApi } from '../api/nfc';
 import type { Credencial, Alumno } from '../types';
+import { toastSuccess, toastError, toastInfo } from '@/lib/toast';
+import Loader from '../components/Loader';
+import ConfirmPasswordModal from '../components/ConfirmPasswordModal';
 
 function nombreCompleto(a: Alumno): string {
   return `${a.nombre} ${a.apellido_paterno} ${a.apellido_materno}`;
@@ -89,13 +92,13 @@ export default function CredentialDetailPage() {
   const [writing, setWriting] = useState(false);
   const [written, setWritten] = useState(false);
   const [nfcWaiting, setNfcWaiting] = useState(false);
+  const [reassignConfirmOpen, setReassignConfirmOpen] = useState(false);
   const captureTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' | 'info' } | null>(null);
-
   const showToast = (message: string, type: 'success' | 'error' | 'info' = 'success') => {
-    setToast({ message, type });
-    setTimeout(() => setToast(null), 3000);
+    if (type === 'success') toastSuccess(message);
+    else if (type === 'error') toastError(message);
+    else toastInfo(message);
   };
 
   const handleSaveEdit = () => {
@@ -186,6 +189,10 @@ export default function CredentialDetailPage() {
   }, [showToast]);
 
   const handleConfirmReassign = () => {
+    setReassignConfirmOpen(true);
+  };
+
+  const performReassign = () => {
     if (!credentialData) return;
     credencialesApi.update(credentialData.id, { numero: newChipId, estatus: 'Activa' })
       .then((updated) => {
@@ -200,13 +207,7 @@ export default function CredentialDetailPage() {
   };
 
   if (loading) {
-    return (
-      <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh' }}>
-        <Loader2 size={32} color="#EB2466" style={{ animation: 'spin 1s linear infinite' }} />
-        <span style={{ marginLeft: 12, fontSize: 14, color: '#5F5657' }}>Cargando datos...</span>
-        <style>{`@keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }`}</style>
-      </div>
-    );
+    return <Loader message="Cargando datos..." fullScreen />;
   }
 
   if (error || !studentData) {
@@ -223,17 +224,6 @@ export default function CredentialDetailPage() {
 
   return (
     <div>
-      {toast && (
-        <div style={{
-          position: 'fixed', top: 20, right: 20, padding: '12px 20px', borderRadius: 8,
-          background: toast.type === 'success' ? '#0F8122' : toast.type === 'error' ? '#AB1748' : '#1792AB',
-          color: '#fff', fontWeight: 600, fontSize: 14, zIndex: 10001,
-          boxShadow: '0 4px 16px rgba(0,0,0,0.2)', animation: 'fadeInContent 200ms ease-out',
-        }}>
-          {toast.message}
-        </div>
-      )}
-
       <div onClick={() => navigate(-1)} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.3)', zIndex: 999 }} />
 
       <div style={{
@@ -460,6 +450,15 @@ export default function CredentialDetailPage() {
           </div>
         </div>
       )}
+
+      <ConfirmPasswordModal
+        open={reassignConfirmOpen}
+        title="Reasignar chip NFC"
+        message={`El chip actual quedara dado de baja y ${nombreCompleto(studentData)} usara el nuevo chip. Ingrese su contrasena para confirmar.`}
+        confirmLabel="Reasignar"
+        onClose={() => setReassignConfirmOpen(false)}
+        onConfirm={performReassign}
+      />
 
       <style>{`
         @keyframes slideInRight {

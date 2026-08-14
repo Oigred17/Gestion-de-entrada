@@ -60,29 +60,18 @@ async def listar_credenciales(
     )
 
 
-@router.get("/{id_credencial}", response_model=CredencialResponse)
-async def obtener_credencial(
-    id_credencial: int, db: AsyncSession = Depends(get_db)
-):
-    credencial = await crud_credencial.get_credencial(db, id_credencial)
-    if not credencial:
-        raise HTTPException(status_code=404, detail="Credencial no encontrada")
-    return credencial
-
-
-@router.get("/nfc/{uid_nfc}", response_model=CredencialResponse)
-async def obtener_credencial_por_uid(
-    uid_nfc: str, db: AsyncSession = Depends(get_db)
-):
+async def _credencial_response_by_uid(db: AsyncSession, uid_nfc: str) -> CredencialResponse:
     credencial = await crud_credencial.get_credencial_by_uid(db, uid_nfc)
     if not credencial:
         raise HTTPException(status_code=404, detail="Credencial no encontrada")
-    from sqlalchemy.orm import selectinload
     from sqlalchemy import select
     from app.models.alumno import Alumno
     from app.models.credencial import Credencial as CredencialModel
+
     result = await db.execute(
-        select(CredencialModel, Alumno).outerjoin(Alumno, CredencialModel.id_alumno == Alumno.id_alumno).where(CredencialModel.uid_nfc == uid_nfc)
+        select(CredencialModel, Alumno)
+        .outerjoin(Alumno, CredencialModel.id_alumno == Alumno.id_alumno)
+        .where(CredencialModel.uid_nfc == uid_nfc)
     )
     row = result.first()
     if row:
@@ -95,6 +84,32 @@ async def obtener_credencial_por_uid(
                 "matricula": alumno.matricula,
             }
         return resp
+    return CredencialResponse.model_validate(credencial, from_attributes=True)
+
+
+# Query param evita UIDs con ":" rotos por proxies/Cloudflare en el path.
+@router.get("/by-uid", response_model=CredencialResponse)
+async def obtener_credencial_por_uid_query(
+    uid_nfc: str = Query(..., min_length=4),
+    db: AsyncSession = Depends(get_db),
+):
+    return await _credencial_response_by_uid(db, uid_nfc)
+
+
+@router.get("/nfc/{uid_nfc}", response_model=CredencialResponse)
+async def obtener_credencial_por_uid(
+    uid_nfc: str, db: AsyncSession = Depends(get_db)
+):
+    return await _credencial_response_by_uid(db, uid_nfc)
+
+
+@router.get("/{id_credencial}", response_model=CredencialResponse)
+async def obtener_credencial(
+    id_credencial: int, db: AsyncSession = Depends(get_db)
+):
+    credencial = await crud_credencial.get_credencial(db, id_credencial)
+    if not credencial:
+        raise HTTPException(status_code=404, detail="Credencial no encontrada")
     return credencial
 
 

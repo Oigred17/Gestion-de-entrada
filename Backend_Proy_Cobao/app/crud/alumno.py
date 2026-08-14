@@ -7,6 +7,27 @@ from app.models.alumno import Alumno
 from app.models.grupo import Grupo
 from app.schemas.alumno import AlumnoCreate, AlumnoUpdate
 
+# Columnas nullable: "" desde el formulario debe ser NULL (si no, falla CHECK/UNIQUE)
+_NULLABLE_EMPTY = {
+    "nss",
+    "tipo_sangre",
+    "capacitacion",
+    "turno",
+    "cohorte",
+    "fecha_nacimiento",
+    "domicilio",
+    "direccion",
+    "tutor_nombre",
+    "tutor_telefono",
+    "telefono",
+}
+
+
+def _empty_to_none(value):
+    if isinstance(value, str) and not value.strip():
+        return None
+    return value
+
 
 async def get_alumnos(db: AsyncSession, solo_activos: bool = False, search: str | None = None):
     stmt = select(Alumno)
@@ -50,15 +71,15 @@ async def create_alumno(db: AsyncSession, data: AlumnoCreate):
         matricula=data.matricula,
         nombre_completo=data.nombre_completo,
         curp=curp,
-        nss=data.nss,
-        tipo_sangre=data.tipo_sangre,
-        capacitacion=data.capacitacion,
-        turno=data.turno,
-        cohorte=data.cohorte,
-        fecha_nacimiento=data.fecha_nacimiento,
-        domicilio=data.direccion,
-        tutor_nombre=data.tutor_nombre,
-        tutor_telefono=data.tutor_telefono or data.telefono,
+        nss=_empty_to_none(data.nss),
+        tipo_sangre=_empty_to_none(data.tipo_sangre),
+        capacitacion=_empty_to_none(data.capacitacion),
+        turno=_empty_to_none(data.turno),
+        cohorte=_empty_to_none(data.cohorte),
+        fecha_nacimiento=_empty_to_none(data.fecha_nacimiento),
+        domicilio=_empty_to_none(data.direccion),
+        tutor_nombre=_empty_to_none(data.tutor_nombre),
+        tutor_telefono=_empty_to_none(data.tutor_telefono or data.telefono),
         activo=data.activo,
         id_grupo=id_grupo,
     )
@@ -73,15 +94,20 @@ async def update_alumno(db: AsyncSession, id_alumno: int, data: AlumnoUpdate):
     if not alumno:
         return None
     update_data = data.model_dump(exclude_unset=True)
+    raw_keys = set(update_data.keys())
+    for key in list(update_data.keys()):
+        if key in _NULLABLE_EMPTY:
+            update_data[key] = _empty_to_none(update_data[key])
     estatus = update_data.pop("estatus", None)
     if estatus is not None:
         update_data["activo"] = estatus.lower() not in ("inactivo", "baja")
-    direccion = update_data.pop("direccion", None)
-    if direccion is not None:
-        update_data["domicilio"] = direccion
-    telefono = update_data.pop("telefono", None)
-    if telefono is not None:
-        update_data["tutor_telefono"] = telefono
+    if "direccion" in raw_keys:
+        update_data["domicilio"] = update_data.pop("direccion", None)
+    if "telefono" in raw_keys:
+        update_data["tutor_telefono"] = update_data.pop("telefono", None)
+    # CURP es NOT NULL + UNIQUE: si llega vacío, generar placeholder (como en create)
+    if "curp" in update_data and not update_data["curp"]:
+        update_data["curp"] = f"SIN{uuid.uuid4().hex[:15].upper()}"
     nombre_parts = []
     if "nombre" in update_data or "apellido_paterno" in update_data or "apellido_materno" in update_data:
         nombre = update_data.pop("nombre", None)

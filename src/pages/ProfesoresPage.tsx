@@ -1,7 +1,17 @@
 import { useState, useMemo, useEffect } from 'react';
-import { Search, Plus, Eye, Pencil, X } from 'lucide-react';
+import { Search, Plus, Eye, Pencil, X, Power } from 'lucide-react';
 import { profesoresApi } from '../api';
 import type { Profesor, ProfesorCreate } from '../types';
+import { toastSuccess, toastError } from '../lib/toast';
+import Loader from '../components/Loader';
+import ConfirmPasswordModal from '../components/ConfirmPasswordModal';
+
+interface ProfesorConfirm {
+  title: string;
+  message: string;
+  confirmLabel: string;
+  run: () => Promise<void>;
+}
 
 export default function ProfesoresPage() {
   const [profesores, setProfesores] = useState<Profesor[]>([]);
@@ -9,14 +19,31 @@ export default function ProfesoresPage() {
   const [modalOpen, setModalOpen] = useState(false);
   const [editItem, setEditItem] = useState<Profesor | null>(null);
   const [detailModal, setDetailModal] = useState<Profesor | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState('');
+  const [saving, setSaving] = useState(false);
+  const [confirm, setConfirm] = useState<ProfesorConfirm | null>(null);
 
   const [formNumNomina, setFormNumNomina] = useState('');
   const [formNombre, setFormNombre] = useState('');
   const [formTelefono, setFormTelefono] = useState('');
   const [formDomicilio, setFormDomicilio] = useState('');
 
+  const loadProfesores = async () => {
+    setLoading(true);
+    setLoadError('');
+    try {
+      const data = await profesoresApi.getAll();
+      setProfesores(data);
+    } catch {
+      setLoadError('No se pudieron cargar los profesores. Intenta de nuevo.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
   useEffect(() => {
-    profesoresApi.getAll().then(setProfesores).catch(console.error);
+    loadProfesores();
   }, []);
 
   const filtered = useMemo(() => {
@@ -49,6 +76,7 @@ export default function ProfesoresPage() {
 
   const handleSave = async () => {
     if (!formNumNomina || !formNombre) return;
+    setSaving(true);
     try {
       const payload: ProfesorCreate = {
         num_nomina: Number(formNumNomina),
@@ -59,24 +87,57 @@ export default function ProfesoresPage() {
       if (editItem) {
         const updated = await profesoresApi.update(editItem.id, payload);
         setProfesores(profesores.map(p => p.id === updated.id ? updated : p));
+        toastSuccess('Profesor actualizado correctamente.');
       } else {
         const created = await profesoresApi.create(payload);
         setProfesores([created, ...profesores]);
+        toastSuccess('Profesor registrado correctamente.');
       }
       setModalOpen(false);
-    } catch (e) {
-      console.error(e);
+    } catch (e: any) {
+      const detail = e?.response?.data?.detail;
+      toastError(typeof detail === 'string' ? detail : 'No se pudo guardar el profesor.');
+    } finally {
+      setSaving(false);
     }
   };
 
-  const handleDelete = async (id: number) => {
-    if (!confirm('¿Eliminar este profesor?')) return;
-    try {
-      await profesoresApi.delete(id);
-      setProfesores(profesores.filter(p => p.id !== id));
-    } catch (e) {
-      console.error(e);
-    }
+  const handleDelete = (id: number) => {
+    const p = profesores.find(x => x.id === id);
+    setConfirm({
+      title: 'Eliminar profesor',
+      message: `¿Seguro que deseas eliminar a ${p?.nombre_completo ?? 'este profesor'}? Esta accion no se puede deshacer. Ingrese su contrasena para confirmar.`,
+      confirmLabel: 'Eliminar',
+      run: async () => {
+        try {
+          await profesoresApi.delete(id);
+          setProfesores(prev => prev.filter(x => x.id !== id));
+          toastSuccess('Profesor eliminado.');
+        } catch (e: any) {
+          const detail = e?.response?.data?.detail;
+          toastError(typeof detail === 'string' ? detail : 'No se pudo eliminar el profesor.');
+        }
+      },
+    });
+  };
+
+  const handleToggleEstatus = (p: Profesor) => {
+    const accion = p.activo ? 'dar de baja' : 'reactivar';
+    setConfirm({
+      title: p.activo ? 'Dar de baja profesor' : 'Reactivar profesor',
+      message: `¿Seguro que deseas ${accion} a ${p.nombre_completo}? Ingrese su contrasena para confirmar.`,
+      confirmLabel: p.activo ? 'Dar de baja' : 'Reactivar',
+      run: async () => {
+        try {
+          const updated = await profesoresApi.update(p.id, { estatus: p.activo ? 'inactivo' : 'activo' });
+          setProfesores(prev => prev.map(x => x.id === updated.id ? updated : x));
+          toastSuccess(updated.activo ? 'Profesor reactivado.' : 'Profesor dado de baja.');
+        } catch (e: any) {
+          const detail = e?.response?.data?.detail;
+          toastError(typeof detail === 'string' ? detail : 'No se pudo actualizar el estatus.');
+        }
+      },
+    });
   };
 
   return (
@@ -96,6 +157,14 @@ export default function ProfesoresPage() {
       </div>
 
       <div className="table-container">
+        {loading ? (
+          <Loader message="Cargando profesores..." height={220} />
+        ) : loadError ? (
+          <div style={{ textAlign: 'center', padding: 24 }}>
+            <p style={{ color: '#EB2466', margin: '0 0 12px' }}>{loadError}</p>
+            <button className="btn btn--secondary" onClick={loadProfesores}>Reintentar</button>
+          </div>
+        ) : (
         <table className="table">
           <thead>
             <tr>
@@ -115,6 +184,7 @@ export default function ProfesoresPage() {
                   <div style={{ display: 'flex', gap: 4 }}>
                     <button className="table-action" title="Ver detalle" onClick={() => setDetailModal(p)}><Eye size={18} /></button>
                     <button className="table-action" title="Editar" onClick={() => openEdit(p)}><Pencil size={18} /></button>
+                    <button className="table-action" title={p.activo ? 'Dar de baja' : 'Reactivar'} onClick={() => handleToggleEstatus(p)}><Power size={18} /></button>
                     <button className="table-action" title="Eliminar" style={{ color: '#EB2466' }} onClick={() => handleDelete(p.id)}><X size={18} /></button>
                   </div>
                 </td>
@@ -125,6 +195,7 @@ export default function ProfesoresPage() {
             )}
           </tbody>
         </table>
+        )}
       </div>
 
       {modalOpen && (
@@ -154,8 +225,8 @@ export default function ProfesoresPage() {
             </div>
             <div className="modal-footer">
               <button className="btn btn--secondary" onClick={() => setModalOpen(false)}>Cancelar</button>
-              <button className="btn btn--primary" onClick={handleSave} disabled={!formNumNomina || !formNombre}>
-                {editItem ? 'Guardar cambios' : 'Crear profesor'}
+              <button className="btn btn--primary" onClick={handleSave} disabled={!formNumNomina || !formNombre || saving}>
+                {saving ? 'Guardando...' : (editItem ? 'Guardar cambios' : 'Crear profesor')}
               </button>
             </div>
           </div>
@@ -192,6 +263,15 @@ export default function ProfesoresPage() {
           </div>
         </div>
       )}
+
+      <ConfirmPasswordModal
+        open={!!confirm}
+        title={confirm?.title ?? ''}
+        message={confirm?.message ?? ''}
+        confirmLabel={confirm?.confirmLabel}
+        onClose={() => setConfirm(null)}
+        onConfirm={confirm?.run ?? (() => {})}
+      />
     </div>
   );
 }

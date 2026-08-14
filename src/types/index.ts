@@ -143,6 +143,7 @@ export interface RegistroAccesoCreate {
   tipo_acceso?: string;
   ubicacion?: string;
   estatus?: string;
+  codigo_autorizacion?: string;
 }
 
 export interface Retardo {
@@ -255,7 +256,7 @@ export interface Reporte {
   fecha: string;
   fecha_registro?: string;
   alumno?: Alumno;
-  prefecto?: Usuario;
+  prefecto?: { id: number; username: string; nombre_completo: string };
 }
 
 export interface ReporteCreate {
@@ -288,28 +289,126 @@ export interface Rol {
   updated_at?: string;
 }
 
+export interface PermisoAlumno {
+  id: number;
+  matricula: string;
+  nombre: string;
+  apellido_paterno: string;
+  apellido_materno: string;
+  tutor_nombre?: string;
+  tutor_telefono?: string;
+  grupo?: string;
+}
+
 export interface Permiso {
   id: number;
-  alumno_id: number;
-  tipo: string;
-  descripcion: string;
-  fecha: string;
-  estatus: string;
-  created_at?: string;
-  updated_at?: string;
-  alumno?: Alumno;
+  id_alumno: number;
+  motivo: string;
+  fecha_salida?: string;
+  fecha_solicitud?: string;
+  estado: string;
+  codigo_autorizacion?: string;
+  notificar_tutor: boolean;
+  id_usuario_registro: number;
+  fecha_registro?: string;
+  alumno?: PermisoAlumno;
+}
+
+export interface PermisoCreate {
+  id_alumno: number;
+  motivo: string;
+  fecha_salida?: string;
+  notificar_tutor?: boolean;
+  id_usuario_registro: number;
 }
 
 export interface Incidencia {
   id: number;
-  alumno_id: number;
+  id_alumno: number;
   tipo: string;
   descripcion: string;
-  fecha: string;
-  estatus: string;
-  created_at?: string;
-  updated_at?: string;
-  alumno?: Alumno;
+  estado: string;
+  notificar: boolean;
+  evidencia_base64?: string;
+  id_usuario_registro: number;
+  fecha_registro?: string;
+  fecha_resolucion?: string;
+  alumno?: PermisoAlumno;
+}
+
+export interface IncidenciaCreate {
+  id_alumno: number;
+  tipo: string;
+  descripcion: string;
+  notificar?: boolean;
+  evidencia_base64?: string;
+  id_usuario_registro: number;
+}
+
+export interface Horario {
+  id: number;
+  descripcion: string;
+  hora_entrada: string;
+  hora_salida: string;
+  dias?: string;
+  activo: boolean;
+}
+
+export interface Configuracion {
+  plantel: {
+    plantel_nombre: string;
+    telefono: string;
+    direccion: string;
+    correo: string;
+    logo_base64?: string;
+    hora_entrada: string;
+    hora_salida: string;
+    smtp_host: string;
+    smtp_port: number;
+    smtp_user: string;
+    smtp_password: string;
+    smtp_from: string;
+    sms_proveedor: string;
+    sms_api_key: string;
+    sms_remitente: string;
+    whatsapp_api_key: string;
+    whatsapp_numero: string;
+    notif_email: boolean;
+    notif_sms: boolean;
+    notif_whatsapp: boolean;
+  };
+  horarios: Horario[];
+  asistencia: {
+    hora_entrada_limite: string;
+    minutos_tolerancia: number;
+    segundos_antirebote: number;
+  };
+}
+
+export interface ConfiguracionUpdate {
+  plantel_nombre?: string;
+  telefono?: string;
+  direccion?: string;
+  correo?: string;
+  logo_base64?: string;
+  hora_entrada?: string;
+  hora_salida?: string;
+  smtp_host?: string;
+  smtp_port?: number;
+  smtp_user?: string;
+  smtp_password?: string;
+  smtp_from?: string;
+  sms_proveedor?: string;
+  sms_api_key?: string;
+  sms_remitente?: string;
+  whatsapp_api_key?: string;
+  whatsapp_numero?: string;
+  notif_email?: boolean;
+  notif_sms?: boolean;
+  notif_whatsapp?: boolean;
+  hora_entrada_limite?: string;
+  minutos_tolerancia?: number;
+  segundos_antirebote?: number;
 }
 
 export interface LoginRequest {

@@ -36,7 +36,10 @@ export const credencialesApi = {
   },
 
   async getByUid(uidNfc: string): Promise<Credencial> {
-    const response = await apiClient.get<Credencial>(`/credenciales/nfc/${uidNfc}`);
+    // Query param: los UID con ":" fallan en path detras de Cloudflare/tuneles.
+    const response = await apiClient.get<Credencial>('/credenciales/by-uid', {
+      params: { uid_nfc: uidNfc },
+    });
     return response.data;
   },
 };

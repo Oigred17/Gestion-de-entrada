@@ -1,92 +1,79 @@
 import { useState, useMemo, useEffect } from 'react';
-import { Search, Plus, Eye, Check, AlertTriangle, Upload, X as XIcon } from 'lucide-react';
-import { alumnosApi } from '../api';
-import type { Alumno as ApiAlumno } from '../types';
+import { Search, Plus, Eye, Check, Upload, X as XIcon, Loader2 } from 'lucide-react';
+import { alumnosApi, incidenciasApi } from '../api';
+import type { Alumno, Incidencia } from '../types';
 import type { UserRole } from '../App';
+import { useAuth } from '../context/AuthContext';
+import { toastSuccess, toastError } from '@/lib/toast';
+import Loader from '../components/Loader';
 
-interface MockAlumno {
-  idAlumno: number;
-  nombreCompleto: string;
-  matricula: string;
-  grupo: string;
-}
+const tipoOptions = ['Acceso sin credencial', 'Credencial danada', 'Acceso fuera de horario', 'Alumno no registrado', 'Intento no autorizado', 'Salida sin credencial', 'Otro'];
 
-interface Incident {
-  id: number;
-  fecha: string;
-  tipo: string;
-  alumno?: MockAlumno;
-  descripcion: string;
-  registradoPor: string;
-  estado: 'Abierto' | 'En revision' | 'Resuelto';
-  gravedad: 'Leve' | 'Moderada' | 'Grave';
-}
-
-const tipoOptions = ['Todas', 'Acceso sin credencial', 'Credencial danada', 'Acceso fuera de horario', 'Alumno no registrado', 'Intento no autorizado', 'Salida sin credencial', 'Otro'];
-const tipoOptionsSinTodas = tipoOptions.filter(t => t !== 'Todas');
-const gravedadOptions = ['Leve', 'Moderada', 'Grave'];
+const TABS = ["Todas", "Abiertas", "En revision", "Resueltas"] as const;
+type TabType = (typeof TABS)[number];
 
 interface IncidentsPageProps {
   role: UserRole;
 }
 
-function getRegistradoPor(role: UserRole): string {
-  return role === 'Directivo' ? 'Directivo (Lic. Fabian Ocampo)' : 'Prefecto (Vigilancia)';
-}
-
-function getDefaultDateTime(): { fecha: string; hora: string } {
-  const now = new Date();
-  const fecha = now.toISOString().slice(0, 10);
-  const hora = now.toTimeString().slice(0, 5);
-  return { fecha, hora };
-}
-
 export default function IncidentsPage({ role }: IncidentsPageProps) {
-  const [apiAlumnos, setApiAlumnos] = useState<MockAlumno[]>([]);
-  const [incidentsList, setIncidentsList] = useState<Incident[]>([]);
-  const [activeTab, setActiveTab] = useState('Todas');
+  const { user } = useAuth();
+  const [apiAlumnos, setApiAlumnos] = useState<Alumno[]>([]);
+  const [incidentsList, setIncidentsList] = useState<Incidencia[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [activeTab, setActiveTab] = useState<TabType>('Todas');
   const [searchQuery, setSearchQuery] = useState('');
   const [modalOpen, setModalOpen] = useState(false);
+  const [detail, setDetail] = useState<Incidencia | null>(null);
   const [page, setPage] = useState(1);
+  const [saving, setSaving] = useState(false);
   const perPage = 8;
 
   const [formTipo, setFormTipo] = useState('');
-  const [formFecha, setFormFecha] = useState('');
-  const [formHora, setFormHora] = useState('');
   const [formAlumnoQuery, setFormAlumnoQuery] = useState('');
-  const [formAlumnoSelected, setFormAlumnoSelected] = useState<MockAlumno | null>(null);
+  const [formAlumnoSelected, setFormAlumnoSelected] = useState<Alumno | null>(null);
   const [showAlumnoDropdown, setShowAlumnoDropdown] = useState(false);
   const [formDescripcion, setFormDescripcion] = useState('');
-  const [formGravedad, setFormGravedad] = useState('');
   const [formNotificar, setFormNotificar] = useState(false);
   const [formFoto, setFormFoto] = useState<File | null>(null);
   const [formErrors, setFormErrors] = useState<Record<string, string>>({});
 
-  const registradoPor = getRegistradoPor(role);
+  const registradoPor = role === 'Directivo' ? 'Directivo' : 'Prefectura';
 
-  useEffect(() => {
-    alumnosApi.getAll().then((data) => {
-      setApiAlumnos(data.map((a: ApiAlumno) => ({
-        idAlumno: a.id,
-        nombreCompleto: `${a.apellido_paterno} ${a.apellido_materno} ${a.nombre}`.trim(),
-        matricula: a.matricula,
-        grupo: a.id_grupo?.toString() ?? '',
-      })));
-    }).catch(console.error);
-  }, []);
+  const nombreAlumno = (inc: Incidencia) =>
+    inc.alumno
+      ? `${inc.alumno.nombre} ${inc.alumno.apellido_paterno} ${inc.alumno.apellido_materno}`
+      : `Alumno #${inc.id_alumno}`;
+
+  const loadData = () => {
+    setLoading(true);
+    Promise.all([incidenciasApi.getAll(), alumnosApi.getAll()])
+      .then(([i, a]) => {
+        setIncidentsList(i);
+        setApiAlumnos(a);
+      })
+      .catch(() => toastError('Error', 'No se pudieron cargar las incidencias'))
+      .finally(() => setLoading(false));
+  };
+
+  useEffect(loadData, []);
 
   const alumnoResults = useMemo(() => {
     if (!formAlumnoQuery || formAlumnoSelected) return [];
     const q = formAlumnoQuery.toLowerCase();
     return apiAlumnos.filter(s =>
-      s.nombreCompleto.toLowerCase().includes(q) ||
+      `${s.nombre} ${s.apellido_paterno} ${s.apellido_materno}`.toLowerCase().includes(q) ||
       s.matricula.toLowerCase().includes(q)
     ).slice(0, 6);
   }, [formAlumnoQuery, formAlumnoSelected, apiAlumnos]);
 
   const filtered = incidentsList.filter((inc) => {
-    const matchTab = activeTab === 'Todas' || inc.tipo === activeTab;
-    const alumnoName = inc.alumno?.nombreCompleto ?? '';
+    const matchTab =
+      activeTab === 'Todas' ||
+      (activeTab === 'Abiertas' && inc.estado === 'Abierto') ||
+      (activeTab === 'En revision' && inc.estado === 'En revision') ||
+      (activeTab === 'Resueltas' && inc.estado === 'Resuelto');
+    const alumnoName = nombreAlumno(inc);
     const matchSearch = searchQuery === '' ||
       alumnoName.toLowerCase().includes(searchQuery.toLowerCase()) ||
       inc.descripcion.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -97,18 +84,12 @@ export default function IncidentsPage({ role }: IncidentsPageProps) {
   const totalPages = Math.max(1, Math.ceil(filtered.length / perPage));
   const paginated = filtered.slice((page - 1) * perPage, page * perPage);
 
-  const graveAbiertas = incidentsList.filter((inc) => inc.gravedad === 'Grave' && inc.estado === 'Abierto');
-
   const resetForm = () => {
     setFormTipo('');
-    const defaults = getDefaultDateTime();
-    setFormFecha(defaults.fecha);
-    setFormHora(defaults.hora);
     setFormAlumnoQuery('');
     setFormAlumnoSelected(null);
     setShowAlumnoDropdown(false);
     setFormDescripcion('');
-    setFormGravedad('');
     setFormNotificar(false);
     setFormFoto(null);
     setFormErrors({});
@@ -119,48 +100,65 @@ export default function IncidentsPage({ role }: IncidentsPageProps) {
   const validate = (): boolean => {
     const errors: Record<string, string> = {};
     if (!formTipo) errors.tipo = 'Selecciona un tipo de incidencia';
-    if (!formFecha) errors.fecha = 'Selecciona la fecha';
-    if (!formHora) errors.hora = 'Selecciona la hora';
     if (!formAlumnoSelected) errors.alumno = 'Selecciona un alumno del sistema';
     if (!formDescripcion.trim()) errors.descripcion = 'Escribe una descripcion';
-    if (!formGravedad) errors.gravedad = 'Selecciona la gravedad';
     setFormErrors(errors);
     return Object.keys(errors).length === 0;
   };
 
-  const handleSave = () => {
+  const fileToBase64 = (file: File): Promise<string> =>
+    new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(String(reader.result));
+      reader.onerror = reject;
+      reader.readAsDataURL(file);
+    });
+
+  const handleSave = async () => {
     if (!validate()) return;
-    const newIncident: Incident = {
-      id: Date.now(),
-      fecha: `${formFecha} ${formHora}`,
-      tipo: formTipo,
-      alumno: formAlumnoSelected!,
-      descripcion: formDescripcion,
-      registradoPor,
-      estado: 'Abierto',
-      gravedad: formGravedad as Incident['gravedad'],
-    };
-    setIncidentsList((prev) => [newIncident, ...prev]);
-    handleCloseModal();
+    if (!user?.id) {
+      toastError('Sesion invalida', 'Vuelve a iniciar sesion');
+      return;
+    }
+    setSaving(true);
+    try {
+      const evidencia = formFoto ? await fileToBase64(formFoto) : undefined;
+      const nueva = await incidenciasApi.create({
+        id_alumno: formAlumnoSelected!.id,
+        tipo: formTipo,
+        descripcion: formDescripcion.trim(),
+        notificar: formNotificar,
+        evidencia_base64: evidencia,
+        id_usuario_registro: user.id,
+      });
+      setIncidentsList(prev => [nueva, ...prev]);
+      handleCloseModal();
+      toastSuccess('Incidencia registrada', `${formTipo} para ${nombreAlumno(nueva)}`);
+    } catch (e: unknown) {
+      const err = e as { response?: { data?: { detail?: string } } };
+      toastError('No se pudo registrar', err.response?.data?.detail || 'Ocurrio un error');
+    } finally {
+      setSaving(false);
+    }
   };
 
-  const handleSelectAlumno = (alumno: MockAlumno) => {
+  const handleMarkResolved = async (inc: Incidencia) => {
+    try {
+      const updated = await incidenciasApi.update(inc.id, { estado: 'Resuelto' });
+      setIncidentsList(prev => prev.map(x => (x.id === inc.id ? updated : x)));
+      if (detail?.id === inc.id) setDetail(updated);
+      toastSuccess('Incidencia resuelta');
+    } catch (e: unknown) {
+      const err = e as { response?: { data?: { detail?: string } } };
+      toastError('No se pudo actualizar', err.response?.data?.detail || 'Ocurrio un error');
+    }
+  };
+
+  const handleSelectAlumno = (alumno: Alumno) => {
     setFormAlumnoSelected(alumno);
-    setFormAlumnoQuery(alumno.nombreCompleto);
+    setFormAlumnoQuery(`${alumno.nombre} ${alumno.apellido_paterno}`);
     setShowAlumnoDropdown(false);
     setFormErrors(prev => ({ ...prev, alumno: '' }));
-  };
-
-  const handleClearAlumno = () => {
-    setFormAlumnoSelected(null);
-    setFormAlumnoQuery('');
-    setFormErrors(prev => ({ ...prev, alumno: 'Selecciona un alumno del sistema' }));
-  };
-
-  const handleMarkResolved = (id: number) => {
-    setIncidentsList(prev => prev.map(inc =>
-      inc.id === id ? { ...inc, estado: 'Resuelto' as const } : inc
-    ));
   };
 
   const handleDragOver = (e: React.DragEvent) => { e.preventDefault(); };
@@ -178,13 +176,6 @@ export default function IncidentsPage({ role }: IncidentsPageProps) {
 
   return (
     <div>
-      {graveAbiertas.length > 0 && (
-        <div className="alert alert--error" style={{ marginBottom: 16 }}>
-          <AlertTriangle size={20} />
-          <span>Hay {graveAbiertas.length} incidencia(s) grave(s) abierta(s) que requieren atencion inmediata.</span>
-        </div>
-      )}
-
       <div className="toolbar">
         <div className="toolbar-center">
           <div className="input-wrapper">
@@ -200,44 +191,52 @@ export default function IncidentsPage({ role }: IncidentsPageProps) {
       </div>
 
       <div className="filter-tabs" style={{ padding: '12px 0' }}>
-        {tipoOptions.map((tipo) => (
-          <button key={tipo} className={`filter-tab ${activeTab === tipo ? 'active' : ''}`} onClick={() => { setActiveTab(tipo); setPage(1); }}>
-            {tipo}
+        {TABS.map((tab) => (
+          <button key={tab} className={`filter-tab ${activeTab === tab ? 'active' : ''}`} onClick={() => { setActiveTab(tab); setPage(1); }}>
+            {tab}
           </button>
         ))}
       </div>
 
-      <div className="table-container">
-        <table className="table">
-          <thead>
-            <tr><th>#</th><th>Fecha y Hora</th><th>Tipo</th><th>Alumno</th><th>Descripcion</th><th>Registrado por</th><th>Estado</th><th>Acciones</th></tr>
-          </thead>
-          <tbody>
-            {paginated.length === 0 && (
-              <tr><td colSpan={8} style={{ textAlign: 'center', padding: 24, color: '#5F5657' }}>No se encontraron incidencias.</td></tr>
-            )}
-            {paginated.map((inc, idx) => (
-              <tr key={inc.id}>
-                <td>{(page - 1) * perPage + idx + 1}</td>
-                <td>{inc.fecha}</td>
-                <td>{inc.tipo}</td>
-                <td style={{ fontWeight: 500 }}>{inc.alumno?.nombreCompleto ?? '---'}</td>
-                <td style={{ maxWidth: 200, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{inc.descripcion}</td>
-                <td>{inc.registradoPor}</td>
-                <td><span className={getEstadoBadge(inc.estado)}>{inc.estado}</span></td>
-                <td>
-                  <div style={{ display: 'flex', gap: 4 }}>
-                    <button className="table-action" title="Ver detalles"><Eye size={18} /></button>
-                    {inc.estado !== 'Resuelto' && (
-                      <button className="table-action" title="Marcar como resuelta" onClick={() => handleMarkResolved(inc.id)}><Check size={18} /></button>
-                    )}
-                  </div>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+      {loading ? (
+        <Loader message="Cargando incidencias..." height={220} />
+      ) : (
+        <div className="table-container">
+          <table className="table">
+            <thead>
+              <tr><th>#</th><th>Fecha y Hora</th><th>Tipo</th><th>Alumno</th><th>Descripcion</th><th>Registrado por</th><th>Estado</th><th>Acciones</th></tr>
+            </thead>
+            <tbody>
+              {paginated.length === 0 && (
+                <tr><td colSpan={8} style={{ textAlign: 'center', padding: 24, color: '#5F5657' }}>No se encontraron incidencias.</td></tr>
+              )}
+              {paginated.map((inc, idx) => (
+                <tr key={inc.id}>
+                  <td>{(page - 1) * perPage + idx + 1}</td>
+                  <td>
+                    {inc.fecha_registro
+                      ? new Date(inc.fecha_registro).toLocaleString('es-MX', { dateStyle: 'short', timeStyle: 'short' })
+                      : '---'}
+                  </td>
+                  <td>{inc.tipo}</td>
+                  <td style={{ fontWeight: 500 }}>{nombreAlumno(inc)}</td>
+                  <td style={{ maxWidth: 200, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{inc.descripcion}</td>
+                  <td>{registradoPor}</td>
+                  <td><span className={getEstadoBadge(inc.estado)}>{inc.estado}</span></td>
+                  <td>
+                    <div style={{ display: 'flex', gap: 4 }}>
+                      <button className="table-action" title="Ver detalles" onClick={() => setDetail(inc)}><Eye size={18} /></button>
+                      {inc.estado !== 'Resuelto' && (
+                        <button className="table-action" title="Marcar como resuelta" onClick={() => handleMarkResolved(inc)}><Check size={18} /></button>
+                      )}
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
 
       <div className="pagination">
         <span> Pagina {page} de {totalPages}</span>
@@ -259,43 +258,9 @@ export default function IncidentsPage({ role }: IncidentsPageProps) {
                 <label className="field-label">Tipo de incidencia *</label>
                 <select className={`select ${formErrors.tipo ? 'input--error' : ''}`} value={formTipo} onChange={(e) => { setFormTipo(e.target.value); setFormErrors(prev => ({ ...prev, tipo: '' })); }}>
                   <option value="">Seleccionar tipo...</option>
-                  {tipoOptionsSinTodas.map((tipo) => (<option key={tipo} value={tipo}>{tipo}</option>))}
+                  {tipoOptions.map((tipo) => (<option key={tipo} value={tipo}>{tipo}</option>))}
                 </select>
                 {formErrors.tipo && <span style={{ fontSize: 12, color: '#AB1748', marginTop: 4, display: 'block' }}>{formErrors.tipo}</span>}
-              </div>
-
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, marginBottom: 16 }}>
-                <div className="input-group">
-                  <label className="field-label">Fecha de la incidencia *</label>
-                  <input
-                    type="date"
-                    className={`input ${formErrors.fecha ? 'input--error' : ''}`}
-                    value={formFecha}
-                    onChange={(e) => { setFormFecha(e.target.value); setFormErrors(prev => ({ ...prev, fecha: '' })); }}
-                  />
-                  {formErrors.fecha && <span style={{ fontSize: 12, color: '#AB1748', marginTop: 4, display: 'block' }}>{formErrors.fecha}</span>}
-                </div>
-                <div className="input-group">
-                  <label className="field-label">Hora de la incidencia *</label>
-                  <input
-                    type="time"
-                    className={`input ${formErrors.hora ? 'input--error' : ''}`}
-                    value={formHora}
-                    onChange={(e) => { setFormHora(e.target.value); setFormErrors(prev => ({ ...prev, hora: '' })); }}
-                  />
-                  {formErrors.hora && <span style={{ fontSize: 12, color: '#AB1748', marginTop: 4, display: 'block' }}>{formErrors.hora}</span>}
-                </div>
-              </div>
-
-              <div className="input-group" style={{ marginBottom: 16 }}>
-                <label className="field-label">Registrado por</label>
-                <input
-                  type="text"
-                  className="input"
-                  value={registradoPor}
-                  readOnly
-                  style={{ background: '#F0EFEF', color: '#5F5657', cursor: 'not-allowed' }}
-                />
               </div>
 
               <div className="input-group" style={{ marginBottom: 16, position: 'relative' }}>
@@ -318,7 +283,7 @@ export default function IncidentsPage({ role }: IncidentsPageProps) {
                   />
                   {formAlumnoSelected && (
                     <button
-                      onClick={handleClearAlumno}
+                      onClick={() => { setFormAlumnoSelected(null); setFormAlumnoQuery(''); }}
                       style={{ position: 'absolute', right: 8, top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', cursor: 'pointer', color: '#85787A', padding: 2 }}
                     >
                       <XIcon size={16} />
@@ -341,7 +306,7 @@ export default function IncidentsPage({ role }: IncidentsPageProps) {
                   }}>
                     {alumnoResults.map(s => (
                       <div
-                        key={s.idAlumno}
+                        key={s.id}
                         onClick={() => handleSelectAlumno(s)}
                         style={{
                           padding: '10px 14px',
@@ -352,8 +317,10 @@ export default function IncidentsPage({ role }: IncidentsPageProps) {
                         onMouseEnter={(e) => (e.currentTarget.style.background = '#f8f7f7')}
                         onMouseLeave={(e) => (e.currentTarget.style.background = '#fff')}
                       >
-                        <div style={{ fontWeight: 600, fontSize: 13, color: '#1C1819' }}>{s.nombreCompleto}</div>
-                        <div style={{ fontSize: 11, color: '#85787A' }}>{s.matricula} · Grupo {s.grupo}</div>
+                        <div style={{ fontWeight: 600, fontSize: 13, color: '#1C1819' }}>
+                          {s.nombre} {s.apellido_paterno} {s.apellido_materno}
+                        </div>
+                        <div style={{ fontSize: 11, color: '#85787A' }}>{s.matricula}</div>
                       </div>
                     ))}
                   </div>
@@ -361,7 +328,7 @@ export default function IncidentsPage({ role }: IncidentsPageProps) {
                 {formAlumnoSelected && (
                   <div style={{ marginTop: 6, padding: '6px 10px', background: '#e8f5e9', borderRadius: 6, fontSize: 12, color: '#0F8122', fontWeight: 500, display: 'flex', alignItems: 'center', gap: 6 }}>
                     <Check size={14} />
-                    {formAlumnoSelected.nombreCompleto} ({formAlumnoSelected.matricula})
+                    {formAlumnoSelected.nombre} {formAlumnoSelected.apellido_paterno} ({formAlumnoSelected.matricula})
                   </div>
                 )}
                 {formErrors.alumno && <span style={{ fontSize: 12, color: '#AB1748', marginTop: 4, display: 'block' }}>{formErrors.alumno}</span>}
@@ -393,22 +360,6 @@ export default function IncidentsPage({ role }: IncidentsPageProps) {
                 </div>
               </div>
 
-              <div className="input-group" style={{ marginBottom: 16 }}>
-                <label className="field-label">Gravedad *</label>
-                <select className={`select ${formErrors.gravedad ? 'input--error' : ''}`} value={formGravedad} onChange={(e) => { setFormGravedad(e.target.value); setFormErrors(prev => ({ ...prev, gravedad: '' })); }}>
-                  <option value="">Seleccionar gravedad...</option>
-                  {gravedadOptions.map((g) => (<option key={g} value={g}>{g}</option>))}
-                </select>
-                {formErrors.gravedad && <span style={{ fontSize: 12, color: '#AB1748', marginTop: 4, display: 'block' }}>{formErrors.gravedad}</span>}
-              </div>
-
-              {formGravedad === 'Grave' && (
-                <div className="alert alert--warning" style={{ marginBottom: 16 }}>
-                  <AlertTriangle size={18} />
-                  <span>Esta incidencia esta marcada como <strong>Grave</strong>. Se notificara a los directivos automaticamente.</span>
-                </div>
-              )}
-
               <label className="checkbox-group">
                 <input type="checkbox" checked={formNotificar} onChange={(e) => setFormNotificar(e.target.checked)} />
                 <span style={{ fontSize: 14 }}>Notificar a directivos</span>
@@ -416,11 +367,74 @@ export default function IncidentsPage({ role }: IncidentsPageProps) {
             </div>
             <div className="modal-footer">
               <button className="btn btn--secondary" onClick={handleCloseModal}>Cancelar</button>
-              <button className="btn btn--primary" onClick={handleSave}>Guardar incidencia</button>
+              <button className="btn btn--primary" onClick={handleSave} disabled={saving}>
+                {saving && <Loader2 size={16} className="spin" style={{ marginRight: 6, verticalAlign: 'middle' }} />}
+                {saving ? 'Guardando...' : 'Guardar incidencia'}
+              </button>
             </div>
           </div>
         </div>
       )}
+
+      {detail && (
+        <div className="modal-backdrop" onClick={() => setDetail(null)}>
+          <div className="modal" style={{ maxWidth: 480 }} onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header">
+              <h3>Detalle de incidencia</h3>
+              <button className="modal-close" onClick={() => setDetail(null)}><XIcon size={20} /></button>
+            </div>
+            <div className="modal-body" style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+              <div>
+                <span className="field-label">Estado</span>
+                <div style={{ marginTop: 4 }}><span className={getEstadoBadge(detail.estado)}>{detail.estado}</span></div>
+              </div>
+              <div>
+                <span className="field-label">Tipo</span>
+                <div style={{ fontWeight: 500 }}>{detail.tipo}</div>
+              </div>
+              <div>
+                <span className="field-label">Alumno</span>
+                <div style={{ fontWeight: 500 }}>{nombreAlumno(detail)}</div>
+              </div>
+              <div>
+                <span className="field-label">Fecha de registro</span>
+                <div>
+                  {detail.fecha_registro
+                    ? new Date(detail.fecha_registro).toLocaleString('es-MX', { dateStyle: 'long', timeStyle: 'short' })
+                    : '---'}
+                </div>
+              </div>
+              <div>
+                <span className="field-label">Descripcion</span>
+                <div>{detail.descripcion}</div>
+              </div>
+              {detail.fecha_resolucion && (
+                <div>
+                  <span className="field-label">Fecha de resolucion</span>
+                  <div>{new Date(detail.fecha_resolucion).toLocaleString('es-MX', { dateStyle: 'long', timeStyle: 'short' })}</div>
+                </div>
+              )}
+              {detail.evidencia_base64 && (
+                <div>
+                  <span className="field-label">Evidencia</span>
+                  <img src={detail.evidencia_base64} alt="Evidencia" style={{ width: '100%', borderRadius: 8, marginTop: 4 }} />
+                </div>
+              )}
+            </div>
+            <div className="modal-footer">
+              <button className="btn btn--secondary" onClick={() => setDetail(null)}>Cerrar</button>
+              {detail.estado !== 'Resuelto' && (
+                <button className="btn btn--primary" onClick={() => handleMarkResolved(detail)}><Check size={16} /> Marcar resuelta</button>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      <style>{`
+        .spin { animation: spin 1s linear infinite; }
+        @keyframes spin { to { transform: rotate(360deg); } }
+      `}</style>
     </div>
   );
 }

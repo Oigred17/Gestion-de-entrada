@@ -37,6 +37,8 @@ async def _process_card_read(uid_nfc: str, db=None):
         close_db = True
 
     try:
+        nfc_manager.note_uid(uid_nfc)
+
         if nfc_manager.capture_mode:
             nfc_manager.capture_event.set()
             nfc_manager.captured_uid = uid_nfc

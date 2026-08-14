@@ -19,12 +19,24 @@ import * as XLSX from "xlsx";
 import { alumnosApi, gruposApi, ciclosApi } from "../api";
 import type { Alumno, Grupo } from "../types";
 import { generateStudentListPDF } from "../utils/generateStudentListPDF";
+import { toastSuccess, toastError, toastInfo } from "@/lib/toast";
+import Loader from "../components/Loader";
+import ConfirmPasswordModal from "../components/ConfirmPasswordModal";
 
 const ROWS_PER_PAGE_OPTIONS = [10, 25, 50, 100];
+
+interface StudentConfirm {
+  type: "toggle_status" | "save_edit" | "import";
+  title: string;
+  message: string;
+  confirmLabel: string;
+  student?: Alumno;
+}
 
 export default function StudentsPage() {
   const [alumnosData, setAlumnosData] = useState<Alumno[]>([]);
   const [gruposMap, setGruposMap] = useState<Record<number, string>>({});
+  const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
   const [activeFilters, setActiveFilters] = useState<string[]>([]);
   const [showFilterDropdown, setShowFilterDropdown] = useState(false);
@@ -45,10 +57,10 @@ export default function StudentsPage() {
   const [editDomicilio, setEditDomicilio] = useState("");
   const [editTutorNombre, setEditTutorNombre] = useState("");
   const [editTelefonoTutor, setEditTelefonoTutor] = useState("");
-  const [editCorreoTutor, setEditCorreoTutor] = useState("");
-  const [toast, setToast] = useState<{ message: string; type: "success" | "error" | "info" } | null>(null);
+  const [editNss, setEditNss] = useState("");
   const [showConfirmEdit, setShowConfirmEdit] = useState(false);
   const [showConfirmClose, setShowConfirmClose] = useState(false);
+  const [confirmAction, setConfirmAction] = useState<StudentConfirm | null>(null);
   const [showExportModal, setShowExportModal] = useState(false);
   const [exportGroupId, setExportGroupId] = useState<string>("all");
   const [showNewStudentModal, setShowNewStudentModal] = useState(false);
@@ -89,6 +101,8 @@ export default function StudentsPage() {
     } catch (error) {
       console.error('Error fetching data:', error);
       showToast("Error al cargar los alumnos", "error");
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -165,8 +179,21 @@ export default function StudentsPage() {
   };
 
   const showToast = (message: string, type: "success" | "error" | "info" = "success") => {
-    setToast({ message, type });
-    setTimeout(() => setToast(null), 3000);
+    if (type === "success") toastSuccess(message);
+    else if (type === "error") toastError(message);
+    else toastInfo(message);
+  };
+
+  const getApiErrorMessage = (error: unknown, fallback: string): string => {
+    const detail = (error as { response?: { data?: { detail?: unknown } } })?.response?.data?.detail;
+    if (typeof detail === "string" && detail.trim()) return detail;
+    if (Array.isArray(detail) && detail.length > 0) {
+      const first = detail[0] as { msg?: string; loc?: unknown[] };
+      const field = Array.isArray(first?.loc) ? String(first.loc[first.loc.length - 1] ?? "") : "";
+      const msg = first?.msg || "Dato inválido";
+      return field ? `${field}: ${msg}` : msg;
+    }
+    return fallback;
   };
 
   const handleEdit = (student: Alumno) => {
@@ -182,7 +209,7 @@ export default function StudentsPage() {
     setEditDomicilio(student.direccion || '');
     setEditTutorNombre(student.tutor_nombre || '');
     setEditTelefonoTutor(student.tutor_telefono || '');
-    setEditCorreoTutor('');
+    setEditNss(student.nss || '');
     setSelectedStudent(student);
     setShowConfirmEdit(true);
   };
@@ -209,13 +236,14 @@ export default function StudentsPage() {
         turno: editTurno,
         fecha_nacimiento: editFechaNacimiento,
         tutor_nombre: editTutorNombre,
+        nss: editNss,
         id_grupo: editGrupo ? Number(editGrupo) : undefined,
       });
       setPanelMode("view");
       showToast("Datos del alumno actualizados correctamente");
       fetchAlumnos();
     } catch (error) {
-      showToast("Error al actualizar el alumno", "error");
+      showToast(getApiErrorMessage(error, "Error al actualizar el alumno"), "error");
     }
   };
 
@@ -234,7 +262,16 @@ export default function StudentsPage() {
     setSelectedStudent(null);
   };
 
-  const handleConfirmSaveAndClose = async () => {
+  const handleConfirmSaveAndClose = () => {
+    setConfirmAction({
+      type: "save_edit",
+      title: "Guardar cambios del alumno",
+      message: "Esta accion guardara los cambios realizados en los datos del alumno. Ingrese su contrasena para confirmar.",
+      confirmLabel: "Guardar cambios",
+    });
+  };
+
+  const performSaveEdit = async () => {
     if (!selectedStudent) return;
     try {
       const nameParts = editName.split(' ');
@@ -251,6 +288,7 @@ export default function StudentsPage() {
         turno: editTurno,
         fecha_nacimiento: editFechaNacimiento,
         tutor_nombre: editTutorNombre,
+        nss: editNss,
         id_grupo: editGrupo ? Number(editGrupo) : undefined,
       });
       setShowConfirmClose(false);
@@ -260,7 +298,7 @@ export default function StudentsPage() {
       fetchAlumnos();
     } catch (error) {
       setShowConfirmClose(false);
-      showToast("Error al actualizar el alumno", "error");
+      showToast(getApiErrorMessage(error, "Error al actualizar el alumno"), "error");
     }
   };
 
@@ -318,11 +356,23 @@ export default function StudentsPage() {
       resetNewStudentForm();
       fetchAlumnos();
     } catch (error) {
-      showToast("Error al crear el alumno", "error");
+      showToast(getApiErrorMessage(error, "Error al crear el alumno"), "error");
     }
   };
 
-  const handleToggleEstatus = async (student: Alumno) => {
+  const handleToggleEstatus = (student: Alumno) => {
+    const nuevoEstatus = student.estatus === "Activo" ? "Inactivo" : "Activo";
+    const accion = nuevoEstatus === "Activo" ? "reactivar" : "dar de baja";
+    setConfirmAction({
+      type: "toggle_status",
+      student,
+      title: accion === "reactivar" ? "Reactivar alumno" : "Dar de baja alumno",
+      message: `¿Desea ${accion} al alumno ${`${student.nombre} ${student.apellido_paterno} ${student.apellido_materno}`.trim()} (${student.matricula})? Ingrese su contrasena para confirmar.`,
+      confirmLabel: accion === "reactivar" ? "Reactivar" : "Dar de baja",
+    });
+  };
+
+  const performToggleEstatus = async (student: Alumno) => {
     const nuevoEstatus = student.estatus === "Activo" ? "Inactivo" : "Activo";
     try {
       await alumnosApi.update(student.id, { estatus: nuevoEstatus });
@@ -343,18 +393,45 @@ export default function StudentsPage() {
     XLSX.writeFile(wb, "plantilla_alumnos.xlsx");
   };
 
+  const HEADER_KEYS: { key: string; label: string }[] = [
+    { key: "nombre", label: "NOMBRE" },
+    { key: "matricula", label: "MATRICULA" },
+    { key: "grupo", label: "GRUPO" },
+    { key: "turno", label: "TURNO" },
+    { key: "capacitacion", label: "CAPACITACION" },
+    { key: "curp", label: "CURP" },
+    { key: "tutor", label: "TUTOR" },
+    { key: "telefono", label: "TELEFONO" },
+    { key: "nss", label: "NSS" },
+    { key: "tipo_sangre", label: "TIPO SANGRE" },
+    { key: "fecha_nacimiento", label: "FECHA NACIMIENTO" },
+    { key: "cohorte", label: "COHORTE" },
+    { key: "domicilio", label: "DOMICILIO" },
+  ];
+
   const findHeaderRow = (data: (string | undefined)[][]): { headerRowIdx: number; colMap: Record<string, number> } | null => {
     for (let i = 0; i < data.length; i++) {
       const row = data[i];
       if (!row) continue;
       const colMap: Record<string, number> = {};
       for (let j = 0; j < row.length; j++) {
-        const val = String(row[j] || "").toLowerCase().trim();
-        if (val.includes("nombre")) colMap.nombre = j;
-        if (val.includes("matricula") || val.includes("matr")) colMap.matricula = j;
-        if (val === "grupo" || val === "grupo " || val.match(/^grupo/i)) colMap.grupo = j;
+        const val = String(row[j] || "").toLowerCase().trim().replace(/\s+/g, " ");
+        if (!val) continue;
+        if ((val.includes("nombre") || val.includes("estudiante") || val.includes("alumno")) && colMap.nombre === undefined) colMap.nombre = j;
+        if (val.includes("matricula") || val.includes("matr") || val.includes("control")) colMap.matricula = j;
+        if (val === "grupo" || /^grupo/i.test(val)) colMap.grupo = j;
+        if (val.includes("turno")) colMap.turno = j;
+        if (val.includes("capacitacion") || val.includes("carrera") || val.includes("tecnico")) colMap.capacitacion = j;
+        if (val.includes("curp")) colMap.curp = j;
+        if (val.includes("tutor")) colMap.tutor = j;
+        if (val.includes("telefono") || val.includes("celular") || val === "tel" || val.includes("tel ")) colMap.telefono = j;
+        if (val.includes("nss") || val.includes("afiliacion") || val.includes("seguro")) colMap.nss = j;
+        if (val.includes("sangre")) colMap.tipo_sangre = j;
+        if (val.includes("nacimiento")) colMap.fecha_nacimiento = j;
+        if (val.includes("cohorte") || val.includes("generacion")) colMap.cohorte = j;
+        if (val.includes("domicilio") || val.includes("direccion") || val.includes("dirección")) colMap.domicilio = j;
       }
-      if (colMap.nombre !== undefined && colMap.matricula !== undefined && colMap.grupo !== undefined) {
+      if (colMap.nombre !== undefined && colMap.matricula !== undefined) {
         return { headerRowIdx: i, colMap };
       }
     }
@@ -389,27 +466,27 @@ export default function StudentsPage() {
           const found = findHeaderRow(jsonData);
           if (!found) continue;
           const rawHeaders = jsonData[found.headerRowIdx];
-          const headers = [
-            String(rawHeaders[found.colMap.nombre] || "NOMBRE DEL ESTUDIANTE"),
-            String(rawHeaders[found.colMap.matricula] || "MATRICULA"),
-            String(rawHeaders[found.colMap.grupo] || "GRUPO"),
-          ];
+          const headers = HEADER_KEYS
+            .filter(k => found.colMap[k.key] !== undefined)
+            .map(k => String(rawHeaders[found.colMap[k.key]] || k.label).toUpperCase());
           const rows: string[][] = [];
           for (let r = found.headerRowIdx + 1; r < jsonData.length; r++) {
             const row = jsonData[r];
             if (!row) continue;
             const name = String(row[found.colMap.nombre] || "").trim();
             const matricula = String(row[found.colMap.matricula] || "").trim();
-            const grupo = String(row[found.colMap.grupo] || "").trim();
             if (!name || !matricula || matricula === "nan" || matricula === "NaN" || /^\d+\.\d+$/.test(matricula)) continue;
-            rows.push([name, matricula, grupo]);
+            const rowData = HEADER_KEYS.map(k =>
+              found.colMap[k.key] !== undefined ? String(row[found.colMap[k.key]] || "").trim() : ""
+            );
+            rows.push(rowData);
           }
           if (rows.length > 0) {
             sheetsData.push({ sheet: sheetName, headers, rows });
           }
         }
         if (sheetsData.length === 0) {
-          setUploadError("No se encontraron datos validos en ninguna hoja. Busque columnas: NOMBRE, MATRICULA, GRUPO.");
+          setUploadError("No se encontraron datos validos en ninguna hoja. Busque al menos columnas: NOMBRE y MATRICULA.");
           setUploadFile(null);
           return;
         }
@@ -440,12 +517,41 @@ export default function StudentsPage() {
     }
   };
 
-  const handleConfirmUpload = async () => {
+  const handleConfirmUpload = () => {
     if (!uploadPreview) return;
-    let allRows: { name: string; matricula: string; grupo: string }[] = [];
+    const totalRows = uploadPreview.reduce((acc, sheet) => acc + sheet.rows.length, 0);
+    setConfirmAction({
+      type: "import",
+      title: "Importar alumnos",
+      message: `Esta accion importara ${totalRows} alumno(s) desde el archivo seleccionado. Ingrese su contrasena para confirmar.`,
+      confirmLabel: "Importar alumnos",
+    });
+  };
+
+  const performUpload = async () => {
+    if (!uploadPreview) return;
+    const allRows: {
+      name: string; matricula: string; grupo: string; turno: string; capacitacion: string;
+      curp: string; tutor: string; telefono: string; nss: string; tipo_sangre: string;
+      fecha_nacimiento: string; cohorte: string; domicilio: string;
+    }[] = [];
     for (const sheet of uploadPreview) {
       for (const row of sheet.rows) {
-        allRows.push({ name: row[0], matricula: row[1], grupo: row[2] });
+        allRows.push({
+          name: row[0],
+          matricula: row[1],
+          grupo: row[2],
+          turno: row[3],
+          capacitacion: row[4],
+          curp: row[5],
+          tutor: row[6],
+          telefono: row[7],
+          nss: row[8],
+          tipo_sangre: row[9],
+          fecha_nacimiento: row[10],
+          cohorte: row[11],
+          domicilio: row[12],
+        });
       }
     }
     const total = allRows.length;
@@ -465,7 +571,7 @@ export default function StudentsPage() {
     const errors: string[] = [];
     setUploadProgress({ current: 0, total, success: 0, failed: 0, done: false, errors: [] });
     for (let i = 0; i < allRows.length; i++) {
-      const { name: nombreCompleto, matricula, grupo: grupoStr } = allRows[i];
+      const { name: nombreCompleto, matricula, grupo: grupoStr, turno, capacitacion, curp, tutor, telefono, nss, tipo_sangre, fecha_nacimiento, cohorte, domicilio } = allRows[i];
       const nameParts = nombreCompleto.replace(/\\n/g, " ").replace(/\s+/g, " ").trim().split(' ');
       let id_grupo: number | undefined;
       const claveGrupo = Number(grupoStr);
@@ -480,6 +586,16 @@ export default function StudentsPage() {
           apellido_paterno: nameParts[1] || '',
           apellido_materno: nameParts.slice(2).join(' ') || '',
           id_grupo,
+          turno: turno || undefined,
+          capacitacion: capacitacion || undefined,
+          curp: curp || undefined,
+          tutor_nombre: tutor || undefined,
+          telefono: telefono || undefined,
+          nss: nss || undefined,
+          tipo_sangre: tipo_sangre || undefined,
+          fecha_nacimiento: fecha_nacimiento || undefined,
+          cohorte: cohorte || undefined,
+          direccion: domicilio || undefined,
         });
         added++;
       } catch (err: unknown) {
@@ -504,6 +620,10 @@ export default function StudentsPage() {
     showToast(`${added} alumno(s) importado(s)${failed > 0 ? ` (${failed} fallidos)` : ""}`);
     fetchAlumnos();
   };
+
+  if (loading) {
+    return <Loader message="Cargando alumnos..." height={220} />;
+  }
 
   return (
     <div className="students-page">
@@ -1077,6 +1197,7 @@ export default function StudentsPage() {
                   setEditDomicilio(selectedStudent.direccion || '');
                   setEditTutorNombre(selectedStudent.tutor_nombre || '');
                   setEditTelefonoTutor(selectedStudent.tutor_telefono || '');
+                  setEditNss(selectedStudent.nss || '');
                   setPanelMode("edit");
                 }} style={{ display: "flex", alignItems: "center", gap: 6, padding: "8px 14px", border: "none", borderRadius: 8, background: "#AB1748", color: "#fff", fontSize: 13, fontWeight: 500, cursor: "pointer" }}>
                   <Edit size={14} /> Editar
@@ -1193,8 +1314,8 @@ export default function StudentsPage() {
                       <input type="text" value={editTelefonoTutor} onChange={(e) => setEditTelefonoTutor(e.target.value)} style={{ width: "100%", padding: "6px 10px", border: "1px solid #CAC6C7", borderRadius: 6, fontSize: 14, fontWeight: 500, marginTop: 4, fontFamily: "var(--font-sans)" }} />
                     </div>
                     <div>
-                      <span style={{ color: "#5F5657", fontSize: 12 }}>Correo tutor</span>
-                      <input type="text" value={editCorreoTutor} onChange={(e) => setEditCorreoTutor(e.target.value)} style={{ width: "100%", padding: "6px 10px", border: "1px solid #CAC6C7", borderRadius: 6, fontSize: 14, fontWeight: 500, marginTop: 4, fontFamily: "var(--font-sans)" }} />
+                      <span style={{ color: "#5F5657", fontSize: 12 }}>Num. Afiliacion</span>
+                      <input type="text" value={editNss} onChange={(e) => setEditNss(e.target.value)} style={{ width: "100%", padding: "6px 10px", border: "1px solid #CAC6C7", borderRadius: 6, fontSize: 14, fontWeight: 500, marginTop: 4, fontFamily: "monospace" }} />
                     </div>
                   </div>
                 </div>
@@ -1690,7 +1811,7 @@ export default function StudentsPage() {
             {newStudentMode === "upload" && (
               <>
                 <div style={{ padding: "12px 16px", borderRadius: 8, background: "#F0EFEF", marginBottom: 20, fontSize: 13, color: "#5F5657", lineHeight: 1.6 }}>
-                  <strong>Formato requerido:</strong> El archivo debe contener columnas: <strong>NOMBRE DEL ESTUDIANTE</strong>, <strong>MATRICULA</strong>, <strong>GRUPO</strong>. Soporta archivos con multiples hojas (cada hoja = un grupo). Compatible con los formatos de LISTAS CAPACITACIÓN y LISTAS PROPEDEUTICO.
+                  <strong>Formato requerido:</strong> El archivo debe contener al menos las columnas <strong>NOMBRE</strong> y <strong>MATRICULA</strong>. Opcionalmente se detectan: <strong>GRUPO</strong>, <strong>TURNO</strong>, <strong>CAPACITACION</strong>, <strong>CURP</strong>, <strong>TUTOR</strong>, <strong>TELEFONO</strong>, <strong>NSS</strong>, <strong>TIPO SANGRE</strong>, <strong>FECHA NACIMIENTO</strong>, <strong>COHORTE</strong> y <strong>DOMICILIO</strong>. Soporta archivos con multiples hojas (cada hoja = un grupo).
                 </div>
 
                 <div style={{ display: "flex", gap: 12, marginBottom: 20 }}>
@@ -1879,26 +2000,21 @@ export default function StudentsPage() {
         </div>
       )}
 
-
-      {toast && (
-        <div
-          style={{
-            position: "fixed",
-            bottom: 24,
-            right: 24,
-            padding: "12px 20px",
-            borderRadius: 8,
-            background: toast.type === "success" ? "#0F8122" : toast.type === "error" ? "#AB1748" : "#5F5657",
-            color: "#fff",
-            fontSize: 14,
-            fontWeight: 500,
-            zIndex: 2000,
-            boxShadow: "0 4px 12px rgba(0,0,0,0.2)",
-          }}
-        >
-          {toast.message}
-        </div>
-      )}
+      <ConfirmPasswordModal
+        open={!!confirmAction}
+        title={confirmAction?.title ?? ""}
+        message={confirmAction?.message ?? ""}
+        confirmLabel={confirmAction?.confirmLabel}
+        onClose={() => setConfirmAction(null)}
+        onConfirm={() => {
+          if (!confirmAction) return;
+          if (confirmAction.type === "toggle_status" && confirmAction.student) {
+            return performToggleEstatus(confirmAction.student);
+          }
+          if (confirmAction.type === "save_edit") return performSaveEdit();
+          if (confirmAction.type === "import") return performUpload();
+        }}
+      />
 
       <style>{`
         @keyframes slideInRight {

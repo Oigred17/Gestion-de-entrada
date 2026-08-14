@@ -1,8 +1,10 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { ArrowDown, ArrowUp, CheckCircle, XCircle, AlertTriangle, Nfc, Lock, Search, LogOut, X as XIcon, Wifi, WifiOff } from 'lucide-react';
+import { ArrowDown, ArrowUp, CheckCircle, XCircle, AlertTriangle, Nfc, Lock, Search, LogOut, X as XIcon, Wifi, WifiOff, KeyRound } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { registrosApi, alumnosApi, credencialesApi } from '../api';
+import { nfcApi } from '../api/nfc';
 import type { RegistroAcceso, Alumno, Credencial } from '../types';
+import { toastSuccess, toastError } from '../lib/toast';
 
 const getFullName = (alumno: Alumno) =>
   `${alumno.nombre} ${alumno.apellido_paterno} ${alumno.apellido_materno}`.trim();
@@ -19,18 +21,6 @@ type ScanResult = {
 
 type ViewMode = 'scan' | 'manual';
 
-type WSMessage = {
-  type: string;
-  status?: string;
-  tipo_evento?: string;
-  uid_nfc?: string;
-  credencial_id?: number;
-  registro_id?: number;
-  alumno?: { id: number; nombre: string; matricula: string } | null;
-  message?: string;
-  timestamp?: string;
-};
-
 export default function ScanPage() {
   const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState<'entrada' | 'salida'>('entrada');
@@ -44,6 +34,7 @@ export default function ScanPage() {
   const [manualSelected, setManualSelected] = useState<Alumno | null>(null);
   const [showManualDropdown, setShowManualDropdown] = useState(false);
   const [manualSaving, setManualSaving] = useState(false);
+  const [codigoPermiso, setCodigoPermiso] = useState('');
 
   const [alumnosList, setAlumnosList] = useState<Alumno[]>([]);
   const [credencialesList, setCredencialesList] = useState<Credencial[]>([]);
@@ -82,25 +73,8 @@ export default function ScanPage() {
   const connectWS = useCallback(() => {
     if (wsRef.current?.readyState === WebSocket.OPEN) return;
 
-    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-    const host = window.location.hostname;
-    const port = '8000';
-    const url = `${protocol}//${host}:${port}/api/v1/nfc/ws`;
-
-    const ws = new WebSocket(url);
-    wsRef.current = ws;
-
-    ws.onopen = () => {
-      setWsConnected(true);
-      if (reconnectTimer.current) {
-        clearTimeout(reconnectTimer.current);
-        reconnectTimer.current = null;
-      }
-    };
-
-    ws.onmessage = (event) => {
-      try {
-        const msg: WSMessage = JSON.parse(event.data);
+    const ws = nfcApi.connectWebSocket(
+      (msg) => {
         if (msg.type === 'scan_result' && msg.uid_nfc) {
           setIsScanning(true);
           const now = new Date();
@@ -122,7 +96,6 @@ export default function ScanPage() {
               nombre: msg.alumno.nombre,
               apellido_paterno: '',
               apellido_materno: '',
-              email: '',
               estatus: 'Activo',
             };
             const newRecord: RegistroAcceso = {
@@ -151,20 +124,15 @@ export default function ScanPage() {
             setIsScanning(false);
           }, 5000);
         }
-      } catch (err) {
-        console.error('WS parse error:', err);
+      },
+      () => setWsConnected(true),
+      () => {
+        setWsConnected(false);
+        wsRef.current = null;
+        reconnectTimer.current = setTimeout(connectWS, 3000);
       }
-    };
-
-    ws.onclose = () => {
-      setWsConnected(false);
-      wsRef.current = null;
-      reconnectTimer.current = setTimeout(connectWS, 3000);
-    };
-
-    ws.onerror = () => {
-      ws.close();
-    };
+    );
+    wsRef.current = ws;
   }, [alumnoMap]);
 
   useEffect(() => {
@@ -190,6 +158,7 @@ export default function ScanPage() {
         credencial_id: cred?.id ?? 0,
         fecha_hora: nowISO,
         tipo_acceso: 'SALIDA',
+        codigo_autorizacion: codigoPermiso.trim() || undefined,
       });
 
       setRecords(prev => [created, ...prev].slice(0, 20));
@@ -197,10 +166,13 @@ export default function ScanPage() {
       setScanResult({ type: 'exit', student: manualSelected, studentName: getFullName(manualSelected), time });
       setManualQuery('');
       setManualSelected(null);
+      setCodigoPermiso('');
       setManualSaving(false);
       setViewMode('scan');
-    } catch (err) {
-      console.error('Error saving manual record:', err);
+      toastSuccess(codigoPermiso.trim() ? 'Salida registrada con permiso validado.' : 'Salida registrada correctamente.');
+    } catch (err: any) {
+      const detail = err?.response?.data?.detail;
+      toastError(typeof detail === 'string' ? detail : 'No se pudo registrar la salida.');
       setManualSaving(false);
     }
   };
@@ -307,8 +279,22 @@ export default function ScanPage() {
               </div>
             )}
           </div>
+          <div style={{ marginBottom: 16 }}>
+            <div style={{ fontSize: 13, fontWeight: 600, color: '#5F5657', marginBottom: 6 }}>Codigo de autorizacion (opcional)</div>
+            <div style={{ position: 'relative' }}>
+              <KeyRound size={16} style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', color: '#85787A' }} />
+              <input
+                type="text"
+                className="input"
+                placeholder="Ej. A7K3P9 - valida un permiso aprobado"
+                value={codigoPermiso}
+                onChange={(e) => setCodigoPermiso(e.target.value.toUpperCase())}
+                style={{ paddingLeft: 36 }}
+              />
+            </div>
+          </div>
           <div style={{ display: 'flex', gap: 8 }}>
-            <button className="btn btn--secondary" onClick={() => { setViewMode('scan'); setManualQuery(''); setManualSelected(null); }}>Cancelar</button>
+            <button className="btn btn--secondary" onClick={() => { setViewMode('scan'); setManualQuery(''); setManualSelected(null); setCodigoPermiso(''); }}>Cancelar</button>
             <button className="btn btn--primary" disabled={!manualSelected || manualSaving} onClick={handleManualSave} style={{ flex: 1, opacity: !manualSelected || manualSaving ? 0.5 : 1, cursor: !manualSelected || manualSaving ? 'not-allowed' : 'pointer' }}>
               {manualSaving ? 'Registrando...' : 'Registrar salida sin credencial'}
             </button>

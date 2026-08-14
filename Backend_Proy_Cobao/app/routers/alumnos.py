@@ -58,7 +58,23 @@ async def crear_alumno(data: AlumnoCreate, db: AsyncSession = Depends(get_db)):
 async def actualizar_alumno(
     id_alumno: int, data: AlumnoUpdate, db: AsyncSession = Depends(get_db)
 ):
-    alumno = await crud_alumno.update_alumno(db, id_alumno, data)
+    try:
+        alumno = await crud_alumno.update_alumno(db, id_alumno, data)
+    except IntegrityError as e:
+        await db.rollback()
+        msg = str(e.orig)
+        if "matricula" in msg:
+            raise HTTPException(status_code=409, detail="Ya existe un alumno con esa matrícula")
+        if "curp" in msg:
+            raise HTTPException(status_code=409, detail="Ya existe un alumno con esa CURP")
+        if "nss" in msg:
+            raise HTTPException(status_code=409, detail="Ya existe un alumno con ese NSS")
+        if "tipo_sangre" in msg or "chk_alumnos_tipo_sangre" in msg:
+            raise HTTPException(
+                status_code=422,
+                detail="Tipo de sangre inválido. Use A+, A-, B+, B-, AB+, AB-, O+ u O-.",
+            )
+        raise HTTPException(status_code=409, detail="Conflicto al actualizar el alumno")
     if not alumno:
         raise HTTPException(status_code=404, detail="Alumno no encontrado")
     return alumno

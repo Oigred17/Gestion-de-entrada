@@ -1,9 +1,11 @@
 from datetime import datetime
 
+from fastapi import HTTPException
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.credencial import Credencial
+from app.models.permiso import Permiso
 from app.models.registro_acceso import RegistroAcceso
 from app.schemas.registro_acceso import RegistroAccesoCreate
 
@@ -63,9 +65,50 @@ async def count_registros_by_credencial(db: AsyncSession, id_credencial: int) ->
 
 
 async def create_registro(db: AsyncSession, data: RegistroAccesoCreate):
+    tipo = data.resolved_tipo_evento.upper()
+    credencial_id = data.resolved_credencial_id
+
+    # Si no llega una credencial valida, se resuelve desde el alumno
+    if not credencial_id or credencial_id <= 0:
+        if data.alumno_id:
+            result = await db.execute(
+                select(Credencial)
+                .where(Credencial.id_alumno == data.alumno_id)
+                .order_by(Credencial.id_credencial.desc())
+                .limit(1)
+            )
+            credencial = result.scalar_one_or_none()
+            if credencial:
+                credencial_id = credencial.id_credencial
+        if not credencial_id or credencial_id <= 0:
+            raise HTTPException(
+                status_code=400,
+                detail="El alumno no tiene una credencial asignada",
+            )
+
+    # Si es salida con codigo de autorizacion, se valida el permiso
+    id_permiso = None
+    if tipo == "SALIDA" and data.codigo_autorizacion:
+        codigo = data.codigo_autorizacion.strip().upper()
+        result = await db.execute(
+            select(Permiso).where(
+                Permiso.codigo_autorizacion == codigo,
+                Permiso.estado == "Aprobado",
+            )
+        )
+        permiso = result.scalar_one_or_none()
+        if not permiso:
+            raise HTTPException(
+                status_code=400,
+                detail="Codigo de autorizacion invalido o ya utilizado",
+            )
+        id_permiso = permiso.id_permiso
+        permiso.estado = "Utilizado"
+
     registro = RegistroAcceso(
-        id_credencial=data.resolved_credencial_id,
-        tipo_evento=data.resolved_tipo_evento,
+        id_credencial=credencial_id,
+        tipo_evento=tipo,
+        id_permiso=id_permiso,
     )
     db.add(registro)
     await db.flush()

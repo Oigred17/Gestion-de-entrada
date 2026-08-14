@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import {
   LayoutDashboard, Users, Building2, CreditCard, FileText,
@@ -7,6 +7,7 @@ import {
 } from 'lucide-react';
 import type { UserRole } from '../App';
 import { useAuth } from '../context/AuthContext';
+import Loader from './Loader';
 
 interface LayoutProps {
   children: ReactNode;
@@ -51,6 +52,7 @@ const prefectoMenu = [
 interface NotificationItem {
   id: number;
   type: 'success' | 'info' | 'warning' | 'error';
+  title: string;
   text: string;
   time: string;
   unread: boolean;
@@ -60,7 +62,14 @@ export default function Layout({ children, role, onLogout }: LayoutProps) {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [collapsed, setCollapsed] = useState(false);
   const [notifOpen, setNotifOpen] = useState(false);
-  const [notifications, setNotifications] = useState<NotificationItem[]>([]);
+  const [notifLoading, setNotifLoading] = useState(false);
+  const [notifications, setNotifications] = useState<NotificationItem[]>([
+    { id: 1, type: 'warning', title: 'Acceso sin credencial', text: 'Un alumno ingresó sin escanear su credencial.', time: '12 min', unread: true },
+    { id: 2, type: 'error', title: 'Credencial por vencer', text: 'La credencial del alumno Luis García está por vencer.', time: '35 min', unread: true },
+    { id: 3, type: 'info', title: 'Nuevo permiso registrado', text: 'Se registró un permiso de salida para el grupo 3°B.', time: '1 h', unread: true },
+    { id: 4, type: 'success', title: 'Registro completado', text: 'La entrada del alumno se registró correctamente.', time: '2 h', unread: false },
+  ]);
+  const notifTimer = useRef<number | undefined>(undefined);
   const location = useLocation();
   const navigate = useNavigate();
   const { user } = useAuth();
@@ -79,6 +88,18 @@ export default function Layout({ children, role, onLogout }: LayoutProps) {
     setNotifications(prev => prev.map(n => ({ ...n, unread: false })));
     setNotifOpen(false);
   };
+
+  const handleToggleNotifications = () => {
+    const opening = !notifOpen;
+    window.clearTimeout(notifTimer.current);
+    if (opening) {
+      setNotifLoading(true);
+      notifTimer.current = window.setTimeout(() => setNotifLoading(false), 900);
+    }
+    setNotifOpen(opening);
+  };
+
+  useEffect(() => () => window.clearTimeout(notifTimer.current), []);
 
   return (
     <div className="app-layout">
@@ -148,7 +169,7 @@ export default function Layout({ children, role, onLogout }: LayoutProps) {
             <div className="relative">
               <button
                 className="topbar-notification"
-                onClick={() => setNotifOpen(!notifOpen)}
+                onClick={handleToggleNotifications}
               >
                 <Bell size={22} />
                 {unreadCount > 0 && <span className="topbar-badge">{unreadCount}</span>}
@@ -166,22 +187,25 @@ export default function Layout({ children, role, onLogout }: LayoutProps) {
                       </button>
                     )}
                   </div>
-                  {notifications.length === 0 ? (
-                    <div style={{ padding: '32px 16px', textAlign: 'center', color: '#85787A', fontSize: 14 }}>
+                  {notifLoading ? (
+                    <Loader message="Cargando notificaciones..." height={240} />
+                  ) : notifications.length === 0 ? (
+                    <div style={{ padding: '32px 16px', textAlign: 'center', color: '#A79F9F', fontSize: 14 }}>
                       No tienes notificaciones
                     </div>
                   ) : (
                     <div className="notification-list">
                       {notifications.map(n => (
-                        <div key={n.id} className={`notification-item ${n.unread ? 'unread' : ''}`}>
-                          <div className={`notification-icon notification-icon--${n.type}`}>
-                            {n.type === 'warning' ? '&#9888;' : n.type === 'error' ? '&#10006;' : '&#9432;'}
+                        <div key={n.id} className={`notification-card ${n.unread ? 'unread' : ''}`}>
+                          <div className={`notification-card__img notification-card__img--${n.type}`} />
+                          <div className="notification-card__text">
+                            <div className="notification-card__textContent">
+                              <p className="notification-card__h1">{n.title}</p>
+                              <span className="notification-card__span">{n.time}</span>
+                            </div>
+                            <p className="notification-card__p">{n.text}</p>
                           </div>
-                          <div className="notification-content">
-                            <div className="notification-text">{n.text}</div>
-                            <div className="notification-time">{n.time}</div>
-                          </div>
-                          {n.unread && <div className="notification-dot" />}
+                          {n.unread && <div className="notification-card__dot" />}
                         </div>
                       ))}
                     </div>

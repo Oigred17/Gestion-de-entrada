@@ -14,6 +14,7 @@ class RegistroAccesoCreate(BaseModel):
     fecha_hora: datetime | None = None
     ubicacion: TextoLibreStr | None = None
     estatus: EstatusStr | None = None
+    codigo_autorizacion: str | None = None
 
     @property
     def resolved_credencial_id(self) -> int:
@@ -36,6 +37,7 @@ class RegistroAccesoResponse(BaseModel):
     estatus: str = "Activo"
     created_at: str | None = None
     updated_at: str | None = None
+    id_permiso: int | None = None
     alumno: dict | None = None
     credencial: dict | None = None
 
@@ -54,6 +56,7 @@ class RegistroAccesoResponse(BaseModel):
                 "estatus": "Activo",
                 "created_at": None,
                 "updated_at": None,
+                "id_permiso": getattr(data, "id_permiso", None),
                 "alumno": None,
                 "credencial": None,
             }

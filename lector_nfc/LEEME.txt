@@ -1,0 +1,37 @@
+INSTRUCCIONES: Lector NFC en otra PC (vía túnel)
+
+1) COPIAR la carpeta "lector_nfc" completa a la PC destino
+   (ej. C:\lector_nfc). Mantener TODOS los archivos juntos.
+
+2) INSTALAR los drivers del lector ACR122U en esa PC
+   (se incluyen en el CD del lector o se descargan de acs.com.hk).
+
+3) CONECTAR el lector ACR122U por USB a esa PC.
+
+4) EDITAR nfc_url.txt y poner la URL ACTUAL del túnel:
+      https://TU_URL_ACTUAL.trycloudflare.com/api/v1/nfc/scan
+   (La URL del túnel cambia cada vez que se reinicia; revisar con:
+      docker logs cobao-tunnel | Select-String trycloudflare.com)
+
+5) EJECUTAR iniciar_nfc.bat (doble clic). Debe mostrar:
+      Lector encontrado: ACS ACR122U ...
+      Esperando tarjetas NFC...
+   y al pasar una tarjeta: "Enviado al backend: XX:XX:XX:XX"
+
+   Opcional (sin ventana): iniciar_nfc_silencioso.vbs
+
+ARCHIVOS DE LA CARPETA
+  iniciar_nfc.bat            -> arranca el lector (obligatorio)
+  nfc_url.txt                -> URL del backend (obligatorio)
+  nfc_reader.exe             -> programa lector (obligatorio)
+  iniciar_nfc_silencioso.vbs -> arranque sin ventana (opcional)
+  nfc_reader.py              -> fuente (solo si usas Python en vez del .exe)
+  requirements-nfc.txt       -> dependencias si usas Python
+
+NOTAS
+  - Si la PC destino no tiene lector aún instalado, el .bat intenta
+    "Esperando lector NFC..." cada 5s; conecta el lector y continúa solo.
+  - El túnel debe estar levantado y el backend corriendo para que funcione.
+  - Si usas Python en vez del .exe: instala Python y
+    pip install -r requirements-nfc.txt, y borra nfc_reader.exe
+    (el .bat usará nfc_reader.py automáticamente).

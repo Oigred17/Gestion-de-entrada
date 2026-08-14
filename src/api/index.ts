@@ -1,8 +1,11 @@
 export { authApi } from './auth';
 export { alumnosApi } from './alumnos';
 export { credencialesApi } from './credenciales';
+export { configuracionApi } from './configuracion';
 export { gruposApi } from './grupos';
+export { incidenciasApi } from './incidencias';
 export { nfcApi } from './nfc';
+export { permisosApi } from './permisos';
 export { profesoresApi } from './profesores';
 export { registrosApi } from './registros';
 export { retardosApi } from './retardos';

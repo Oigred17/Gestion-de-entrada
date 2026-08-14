@@ -17,6 +17,8 @@ from app.schemas.auth import (
     ResetPasswordRequest,
     TokenResponse,
     UserResponse,
+    VerifyPasswordRequest,
+    VerifyPasswordResponse,
 )
 from app.services import email_service, recovery
 
@@ -95,6 +97,20 @@ async def login(data: LoginRequest, db: AsyncSession = Depends(get_db)):
 
     token = create_access_token({"sub": str(usuario.id_usuario)})
     return TokenResponse(access_token=token)
+
+
+@router.post("/verify-password", response_model=VerifyPasswordResponse)
+async def verify_password_endpoint(
+    data: VerifyPasswordRequest,
+    current_user: Usuario = Depends(get_current_user),
+):
+    """Verifica que la contrasena pertenece al usuario autenticado."""
+    if not verify_password(data.password, current_user.password_user):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Contrasena incorrecta",
+        )
+    return VerifyPasswordResponse(valid=True)
 
 
 @router.get("/me", response_model=UserResponse)

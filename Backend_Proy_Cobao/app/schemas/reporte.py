@@ -28,6 +28,8 @@ class ReporteResponse(BaseModel):
     sancion: str
     fecha: str
     fecha_registro: str | None = None
+    alumno: dict | None = None
+    prefecto: dict | None = None
 
     @model_validator(mode="before")
     @classmethod
@@ -41,5 +43,7 @@ class ReporteResponse(BaseModel):
                 "sancion": data.sancion,
                 "fecha": str(data.fecha),
                 "fecha_registro": str(data.fecha_registro) if getattr(data, "fecha_registro", None) else None,
+                "alumno": getattr(data, "alumno", None),
+                "prefecto": getattr(data, "prefecto", None),
             }
         return data

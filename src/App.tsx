@@ -17,22 +17,14 @@ import GruposPage from './pages/GruposPage';
 import RegulationsPage from './pages/RegulationsPage';
 import ProfesoresPage from './pages/ProfesoresPage';
 import KioscoEntradasPage from './pages/KioscoEntradasPage';
+import { Toaster } from './components/ui/toast';
+import Loader from './components/Loader';
 
 function AppRoutes() {
   const { isAuthenticated, isLoading, user, logout } = useAuth();
 
   if (isLoading) {
-    return (
-      <div style={{ 
-        minHeight: '100vh', 
-        display: 'flex', 
-        alignItems: 'center', 
-        justifyContent: 'center',
-        background: '#F0EFEF'
-      }}>
-        <p>Cargando...</p>
-      </div>
-    );
+    return <Loader message="Cargando..." fullScreen />;
   }
 
   if (!isAuthenticated) {
@@ -107,6 +99,7 @@ export default function App() {
   return (
     <AuthProvider>
       <AppRoutes />
+      <Toaster />
     </AuthProvider>
   );
 }

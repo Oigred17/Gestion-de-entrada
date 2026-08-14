@@ -25,4 +25,15 @@ export const reportesProgramadosApi = {
   async delete(id: number): Promise<void> {
     await apiClient.delete(`/reportes-programados/${id}`);
   },
+
+  async ejecutar(id: number): Promise<{
+    mensaje: string;
+    ultima_generacion: string;
+    proxima_generacion: string;
+    enviados: { email: string; enviado: boolean }[];
+    lineas: number;
+  }> {
+    const response = await apiClient.post(`/reportes-programados/${id}/ejecutar`);
+    return response.data;
+  },
 };

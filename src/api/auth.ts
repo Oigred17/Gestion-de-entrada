@@ -12,6 +12,11 @@ export const authApi = {
     return response.data;
   },
 
+  async verifyPassword(password: string): Promise<{ valid: boolean }> {
+    const response = await apiClient.post<{ valid: boolean }>('/auth/verify-password', { password });
+    return response.data;
+  },
+
   async requestRecoveryCode(username: string): Promise<RecoveryResponse> {
     const response = await apiClient.post<RecoveryResponse>('/auth/recover/request', { username });
     return response.data;

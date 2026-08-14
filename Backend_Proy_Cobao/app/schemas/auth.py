@@ -18,6 +18,14 @@ class ResetPasswordRequest(BaseModel):
     new_password: str
 
 
+class VerifyPasswordRequest(BaseModel):
+    password: str
+
+
+class VerifyPasswordResponse(BaseModel):
+    valid: bool = True
+
+
 class TokenResponse(BaseModel):
     access_token: str
     token_type: str = "bearer"

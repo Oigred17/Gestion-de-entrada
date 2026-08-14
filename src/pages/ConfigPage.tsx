@@ -21,7 +21,16 @@ import {
 } from 'lucide-react';
 import { DEFAULT_CREDENTIAL_LAYOUT, LAYOUT_VERSION, type CredentialLayout } from '../utils/generateCredentialsPDF';
 import { usuariosApi } from '../api/usuarios';
+import { configuracionApi } from '../api/configuracion';
+import { toastSuccess, toastError, toastWarning, toastInfo } from '../lib/toast';
 import type { UserRole } from '../App';
+import ConfirmPasswordModal from '../components/ConfirmPasswordModal';
+
+const errMsg = (err: unknown, fallback: string) => {
+  const detail = (err as { response?: { data?: { detail?: unknown } } })?.response?.data?.detail;
+  if (typeof detail === 'string') return detail;
+  return (err as Error)?.message || fallback;
+};
 
 interface ConfigPageProps {
   role?: UserRole;
@@ -116,17 +125,61 @@ export default function ConfigPage({ role }: ConfigPageProps) {
     Domingo: false,
   });
   const [toleranciaRetardo, setToleranciaRetardo] = useState(30);
-  const [horariosEspeciales, setHorariosEspeciales] = useState<HorarioEspecial[]>([
-    { id: 1, nombre: 'Examen final', entrada: '08:00', salida: '13:00', fecha: '2026-07-20' },
-    { id: 2, nombre: 'Evento deportivo', entrada: '09:00', salida: '12:00', fecha: '2026-07-25' },
-    { id: 3, nombre: 'Jornada extendida', entrada: '07:00', salida: '17:00', fecha: '2026-08-01' },
-  ]);
+  const [horariosEspeciales, setHorariosEspeciales] = useState<HorarioEspecial[]>([]);
+
+  const [cargandoConfig, setCargandoConfig] = useState(true);
+  const [guardando, setGuardando] = useState(false);
 
   const [usuarios, setUsuarios] = useState<Usuario[]>([]);
   const [showUsuarioModal, setShowUsuarioModal] = useState(false);
+  const [usuarioEnEdicion, setUsuarioEnEdicion] = useState<Usuario | null>(null);
+  const [guardandoUsuario, setGuardandoUsuario] = useState(false);
   const [nuevoUsuario, setNuevoUsuario] = useState({ username: '', nombre: '', email: '', contrasena: '', rol_id: 2, enviarCorreo: true });
   const [showPassword, setShowPassword] = useState(false);
   const [autoGenerate, setAutoGenerate] = useState(true);
+  const [confirm, setConfirm] = useState<{ title: string; message: string; confirmLabel: string; run: () => Promise<void> } | null>(null);
+
+  const mapHorarios = (horarios: { id: number; descripcion: string; hora_entrada: string; hora_salida: string; dias?: string }[]): HorarioEspecial[] =>
+    horarios.map(h => ({
+      id: h.id,
+      nombre: h.descripcion,
+      entrada: (h.hora_entrada || '07:00').slice(0, 5),
+      salida: (h.hora_salida || '14:00').slice(0, 5),
+      fecha: h.dias ?? '',
+    }));
+
+  useEffect(() => {
+    let mounted = true;
+    configuracionApi.getAll()
+      .then(cfg => {
+        if (!mounted) return;
+        const p = cfg.plantel ?? {};
+        if (p.plantel_nombre) setPlantelNombre(p.plantel_nombre);
+        if (p.direccion) setDireccion(p.direccion);
+        if (p.telefono) setTelefono(p.telefono);
+        if (p.correo) setCorreoInstitucional(p.correo);
+        if (p.logo_base64) setLogo(p.logo_base64);
+        if (p.hora_entrada) setHoraEntrada(String(p.hora_entrada).slice(0, 5));
+        if (p.hora_salida) setHoraSalida(String(p.hora_salida).slice(0, 5));
+        setSmtp({
+          servidor: p.smtp_host ?? 'smtp.gmail.com',
+          puerto: String(p.smtp_port ?? 587),
+          usuario: p.smtp_user ?? '',
+          contrasena: p.smtp_password ?? '',
+          remitente: p.smtp_from ?? '',
+        });
+        setSmsApi({ proveedor: p.sms_proveedor ?? '', apiToken: p.sms_api_key ?? '', remitente: p.sms_remitente ?? '' });
+        setWhatsappApi({ phoneNumberId: p.whatsapp_numero ?? '', accessToken: p.whatsapp_api_key ?? '', businessAccountId: '' });
+        setNotifEmail(p.notif_email ?? false);
+        setNotifSMS(p.notif_sms ?? false);
+        setNotifWhatsApp(p.notif_whatsapp ?? false);
+        if (cfg.asistencia?.minutos_tolerancia != null) setToleranciaRetardo(cfg.asistencia.minutos_tolerancia);
+        if (Array.isArray(cfg.horarios)) setHorariosEspeciales(mapHorarios(cfg.horarios));
+      })
+      .catch(() => {})
+      .finally(() => { if (mounted) setCargandoConfig(false); });
+    return () => { mounted = false; };
+  }, []);
 
   useEffect(() => {
     if (activeTab === 'usuarios') {
@@ -228,38 +281,188 @@ export default function ConfigPage({ role }: ConfigPageProps) {
 
   const toggleDia = (dia: string) => setDiasHabiles(prev => ({ ...prev, [dia]: !prev[dia] }));
 
-  const addHorarioEspecial = () => {
-    const newId = Math.max(...horariosEspeciales.map(h => h.id), 0) + 1;
-    setHorariosEspeciales([...horariosEspeciales, { id: newId, nombre: '', entrada: '07:00', salida: '14:00', fecha: '' }]);
-  };
-
-  const removeHorarioEspecial = (id: number) => setHorariosEspeciales(horariosEspeciales.filter(h => h.id !== id));
-
-  const addUsuario = async () => {
+  const addHorarioEspecial = async () => {
     try {
-      await usuariosApi.create({
-        username: nuevoUsuario.username,
-        password_user: nuevoUsuario.contrasena,
-        nombre: nuevoUsuario.nombre,
-        email: nuevoUsuario.email || undefined,
-        id_rol: nuevoUsuario.rol_id,
+      await configuracionApi.createHorario({
+        descripcion: 'Nuevo horario',
+        hora_entrada: horaEntrada,
+        hora_salida: horaSalida,
+        dias: '',
         activo: true,
       });
-      const updated = await usuariosApi.getAll();
-      setUsuarios(updated);
-      setShowUsuarioModal(false);
-      setNuevoUsuario({ username: '', nombre: '', email: '', contrasena: '', rol_id: 2, enviarCorreo: true });
+      const cfg = await configuracionApi.getAll();
+      setHorariosEspeciales(mapHorarios(cfg.horarios));
+      toastSuccess('Horario agregado');
     } catch (err) {
-      console.error('Error creating user:', err);
+      toastError('No se pudo agregar el horario', errMsg(err, 'Ocurrio un error'));
     }
   };
 
-  const removeUsuario = async (id: number) => {
+  const removeHorarioEspecial = (id: number) => {
+    setConfirm({
+      title: 'Eliminar horario',
+      message: '¿Seguro que deseas eliminar este horario especial? Esta accion no se puede deshacer. Ingrese su contrasena para confirmar.',
+      confirmLabel: 'Eliminar',
+      run: async () => {
+        try {
+          await configuracionApi.deleteHorario(id);
+          setHorariosEspeciales(prev => prev.filter(h => h.id !== id));
+          toastSuccess('Horario eliminado');
+        } catch (err) {
+          toastError('No se pudo eliminar el horario', errMsg(err, 'Ocurrio un error'));
+        }
+      },
+    });
+  };
+
+  const closeUsuarioModal = () => {
+    setShowUsuarioModal(false);
+    setUsuarioEnEdicion(null);
+    setAutoGenerate(true);
+    setNuevoUsuario({ username: '', nombre: '', email: '', contrasena: '', rol_id: 2, enviarCorreo: true });
+  };
+
+  const openEditarUsuario = (u: Usuario) => {
+    setUsuarioEnEdicion(u);
+    setNuevoUsuario({
+      username: u.username,
+      nombre: [u.nombre, u.apellido_paterno, u.apellido_materno].filter(Boolean).join(' ').trim(),
+      email: u.email,
+      contrasena: '',
+      rol_id: u.rol_id,
+      enviarCorreo: false,
+    });
+    setAutoGenerate(false);
+    setShowPassword(false);
+    setShowUsuarioModal(true);
+  };
+
+  const addUsuario = async () => {
+    if (!nuevoUsuario.username.trim() || !nuevoUsuario.nombre.trim()) {
+      toastWarning('Campos requeridos', 'El nombre y el nombre de usuario son obligatorios.');
+      return;
+    }
+    setGuardandoUsuario(true);
     try {
-      await usuariosApi.delete(id);
-      setUsuarios(usuarios.filter(u => u.id !== id));
+      if (usuarioEnEdicion) {
+        await usuariosApi.update(usuarioEnEdicion.id, {
+          username: nuevoUsuario.username.trim(),
+          nombre: nuevoUsuario.nombre.trim(),
+          email: nuevoUsuario.email || undefined,
+          rol_id: nuevoUsuario.rol_id,
+        });
+        toastSuccess('Usuario actualizado', `Se actualizo a ${nuevoUsuario.username}.`);
+      } else {
+        const password = autoGenerate || !nuevoUsuario.contrasena ? generarContrasena() : nuevoUsuario.contrasena;
+        await usuariosApi.create({
+          username: nuevoUsuario.username.trim(),
+          password_user: password,
+          nombre: nuevoUsuario.nombre.trim(),
+          email: nuevoUsuario.email || undefined,
+          id_rol: nuevoUsuario.rol_id,
+          activo: true,
+        });
+        toastSuccess(
+          'Usuario creado',
+          autoGenerate
+            ? `Contrasena generada: ${password}`
+            : `Usuario ${nuevoUsuario.username} creado correctamente.`
+        );
+      }
+      const updated = await usuariosApi.getAll();
+      setUsuarios(updated);
+      closeUsuarioModal();
     } catch (err) {
-      console.error('Error deleting user:', err);
+      toastError(usuarioEnEdicion ? 'No se pudo actualizar el usuario' : 'No se pudo crear el usuario', errMsg(err, 'Ocurrio un error'));
+    } finally {
+      setGuardandoUsuario(false);
+    }
+  };
+
+  const removeUsuario = (id: number) => {
+    setConfirm({
+      title: 'Eliminar usuario',
+      message: '¿Seguro que deseas eliminar este usuario? Esta accion no se puede deshacer. Ingrese su contrasena para confirmar.',
+      confirmLabel: 'Eliminar',
+      run: async () => {
+        try {
+          await usuariosApi.delete(id);
+          setUsuarios(prev => prev.filter(u => u.id !== id));
+          toastSuccess('Usuario eliminado');
+        } catch (err) {
+          toastError('No se pudo eliminar el usuario', errMsg(err, 'Ocurrio un error'));
+        }
+      },
+    });
+  };
+
+  const guardarGeneral = async () => {
+    setGuardando(true);
+    try {
+      await configuracionApi.save({
+        plantel_nombre: plantelNombre,
+        telefono,
+        direccion,
+        correo: correoInstitucional,
+        logo_base64: logo ?? undefined,
+      });
+      toastSuccess('Configuracion guardada', 'La informacion del plantel se actualizo correctamente.');
+    } catch (err) {
+      toastError('No se pudo guardar', errMsg(err, 'Ocurrio un error'));
+    } finally {
+      setGuardando(false);
+    }
+  };
+
+  const guardarHorarios = async () => {
+    setGuardando(true);
+    try {
+      await configuracionApi.save({
+        hora_entrada: horaEntrada,
+        hora_salida: horaSalida,
+        minutos_tolerancia: toleranciaRetardo,
+      });
+      for (const h of horariosEspeciales) {
+        if (h.id > 0) {
+          await configuracionApi.updateHorario(h.id, {
+            descripcion: h.nombre,
+            hora_entrada: h.entrada,
+            hora_salida: h.salida,
+            dias: h.fecha,
+          });
+        }
+      }
+      toastSuccess('Horarios guardados', 'El horario oficial y los horarios especiales se actualizaron.');
+    } catch (err) {
+      toastError('No se pudo guardar', errMsg(err, 'Ocurrio un error'));
+    } finally {
+      setGuardando(false);
+    }
+  };
+
+  const guardarNotificaciones = async () => {
+    setGuardando(true);
+    try {
+      await configuracionApi.save({
+        notif_email: notifEmail,
+        notif_sms: notifSMS,
+        notif_whatsapp: notifWhatsApp,
+        smtp_host: smtp.servidor,
+        smtp_port: Number(smtp.puerto) || 587,
+        smtp_user: smtp.usuario,
+        smtp_password: smtp.contrasena,
+        smtp_from: smtp.remitente,
+        sms_proveedor: smsApi.proveedor,
+        sms_api_key: smsApi.apiToken,
+        sms_remitente: smsApi.remitente,
+        whatsapp_api_key: whatsappApi.accessToken,
+        whatsapp_numero: whatsappApi.phoneNumberId,
+      });
+      toastSuccess('Notificaciones guardadas', 'La configuracion de canales de notificacion se actualizo.');
+    } catch (err) {
+      toastError('No se pudo guardar', errMsg(err, 'Ocurrio un error'));
+    } finally {
+      setGuardando(false);
     }
   };
 
@@ -421,7 +624,7 @@ export default function ConfigPage({ role }: ConfigPageProps) {
       </div>
 
       <div style={s.actions}>
-        <button style={s.btnPrimary}><Save size={16} /> Guardar cambios</button>
+        <button style={s.btnPrimary} onClick={guardarGeneral} disabled={guardando || cargandoConfig}><Save size={16} /> {guardando ? 'Guardando...' : 'Guardar cambios'}</button>
       </div>
     </div>
   );
@@ -490,7 +693,7 @@ export default function ConfigPage({ role }: ConfigPageProps) {
       </div>
 
       <div style={s.actions}>
-        <button style={s.btnPrimary}><Save size={16} /> Guardar cambios</button>
+        <button style={s.btnPrimary} onClick={guardarHorarios} disabled={guardando}><Save size={16} /> {guardando ? 'Guardando...' : 'Guardar cambios'}</button>
       </div>
     </div>
   );
@@ -526,7 +729,7 @@ export default function ConfigPage({ role }: ConfigPageProps) {
                   <td style={s.td}>{u.created_at ? new Date(u.created_at).toLocaleString() : 'Nunca'}</td>
                   <td style={s.td}>
                     <div style={s.actionsCell}>
-                      <button style={s.btnIcon()}><Edit size={16} /></button>
+                      <button style={s.btnIcon()} onClick={() => openEditarUsuario(u)}><Edit size={16} /></button>
                       <button style={s.btnIcon(true)} onClick={() => removeUsuario(u.id)}><Trash2 size={16} /></button>
                     </div>
                   </td>
@@ -538,9 +741,9 @@ export default function ConfigPage({ role }: ConfigPageProps) {
       </div>
 
       {showUsuarioModal && (
-        <div style={s.modalOverlay} onClick={() => setShowUsuarioModal(false)}>
+        <div style={s.modalOverlay} onClick={closeUsuarioModal}>
           <div style={s.modal} onClick={e => e.stopPropagation()}>
-            <h3 style={s.modalTitle}>Nuevo Usuario</h3>
+            <h3 style={s.modalTitle}>{usuarioEnEdicion ? 'Editar Usuario' : 'Nuevo Usuario'}</h3>
             <div style={s.field}>
               <label style={s.label}>Nombre completo</label>
               <input style={s.input} value={nuevoUsuario.nombre} onChange={e => setNuevoUsuario({ ...nuevoUsuario, nombre: e.target.value })} onFocus={handleInputFocus} onBlur={handleInputBlur} />
@@ -561,44 +764,48 @@ export default function ConfigPage({ role }: ConfigPageProps) {
                 <option value={3}>Servicios Escolares</option>
               </select>
             </div>
-            <div style={s.field}>
-              <label style={s.label}>Contrasena</label>
-              <div style={s.passwordRow}>
-                <input
-                  type={showPassword ? 'text' : 'password'}
-                  style={{ ...s.input, flex: 1 }}
-                  value={autoGenerate ? '' : nuevoUsuario.contrasena}
-                  placeholder={autoGenerate ? generarContrasena() : ''}
-                  disabled={autoGenerate}
-                  onChange={e => setNuevoUsuario({ ...nuevoUsuario, contrasena: e.target.value })}
-                  onFocus={handleInputFocus}
-                  onBlur={handleInputBlur}
-                />
-                <button style={s.btnIcon()} onClick={() => setShowPassword(!showPassword)}>
-                  {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
-                </button>
-                <button
-                  style={s.btnIcon()}
-                  onClick={() => {
-                    setNuevoUsuario({ ...nuevoUsuario, contrasena: generarContrasena() });
-                    setAutoGenerate(false);
-                  }}
-                >
-                  <Copy size={16} />
-                </button>
-              </div>
-              <label style={s.checkboxLabel}>
-                <input type="checkbox" checked={autoGenerate} onChange={e => setAutoGenerate(e.target.checked)} />
-                Contrasena auto-generada
-              </label>
-            </div>
-            <label style={s.checkboxLabel}>
-              <input type="checkbox" checked={nuevoUsuario.enviarCorreo} onChange={e => setNuevoUsuario({ ...nuevoUsuario, enviarCorreo: e.target.checked })} />
-              Enviar credenciales por correo
-            </label>
+            {!usuarioEnEdicion && (
+              <>
+                <div style={s.field}>
+                  <label style={s.label}>Contrasena</label>
+                  <div style={s.passwordRow}>
+                    <input
+                      type={showPassword ? 'text' : 'password'}
+                      style={{ ...s.input, flex: 1 }}
+                      value={autoGenerate ? '' : nuevoUsuario.contrasena}
+                      placeholder={autoGenerate ? generarContrasena() : ''}
+                      disabled={autoGenerate}
+                      onChange={e => setNuevoUsuario({ ...nuevoUsuario, contrasena: e.target.value })}
+                      onFocus={handleInputFocus}
+                      onBlur={handleInputBlur}
+                    />
+                    <button style={s.btnIcon()} onClick={() => setShowPassword(!showPassword)}>
+                      {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+                    </button>
+                    <button
+                      style={s.btnIcon()}
+                      onClick={() => {
+                        setNuevoUsuario({ ...nuevoUsuario, contrasena: generarContrasena() });
+                        setAutoGenerate(false);
+                      }}
+                    >
+                      <Copy size={16} />
+                    </button>
+                  </div>
+                  <label style={s.checkboxLabel}>
+                    <input type="checkbox" checked={autoGenerate} onChange={e => setAutoGenerate(e.target.checked)} />
+                    Contrasena auto-generada
+                  </label>
+                </div>
+                <label style={s.checkboxLabel}>
+                  <input type="checkbox" checked={nuevoUsuario.enviarCorreo} onChange={e => setNuevoUsuario({ ...nuevoUsuario, enviarCorreo: e.target.checked })} />
+                  Enviar credenciales por correo
+                </label>
+              </>
+            )}
             <div style={s.modalActions}>
-              <button style={s.btnSecondary} onClick={() => setShowUsuarioModal(false)}>Cancelar</button>
-              <button style={s.btnPrimary} onClick={addUsuario}><Save size={16} /> Crear usuario</button>
+              <button style={s.btnSecondary} onClick={closeUsuarioModal}>Cancelar</button>
+              <button style={s.btnPrimary} onClick={addUsuario} disabled={guardandoUsuario}><Save size={16} /> {guardandoUsuario ? 'Guardando...' : (usuarioEnEdicion ? 'Guardar cambios' : 'Crear usuario')}</button>
             </div>
           </div>
         </div>
@@ -710,15 +917,15 @@ export default function ConfigPage({ role }: ConfigPageProps) {
                       <code key={v} style={s.variableTag}>{v}</code>
                     ))}
                   </div>
-                </div>
-              )}
-            </div>
-          ))}
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
         </div>
-      </div>
 
       <div style={s.actions}>
-        <button style={s.btnPrimary}><Save size={16} /> Guardar cambios</button>
+        <button style={s.btnPrimary} onClick={guardarNotificaciones} disabled={guardando}><Save size={16} /> {guardando ? 'Guardando...' : 'Guardar cambios'}</button>
       </div>
     </div>
   );
@@ -726,12 +933,14 @@ export default function ConfigPage({ role }: ConfigPageProps) {
   const saveCredLayout = () => {
     localStorage.setItem('credentialLayout', JSON.stringify(credLayout));
     localStorage.setItem('credentialLayoutVersion', String(LAYOUT_VERSION));
+    toastSuccess('Diseno guardado', 'La disposicion de la credencial se guardo en este dispositivo.');
   };
 
   const resetCredLayout = () => {
     setCredLayout({ ...DEFAULT_CREDENTIAL_LAYOUT });
     localStorage.removeItem('credentialLayout');
     localStorage.removeItem('credentialLayoutVersion');
+    toastInfo('Diseno restaurado', 'Se restablecio la disposicion por defecto.');
   };
 
   const updateCredField = (key: string, field: 'y' | 'size' | 'xOffset' | 'label' | 'text', value: number | string) => {
@@ -1175,7 +1384,7 @@ export default function ConfigPage({ role }: ConfigPageProps) {
             </label>
           </div>
         </div>
-        <button style={s.btnPrimary}><RefreshCw size={16} /> Generar respaldo manual</button>
+        <button style={s.btnPrimary} onClick={() => toastInfo('Respaldo', 'La generacion manual de respaldos estara disponible proximamente.')}><RefreshCw size={16} /> Generar respaldo manual</button>
       </div>
 
       <div style={s.section}>
@@ -1242,6 +1451,15 @@ export default function ConfigPage({ role }: ConfigPageProps) {
       <div style={s.content}>
         {renderTab()}
       </div>
+
+      <ConfirmPasswordModal
+        open={!!confirm}
+        title={confirm?.title ?? ''}
+        message={confirm?.message ?? ''}
+        confirmLabel={confirm?.confirmLabel}
+        onClose={() => setConfirm(null)}
+        onConfirm={confirm?.run ?? (() => {})}
+      />
     </div>
   );
 }

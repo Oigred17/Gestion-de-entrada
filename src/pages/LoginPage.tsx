@@ -29,9 +29,10 @@ export default function LoginPage() {
     setIsLoading(true);
     
     try {
-      await login({ username, password });
-    } catch (err) {
-      setError('Credenciales incorrectas. Intenta de nuevo.');
+      await login({ username, password }, remember);
+    } catch (err: any) {
+      const detail = err?.response?.data?.detail;
+      setError(typeof detail === 'string' ? detail : 'Credenciales incorrectas. Intenta de nuevo.');
     } finally {
       setIsLoading(false);
     }
@@ -560,9 +561,12 @@ export default function LoginPage() {
             }}
           >
             No tienes cuenta?{' '}
-            <span style={{ fontWeight: 600, color: '#EB2466', cursor: 'pointer' }}>
+            <a
+              href="mailto:sistemas@cobao.edu.mx?subject=Acceso%20al%20Sistema%20de%20Control%20de%20Entrada%20NFC"
+              style={{ fontWeight: 600, color: '#EB2466', textDecoration: 'none' }}
+            >
               Contacta al administrador
-            </span>
+            </a>
           </p>
         </div>
       </div>
@@ -652,6 +656,19 @@ export default function LoginPage() {
                     <>Se enviara un codigo de verificacion al correo electronico registrado de tu cuenta.</>
                   )}
                 </p>
+                {recoverMsg && (
+                  <div style={{
+                    padding: '10px 12px',
+                    borderRadius: 10,
+                    background: recoverMsg.type === 'ok' ? '#E8F5E9' : '#FEEBEE',
+                    color: recoverMsg.type === 'ok' ? '#0F8122' : '#EB2466',
+                    fontSize: 13,
+                    marginBottom: 16,
+                    border: `1px solid ${recoverMsg.type === 'ok' ? '#0F8122' : '#EB2466'}`,
+                  }}>
+                    {recoverMsg.text}
+                  </div>
+                )}
                 <div style={{ display: 'flex', gap: 12 }}>
                   <button
                     onClick={closeRecover}

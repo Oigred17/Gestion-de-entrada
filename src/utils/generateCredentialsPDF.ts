@@ -81,8 +81,11 @@ function studentToBlock(s: Alumno, reposicion: boolean, layout: CredentialLayout
     domicilio1: `DOMICILIO: ${domicilioParts[0] ?? ''}`,
     domicilio2: domicilioParts[1] ?? '',
     domicilio3: domicilioParts[2] ?? '',
-    afiliacion: `NUMERO DE AFILIACION: ${s.telefono ?? ''}`,
-    tutor: `TELEFONO: ${s.telefono ?? ''}`,
+    curp: `CURP: ${s.curp ?? ''}`,
+    tipo_sangre: `TIPO DE SANGRE: ${s.tipo_sangre ?? ''}`,
+    afiliacion: `NUMERO DE AFILIACION: ${s.nss ?? ''}`,
+    tutor: `TUTOR: ${s.tutor_nombre ?? ''}`,
+    tel_tutor: `TELEFONO: ${s.tutor_telefono ?? s.telefono ?? ''}`,
     firma: overrides.firma ?? 'LIC. FABIAN OCAMPO GODINEZ',
   };
 }

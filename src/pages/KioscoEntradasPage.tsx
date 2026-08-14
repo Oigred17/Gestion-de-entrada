@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { Nfc, CheckCircle, LogOut, Clock, UserCheck, ArrowUpRight } from 'lucide-react';
+import { Nfc, CheckCircle, LogOut, Clock, UserCheck, ArrowUpRight, XCircle } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
+import { nfcApi } from '../api/nfc';
 
 type KioskResult = {
   tipo: 'ENTRADA' | 'SALIDA';
@@ -9,19 +10,11 @@ type KioskResult = {
   hora: string;
 } | null;
 
-type WSMessage = {
-  type: string;
-  status?: string;
-  tipo_evento?: string;
-  uid_nfc?: string;
-  alumno?: { id: number; nombre: string; matricula: string } | null;
-  message?: string;
-};
-
 export default function KioscoEntradasPage() {
   const { logout, user } = useAuth();
   const [now, setNow] = useState(new Date());
   const [result, setResult] = useState<KioskResult>(null);
+  const [errorMsg, setErrorMsg] = useState('');
   const [wsConnected, setWsConnected] = useState(false);
   const [pulse, setPulse] = useState(false);
 
@@ -38,29 +31,15 @@ export default function KioscoEntradasPage() {
   const connectWS = useCallback(() => {
     if (wsRef.current?.readyState === WebSocket.OPEN) return;
 
-    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-    const url = `${protocol}//${window.location.host}/api/v1/nfc/ws`;
-
-    const ws = new WebSocket(url);
-    wsRef.current = ws;
-
-    ws.onopen = () => {
-      setWsConnected(true);
-      if (reconnectTimer.current) {
-        clearTimeout(reconnectTimer.current);
-        reconnectTimer.current = null;
-      }
-    };
-
-    ws.onmessage = (event) => {
-      try {
-        const msg: WSMessage = JSON.parse(event.data);
+    const ws = nfcApi.connectWebSocket(
+      (msg) => {
         if (msg.type === 'scan_result' && msg.uid_nfc) {
           setPulse(true);
           if (pulseTimer.current) clearTimeout(pulseTimer.current);
           pulseTimer.current = setTimeout(() => setPulse(false), 2500);
 
           if (msg.status === 'success' && msg.alumno) {
+            setErrorMsg('');
             const nowT = new Date();
             const hora = nowT.toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
             setResult({
@@ -71,25 +50,30 @@ export default function KioscoEntradasPage() {
             });
           } else {
             setResult(null);
+            setErrorMsg(msg.message || 'Credencial no reconocida');
           }
 
           if (resultTimer.current) clearTimeout(resultTimer.current);
-          resultTimer.current = setTimeout(() => setResult(null), 8000);
+          resultTimer.current = setTimeout(() => {
+            setResult(null);
+            setErrorMsg('');
+          }, 8000);
         }
-      } catch (err) {
-        console.error('WS parse error:', err);
+      },
+      () => {
+        setWsConnected(true);
+        if (reconnectTimer.current) {
+          clearTimeout(reconnectTimer.current);
+          reconnectTimer.current = null;
+        }
+      },
+      () => {
+        setWsConnected(false);
+        wsRef.current = null;
+        reconnectTimer.current = setTimeout(connectWS, 3000);
       }
-    };
-
-    ws.onclose = () => {
-      setWsConnected(false);
-      wsRef.current = null;
-      reconnectTimer.current = setTimeout(connectWS, 3000);
-    };
-
-    ws.onerror = () => {
-      ws.close();
-    };
+    );
+    wsRef.current = ws;
   }, []);
 
   useEffect(() => {
@@ -141,11 +125,23 @@ export default function KioscoEntradasPage() {
             <Nfc size={90} />
           </div>
           <h1 className="kiosk-scan-hint">
-            {result ? 'Registro exitoso' : 'Acerca la credencial al lector'}
+            {result ? 'Registro exitoso' : errorMsg ? 'Acceso no permitido' : 'Acerca la credencial al lector'}
           </h1>
           <p className="kiosk-scan-sub">
-            {wsConnected ? 'Lector conectado - Escaneo en tiempo real' : 'Conectando lector NFC...'}
+            {errorMsg ? (
+              errorMsg
+            ) : wsConnected ? (
+              'Lector conectado - Escaneo en tiempo real'
+            ) : (
+              'Conectando lector NFC...'
+            )}
           </p>
+          {errorMsg && (
+            <div className="kiosk-error">
+              <XCircle size={32} />
+              <span>{errorMsg}</span>
+            </div>
+          )}
           <div className={`kiosk-status-dot ${wsConnected ? 'on' : 'off'}`} />
         </div>
 

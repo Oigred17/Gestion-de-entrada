@@ -1,9 +1,12 @@
 import { useState, useCallback, useEffect, useRef } from 'react';
-import { Search, Plus, Eye, Trash2, RefreshCw, Nfc, Check, X, AlertTriangle, Shield, Download, Loader2, User } from 'lucide-react';
+import { Search, Plus, Eye, Trash2, RefreshCw, Nfc, Check, X, AlertTriangle, Download, Loader2, User } from 'lucide-react';
 import { credencialesApi, alumnosApi, gruposApi, reposicionesApi } from '../api';
 import { nfcApi } from '../api/nfc';
-import type { Credencial, CredencialCreate, Alumno, Grupo, Reposicion } from '../types';
+import type { Credencial, Alumno, Grupo, Reposicion } from '../types';
 import { generateCredentialsPDF } from '../utils/generateCredentialsPDF';
+import { toastSuccess, toastError, toastInfo } from '@/lib/toast';
+import Loader from '../components/Loader';
+import ConfirmPasswordModal from '../components/ConfirmPasswordModal';
 
 type CredencialEstado = 'Activa' | 'Inactiva';
 
@@ -18,16 +21,16 @@ const tabFilters: { label: string; key: CredencialEstado | 'Todas' }[] = [
   { label: 'Inactivas', key: 'Inactiva' },
 ];
 
-type ConfirmType = 'simple' | 'password';
-type ConfirmAction = 'activar' | 'desactivar' | 'reasignar' | 'escanear' | null;
+type ConfirmAction = 'activar' | 'desactivar' | 'marcar_entregada' | null;
 
 interface ConfirmState {
   open: boolean;
-  type: ConfirmType;
   action: ConfirmAction;
   title: string;
   message: string;
+  confirmLabel: string;
   credId?: number;
+  repoId?: number;
 }
 
 interface BatchResult {
@@ -65,10 +68,7 @@ export default function CredentialsPage() {
   const [batchVerified, setBatchVerified] = useState(false);
   const [batchChipId, setBatchChipId] = useState('');
 
-  const [confirm, setConfirm] = useState<ConfirmState>({ open: false, type: 'simple', action: null, title: '', message: '' });
-  const [passwordInput, setPasswordInput] = useState('');
-  const [passwordError, setPasswordError] = useState('');
-  const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' | 'info' } | null>(null);
+  const [confirm, setConfirm] = useState<ConfirmState>({ open: false, action: null, title: '', message: '', confirmLabel: '' });
 
   const [showExportModal, setShowExportModal] = useState(false);
   const [exportMode, setExportMode] = useState<'alumno' | 'grupo'>('alumno');
@@ -94,10 +94,9 @@ export default function CredentialsPage() {
   const captureTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const autoCaptureRef = useRef<string>('');
   const lastRejectedUidRef = useRef<string>('');
+  const [loading, setLoading] = useState(true);
 
   const uniqueGroups = Array.from(new Set(grupos.map((g) => g.nombre))).sort();
-
-  const SYSTEM_PASSWORD = 'admin123';
 
   useEffect(() => {
     const fetchData = async () => {
@@ -114,19 +113,22 @@ export default function CredentialsPage() {
         setReposiciones(reposicionesData);
       } catch (error) {
         console.error('Error fetching data:', error);
+      } finally {
+        setLoading(false);
       }
     };
     fetchData();
     return () => { cleanupWs(); };
   }, []);
 
-  const connectNfcWs = useCallback((onCapture: (uid: string) => void, timeoutMs = 30000): Promise<string> => {
+  const connectNfcWs = useCallback((onCapture: (uid: string) => void, timeoutMs = 45000): Promise<string> => {
     return new Promise(async (resolve, reject) => {
       if (captureTimeoutRef.current) clearTimeout(captureTimeoutRef.current);
 
       setNfcStatus('connecting');
 
       try {
+        await nfcApi.stopCapture().catch(() => {});
         await nfcApi.startCapture();
       } catch {
         setNfcStatus('idle');
@@ -150,15 +152,16 @@ export default function CredentialsPage() {
             resolve(result.uid_nfc);
           }
         } catch {
+          // Reintentar en el siguiente tick (tunel puede fallar un poll puntual).
         }
-      }, 500);
+      }, 400);
 
       captureTimeoutRef.current = setTimeout(() => {
         stopped = true;
         clearInterval(pollInterval);
         setNfcStatus('idle');
         nfcApi.stopCapture().catch(() => {});
-        reject(new Error('Tiempo de espera agotado. Acerque la tarjeta NFC al lector.'));
+        reject(new Error('Tiempo de espera agotado. Retire la tarjeta, espere un segundo y acerquela de nuevo.'));
       }, timeoutMs);
     });
   }, []);
@@ -178,8 +181,9 @@ export default function CredentialsPage() {
   };
 
   const showToast = (message: string, type: 'success' | 'error' | 'info' = 'success') => {
-    setToast({ message, type });
-    setTimeout(() => setToast(null), 3000);
+    if (type === 'success') toastSuccess(message);
+    else if (type === 'error') toastError(message);
+    else toastInfo(message);
   };
 
   const getStudent = (id: number) => localStudents.find((s) => s.id === id);
@@ -245,10 +249,10 @@ export default function CredentialsPage() {
   const handleDeactivate = (credId: number) => {
     setConfirm({
       open: true,
-      type: 'password',
       action: 'desactivar',
       title: 'Desactivar credencial',
-      message: 'Esta accion desactivara permanentemente la credencial. Ingrese la contraseña del sistema para confirmar.',
+      message: 'Esta accion desactivara permanentemente la credencial y el alumno no podra acceder al plantel. Ingrese su contrasena para confirmar.',
+      confirmLabel: 'Desactivar',
       credId,
     });
   };
@@ -256,10 +260,10 @@ export default function CredentialsPage() {
   const handleActivate = (credId: number) => {
     setConfirm({
       open: true,
-      type: 'password',
       action: 'activar',
       title: 'Activar credencial',
-      message: 'Esta accion activara la credencial NFC y el alumno podra acceder al plantel. Ingrese la contraseña del sistema para confirmar.',
+      message: 'Esta accion activara la credencial NFC y el alumno podra acceder al plantel. Ingrese su contrasena para confirmar.',
+      confirmLabel: 'Activar',
       credId,
     });
   };
@@ -274,11 +278,6 @@ export default function CredentialsPage() {
   };
 
   const handleConfirmAction = () => {
-    if (confirm.type === 'password' && passwordInput !== SYSTEM_PASSWORD) {
-      setPasswordError('Contraseña incorrecta. Intente de nuevo.');
-      return;
-    }
-
     if (confirm.action === 'activar' && confirm.credId) {
       credencialesApi.update(confirm.credId, { estatus: 'Activa' }).then(() => {
         setCreds(prev => prev.map(c => c.id === confirm.credId ? { ...c, estatus: 'Activa' } : c));
@@ -289,17 +288,21 @@ export default function CredentialsPage() {
         setCreds(prev => prev.map(c => c.id === confirm.credId ? { ...c, estatus: 'Inactiva' } : c));
         showToast('Credencial desactivada');
       }).catch(() => showToast('Error al desactivar credencial', 'error'));
-    } else if (confirm.action === 'reasignar' && confirm.credId) {
-      showToast('Use el panel de reasignacion para asignar un nuevo chip', 'info');
+    } else if (confirm.action === 'marcar_entregada' && confirm.repoId) {
+      reposicionesApi.update(confirm.repoId, {
+        fecha_entrega: new Date().toISOString().split('T')[0],
+      }).then((updated) => {
+        setReposiciones(prev => prev.map(r => r.id === updated.id ? updated : r));
+        showToast('Reposicion marcada como entregada.');
+      }).catch((err) => {
+        const msg = (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail ?? 'No se pudo actualizar la reposicion.';
+        showToast(msg, 'error');
+      });
     }
-
-    closeConfirm();
   };
 
   const closeConfirm = () => {
-    setConfirm({ open: false, type: 'simple', action: null, title: '', message: '' });
-    setPasswordInput('');
-    setPasswordError('');
+    setConfirm({ open: false, action: null, title: '', message: '', confirmLabel: '' });
   };
 
   const handleCloseAssignModal = () => {
@@ -328,6 +331,10 @@ export default function CredentialsPage() {
   };
 
   const handleWriteChip = useCallback(async (onDone: (chipId: string) => void) => {
+    if (!selectedStudentId) {
+      showToast('Selecciona un alumno antes de escribir el chip.', 'error');
+      return;
+    }
     setWriting(true);
     try {
       const uid = await connectNfcWs(() => {});
@@ -343,18 +350,32 @@ export default function CredentialsPage() {
           return;
         }
       } catch {
+        // 404 = chip libre, continuar
       }
+
+      // Guardar en BD al capturar el UID (antes solo quedaba en memoria hasta "Confirmar").
+      const created = await credencialesApi.create({
+        alumno_id: selectedStudentId,
+        numero: uid,
+        estatus: 'Activa',
+        fecha_emision: new Date().toISOString().split('T')[0],
+      });
+      setCreds((prev) => [...prev, created]);
       setChipId(uid);
       setWriting(false);
       setWritten(true);
+      showToast(`Chip guardado en base de datos: ${uid}`);
       onDone(uid);
     } catch (err: unknown) {
       setWriting(false);
       autoCaptureRef.current = '';
-      const msg = err instanceof Error ? err.message : 'Error al detectar tarjeta NFC';
+      const axiosDetail = (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail;
+      const msg =
+        (typeof axiosDetail === 'string' && axiosDetail) ||
+        (err instanceof Error ? err.message : 'Error al detectar/guardar tarjeta NFC');
       showToast(msg, 'error');
     }
-  }, [connectNfcWs, showToast]);
+  }, [connectNfcWs, selectedStudentId, showToast]);
 
   const handleVerifyChip = useCallback(async (_chipIdToVerify: string, onDone: () => void) => {
     setVerifying(true);
@@ -363,6 +384,7 @@ export default function CredentialsPage() {
       if (uid.toUpperCase() === _chipIdToVerify.toUpperCase()) {
         setVerifying(false);
         setVerified(true);
+        showToast('Verificacion correcta. La credencial ya esta guardada.');
         onDone();
       } else {
         setVerifying(false);
@@ -378,6 +400,11 @@ export default function CredentialsPage() {
   }, [connectNfcWs, showToast]);
 
   const handleBatchWriteChip = useCallback(async (onDone: (chipId: string) => void) => {
+    const studentId = batchStudents[batchIndex];
+    if (!studentId) {
+      showToast('No hay alumno en el lote actual.', 'error');
+      return;
+    }
     setBatchWriting(true);
     try {
       const uid = await connectNfcWs(() => {});
@@ -390,18 +417,31 @@ export default function CredentialsPage() {
           return;
         }
       } catch {
+        // 404 = chip libre
       }
+
+      const created = await credencialesApi.create({
+        alumno_id: studentId,
+        numero: uid,
+        estatus: 'Activa',
+        fecha_emision: new Date().toISOString().split('T')[0],
+      });
+      setCreds((prev) => [...prev, created]);
       setBatchChipId(uid);
       setBatchWriting(false);
       setBatchWritten(true);
+      showToast(`Chip guardado: ${getStudentName(studentId)}`);
       onDone(uid);
     } catch (err: unknown) {
       setBatchWriting(false);
       autoCaptureRef.current = '';
-      const msg = err instanceof Error ? err.message : 'Error al detectar tarjeta NFC';
+      const axiosDetail = (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail;
+      const msg =
+        (typeof axiosDetail === 'string' && axiosDetail) ||
+        (err instanceof Error ? err.message : 'Error al detectar/guardar tarjeta NFC');
       showToast(msg, 'error');
     }
-  }, [connectNfcWs, showToast]);
+  }, [batchIndex, batchStudents, connectNfcWs, showToast]);
 
   const handleBatchVerifyChip = useCallback(async (_chipIdToVerify: string, onDone: () => void) => {
     setBatchVerifying(true);
@@ -437,9 +477,13 @@ export default function CredentialsPage() {
           reposicionesApi.create({
             id_alumno: student.id,
             motivo: reposicionMotivo || 'Credencial extraviada o danada',
-          }).then(() => {
-            reposicionesApi.getAll().then(setReposiciones);
-          }).catch(() => {});
+          }).then((created) => {
+            setReposiciones(prev => [created, ...prev]);
+            showToast('Reposicion registrada correctamente.');
+          }).catch((err) => {
+            const msg = err?.response?.data?.detail ?? 'No se pudo registrar la reposicion.';
+            showToast(msg, 'error');
+          });
         }
         showToast(`PDF generado: ${isReposicion ? 'reposicion' : 'credenciales'}_alumno_${student.matricula}.pdf`);
       }
@@ -460,12 +504,27 @@ export default function CredentialsPage() {
             motivo: reposicionMotivo || 'Credencial extraviada o danada',
           }))
         ).then(() => {
-          reposicionesApi.getAll().then(setReposiciones);
-        }).catch(() => {});
+          reposicionesApi.getAll().then(setReposiciones).catch(() => {});
+          showToast(`${toExport.length} reposiciones registradas correctamente.`);
+        }).catch((err) => {
+          const msg = err?.response?.data?.detail ?? 'No se pudieron registrar las reposiciones.';
+          showToast(msg, 'error');
+        });
       }
       showToast(`PDF generado: ${isReposicion ? 'reposicion' : 'credenciales'}_${label}.pdf`);
     }
     setShowExportModal(false);
+  };
+
+  const handleMarcarEntregada = (repo: Reposicion) => {
+    setConfirm({
+      open: true,
+      action: 'marcar_entregada',
+      title: 'Marcar reposicion como entregada',
+      message: `¿Seguro que deseas marcar como entregada la reposicion de ${getStudentName(repo.id_alumno)}? Ingrese su contrasena para confirmar.`,
+      confirmLabel: 'Marcar entregada',
+      repoId: repo.id,
+    });
   };
 
   const filteredExportStudents = exportStudentQuery
@@ -552,27 +611,12 @@ export default function CredentialsPage() {
     );
   };
 
+  if (loading) {
+    return <Loader message="Cargando credenciales..." height={220} />;
+  }
+
   return (
     <div>
-      {toast && (
-        <div style={{
-          position: 'fixed',
-          top: 20,
-          right: 20,
-          padding: '12px 20px',
-          borderRadius: 8,
-          background: toast.type === 'success' ? '#0F8122' : toast.type === 'error' ? '#AB1748' : '#1792AB',
-          color: '#fff',
-          fontWeight: 600,
-          fontSize: 14,
-          zIndex: 9999,
-          boxShadow: '0 4px 16px rgba(0,0,0,0.2)',
-          animation: 'fadeInContent 200ms ease-out',
-        }}>
-          {toast.message}
-        </div>
-      )}
-
       <div className="toolbar">
         <div className="toolbar-center">
           <div className="input-wrapper">
@@ -644,15 +688,23 @@ export default function CredentialsPage() {
         <h3 style={{ fontSize: 18, fontWeight: 600, marginBottom: 12 }}>Reposiciones Recientes</h3>
         <div className="table-container">
           <table className="table">
-            <thead><tr><th>#</th><th>Alumno</th><th>Motivo</th><th>Fecha Solicitud</th><th>Fecha Entrega</th></tr></thead>
+            <thead><tr><th>#</th><th>Alumno</th><th>Motivo</th><th>Fecha Solicitud</th><th>Fecha Entrega</th><th>Acciones</th></tr></thead>
             <tbody>
               {reposiciones.map((repo, i) => (
                 <tr key={repo.id}>
-                  <td>{i + 1}</td><td style={{ fontWeight: 500 }}>{getStudentName(repo.id_alumno)}</td><td>{repo.motivo}</td><td>{repo.fecha_solicitud}</td><td>{repo.fecha_entrega ?? '---'}</td>
+                  <td>{i + 1}</td><td style={{ fontWeight: 500 }}>{getStudentName(repo.id_alumno)}</td><td>{repo.motivo}</td><td>{repo.fecha_solicitud}</td>
+                  <td>{repo.fecha_entrega ?? <span style={{ color: '#85787A', fontSize: 12 }}>Pendiente</span>}</td>
+                  <td>
+                    {!repo.fecha_entrega && (
+                      <button className="btn btn--secondary" style={{ padding: '4px 12px', fontSize: 13 }} onClick={() => handleMarcarEntregada(repo)}>
+                        <Check size={14} /> Marcar entregada
+                      </button>
+                    )}
+                  </td>
                 </tr>
               ))}
               {reposiciones.length === 0 && (
-                <tr><td colSpan={5} style={{ textAlign: 'center', padding: 24, color: '#5F5657' }}>No hay reposiciones registradas.</td></tr>
+                <tr><td colSpan={6} style={{ textAlign: 'center', padding: 24, color: '#5F5657' }}>No hay reposiciones registradas.</td></tr>
               )}
             </tbody>
           </table>
@@ -765,11 +817,11 @@ export default function CredentialsPage() {
                     <p style={{ fontSize: 13, color: '#EB2466', marginBottom: 8, fontWeight: 600 }}>Esperando tarjeta NFC... Acerque la tarjeta al lector</p>
                   )}
                   <p style={{ fontSize: 16, color: '#5F5657', marginBottom: 16 }}>
-                    {writing ? 'Leyendo tarjeta NFC...' : written ? 'UID capturado correctamente' : 'Acerca el chip NFC al lector para asociarlo al alumno'}
+                    {writing ? 'Leyendo tarjeta NFC...' : written ? 'UID capturado y guardado en la base de datos' : 'Acerca el chip NFC al lector para asociarlo al alumno'}
                   </p>
                   {written && chipId && (
                     <div style={{ padding: 12, background: '#F0EFEF', borderRadius: 8, display: 'inline-block' }}>
-                      <span style={{ fontSize: 12, color: '#5F5657' }}>UID NFC capturado: </span>
+                      <span style={{ fontSize: 12, color: '#5F5657' }}>UID NFC guardado: </span>
                       <span style={{ fontFamily: 'var(--font-mono)', fontWeight: 700, fontSize: 16, color: '#0F8122' }}>{chipId}</span>
                     </div>
                   )}
@@ -809,9 +861,17 @@ export default function CredentialsPage() {
                         <div style={{ fontWeight: 600, fontSize: 14 }}>{getStudentName(currentBatchStudent)}</div>
                         <div style={{ fontSize: 13, color: '#5F5657' }}>Matricula: {getStudentControl(currentBatchStudent)}</div>
                       </div>
-                      <NfcZone state={batchWriting ? 'writing' : batchWritten ? 'written' : 'idle'} />
+                      <NfcZone state={batchWriting ? 'writing' : batchVerifying ? 'verifying' : batchWritten || batchVerified ? 'written' : 'idle'} />
                       <p style={{ fontSize: 16, color: '#5F5657', marginBottom: 16 }}>
-                        {batchWriting ? 'Escribiendo datos en el chip NFC...' : batchWritten ? 'Escritura completada' : 'Acerca el chip NFC al lector para escribir'}
+                        {batchWriting
+                          ? 'Leyendo chip NFC...'
+                          : batchVerifying
+                            ? 'Retire la tarjeta y acerquela de nuevo para verificar...'
+                            : batchVerified
+                              ? 'Verificacion completada (ya guardada en BD)'
+                              : batchWritten
+                                ? 'Guardado en BD. Retire y acerque de nuevo para verificar'
+                                : 'Acerca el chip NFC al lector para escribir'}
                       </p>
                       {batchWritten && batchChipId && (
                         <div style={{ padding: 12, background: '#F0EFEF', borderRadius: 8, display: 'inline-block', marginBottom: 16 }}>
@@ -832,8 +892,16 @@ export default function CredentialsPage() {
                     <div style={{ fontSize: 13, color: '#5F5657' }}>Matricula: {getStudentControl(selectedStudentId!)}</div>
                   </div>
                   <NfcZone state={verifying ? 'verifying' : verified ? 'verified' : 'idle'} />
+                  {nfcStatus === 'connecting' && (
+                    <p style={{ fontSize: 13, color: '#1792AB', marginBottom: 8 }}>Conectando al lector NFC...</p>
+                  )}
+                  {nfcStatus === 'waiting' && (
+                    <p style={{ fontSize: 13, color: '#EB2466', marginBottom: 8, fontWeight: 600 }}>
+                      Retire la tarjeta y acerquela de nuevo para verificar
+                    </p>
+                  )}
                   <p style={{ fontSize: 16, color: '#5F5657', marginBottom: 16 }}>
-                    {verifying ? 'Leyendo tarjeta NFC para verificar...' : verified ? 'Verificacion exitosa. El UID coincide.' : 'Acerca la misma tarjeta NFC al lector para verificar'}
+                    {verifying ? 'Leyendo tarjeta NFC para verificar...' : verified ? 'Verificacion exitosa. El UID coincide.' : 'Retire el chip del lector y acerquelo otra vez para comprobar'}
                   </p>
                   {verified && (
                     <div style={{ padding: 16, background: '#F0FDF4', borderRadius: 8, border: '1px solid #0F8122', marginBottom: 16 }}>
@@ -896,6 +964,17 @@ export default function CredentialsPage() {
                   Siguiente: Verificar
                 </button>
               )}
+              {assignStep === 2 && assignMode === 'alumno' && written && (
+                <button
+                  className="btn btn--secondary"
+                  onClick={() => {
+                    showToast(`Credencial ya guardada para ${getStudentName(selectedStudentId!)}`);
+                    handleCloseAssignModal();
+                  }}
+                >
+                  Finalizar (ya guardada)
+                </button>
+              )}
               {assignStep === 2 && assignMode === 'grupo' && !batchComplete && batchVerified && (
                 <button className="btn btn--primary" onClick={() => {
                   setBatchResults(prev => [...prev, { studentId: currentBatchStudent, uidNfc: batchChipId, success: true }]);
@@ -919,51 +998,33 @@ export default function CredentialsPage() {
                 <button
                   className="btn btn--primary"
                   onClick={() => {
-                    const newCred: CredencialCreate = {
-                      alumno_id: selectedStudentId!,
-                      numero: chipId,
-                      estatus: 'Activa',
-                      fecha_emision: new Date().toISOString().split('T')[0],
-                    };
-                    credencialesApi.create(newCred).then((created) => {
-                      setCreds(prev => [...prev, created]);
-                      showToast(`Credencial asignada a ${getStudentName(selectedStudentId!)}`);
-                      handleCloseAssignModal();
-                    }).catch((err) => {
-                      const msg = err?.response?.data?.detail ?? err?.message ?? 'Error al crear credencial';
-                      showToast(msg, 'error');
-                    });
+                    showToast(`Credencial asignada a ${getStudentName(selectedStudentId!)}`);
+                    handleCloseAssignModal();
                   }}
                 >
-                  <Check size={18} /> Confirmar Asignacion
+                  <Check size={18} /> Finalizar
+                </button>
+              )}
+              {assignStep === 3 && assignMode === 'alumno' && written && !verified && (
+                <button
+                  className="btn btn--secondary"
+                  onClick={() => {
+                    showToast(`Credencial ya estaba guardada. Puedes verificar despues.`);
+                    handleCloseAssignModal();
+                  }}
+                >
+                  Cerrar (ya guardada en BD)
                 </button>
               )}
               {assignStep === 3 && assignMode === 'grupo' && batchComplete && (
                 <button
                   className="btn btn--primary"
-                  onClick={async () => {
-                    const successfulResults = batchResults.filter(r => r.success);
-                    try {
-                      const createdCreds = await Promise.all(
-                        successfulResults.map(result =>
-                          credencialesApi.create({
-                            alumno_id: result.studentId,
-                            numero: result.uidNfc,
-                            estatus: 'Activa',
-                            fecha_emision: new Date().toISOString().split('T')[0],
-                          })
-                        )
-                      );
-                      setCreds(prev => [...prev, ...createdCreds]);
-                      showToast(`${successfulResults.length} credenciales asignadas correctamente`);
-                      handleCloseAssignModal();
-                    } catch (err: any) {
-                      const msg = err?.response?.data?.detail ?? err?.message ?? 'Error al asignar credenciales';
-                      showToast(msg, 'error');
-                    }
+                  onClick={() => {
+                    showToast(`${batchResults.filter(r => r.success).length} credenciales guardadas`);
+                    handleCloseAssignModal();
                   }}
                 >
-                  <Check size={18} /> Confirmar Asignacion
+                  <Check size={18} /> Finalizar
                 </button>
               )}
             </div>
@@ -972,54 +1033,14 @@ export default function CredentialsPage() {
       )}
 
       {/* ========== MODAL CONFIRMACION ========== */}
-      {confirm.open && (
-        <div className="modal-backdrop" onClick={closeConfirm} style={{ zIndex: 9998 }}>
-          <div className="modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 440 }}>
-            <div className="modal-header">
-              <h3 style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                {confirm.type === 'password' ? <Shield size={20} color="#AB1748" /> : <AlertTriangle size={20} color="#1792AB" />}
-                {confirm.title}
-              </h3>
-              <button className="modal-close" onClick={closeConfirm}><X size={20} /></button>
-            </div>
-            <div className="modal-body">
-              <p style={{ fontSize: 14, color: '#5F5657', lineHeight: 1.6, marginBottom: confirm.type === 'password' ? 16 : 0 }}>
-                {confirm.message}
-              </p>
-              {confirm.type === 'password' && (
-                <div>
-                  <label className="field-label" style={{ marginBottom: 6, display: 'block' }}>Contraseña del sistema</label>
-                  <input
-                    type="password"
-                    className={`input ${passwordError ? 'input--error' : ''}`}
-                    placeholder="Ingrese la contraseña..."
-                    value={passwordInput}
-                    onChange={(e) => { setPasswordInput(e.target.value); setPasswordError(''); }}
-                    onKeyDown={(e) => { if (e.key === 'Enter') handleConfirmAction(); }}
-                    autoFocus
-                  />
-                  {passwordError && (
-                    <span style={{ fontSize: 12, color: '#AB1748', marginTop: 4, display: 'block' }}>{passwordError}</span>
-                  )}
-                  <span style={{ fontSize: 11, color: '#85787A', marginTop: 6, display: 'block' }}>Contraseña por defecto: admin123</span>
-                </div>
-              )}
-            </div>
-            <div className="modal-footer">
-              <button className="btn btn--secondary" onClick={closeConfirm}>Cancelar</button>
-              <button
-                className={confirm.type === 'password' ? 'btn btn--danger' : 'btn btn--primary'}
-                onClick={handleConfirmAction}
-                disabled={confirm.type === 'password' && !passwordInput}
-              >
-                {confirm.action === 'activar' && <><RefreshCw size={16} /> Activar</>}
-                {confirm.action === 'desactivar' && <><Trash2 size={16} /> Desactivar</>}
-                {confirm.action === 'reasignar' && <><RefreshCw size={16} /> Reasignar</>}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      <ConfirmPasswordModal
+        open={confirm.open}
+        title={confirm.title}
+        message={confirm.message}
+        confirmLabel={confirm.confirmLabel}
+        onClose={closeConfirm}
+        onConfirm={handleConfirmAction}
+      />
 
       {/* ========== MODAL ESCANEAR CREDENCIAL ========== */}
       {scanModalOpen && (
@@ -1327,12 +1348,24 @@ export default function CredentialsPage() {
           }
         };
 
-        const handleConfirmReassign = () => {
-          credencialesApi.update(cred.id, { numero: newChipId, estatus: 'Activa' }).then(() => {
-            setCreds(prev => prev.map(c => c.id === cred.id ? { ...c, numero: newChipId, estatus: 'Activa' } : c));
+        const handleConfirmReassign = async () => {
+          try {
+            const existing = await credencialesApi.getByUid(newChipId).catch(() => null);
+            if (existing) {
+              showToast(`Este chip ya esta asignado a ${existing.alumno?.nombre || `alumno #${existing.alumno_id}`}. Usa otro chip.`, 'error');
+              return;
+            }
+          } catch {
+          }
+          try {
+            const updated = await credencialesApi.update(cred.id, { numero: newChipId, estatus: 'Activa' });
+            setCreds(prev => prev.map(c => c.id === cred.id ? updated : c));
             showToast(`Chip reasignado correctamente. Nuevo ID: ${newChipId}`);
             closePanel();
-          }).catch(() => showToast('Error al reasignar chip', 'error'));
+          } catch (err: any) {
+            const msg = err?.response?.data?.detail ?? 'Error al reasignar chip';
+            showToast(msg, 'error');
+          }
         };
 
         return (

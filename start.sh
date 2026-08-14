@@ -16,5 +16,8 @@ else
 fi
 
 # Iniciar FastAPI
+# --forwarded-allow-ips=* : confiar en X-Forwarded-Proto del tunel/proxy
+# (sin esto, redirects de trailing-slash salen como http:// y el navegador
+#  bloquea Mixed Content cuando la pagina se sirve por HTTPS).
 echo "Iniciando FastAPI..."
-exec uvicorn app.main:app --host 0.0.0.0 --port 8000
+exec uvicorn app.main:app --host 0.0.0.0 --port 8000 --proxy-headers --forwarded-allow-ips='*'

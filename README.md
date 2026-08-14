@@ -82,6 +82,41 @@ docker compose up -d --build
 El contenedor sirve el frontend (SPA), el backend y `bd_COBAO.sql` se aplica solo
 en el **primer arranque** del volumen de Postgres.
 
+## Dominio de prueba (tunel publico temporal)
+
+Sin necesidad de dominio ni abrir puertos en el router, puedes exponer el stack que
+corre en tu maquina (`localhost:8000`) con un tunel rapido de Cloudflare que genera
+una URL publica con HTTPS automatico (`https://algo.trycloudflare.com`).
+
+```bash
+# Levantar el tunel (la primera vez descarga la imagen cloudflare/cloudflared)
+docker run -d --name cobao-tunnel --restart unless-stopped \
+  cloudflare/cloudflared:latest tunnel --url http://host.docker.internal:8000
+
+# Obtener la URL publica
+docker logs cobao-tunnel | Select-String trycloudflare.com
+```
+
+Detenerlo:
+
+```bash
+docker rm -f cobao-tunnel
+```
+
+> **Importante:**
+> - La URL cambia cada vez que el contenedor del tunel se reinicia. Para regenerarla:
+>   `docker restart cobao-tunnel` y vuelve a leer los logs.
+> - Es **publico**: cualquiera con la URL puede intentar entrar. Cambia las
+>   contrasenas por defecto (`admin`/`prefecto`/`servicios`/`entrada`) antes de compartirla.
+> - El tunel funciona con WebSockets, por lo que el escaneo NFC en tiempo real
+>   (`/api/v1/nfc/ws`) tambien pasa por la URL publica.
+> - Si ves **Mixed Content** (`https` pagina pidiendo `http://.../api/...`), reconstruye
+>   el contenedor `app`: el backend debe arrancar con `--forwarded-allow-ips=*` para que
+>   los redirects usen HTTPS detras del tunel.
+> - Para una URL **fija** en produccion: crea un named tunnel
+>   (`cloudflared tunnel create <nombre>`) y apunta un registro DNS
+>   `CNAME <sub>.tudominio.com -> <uuid>.cfargotunnel.com`.
+
 ### Migraciones (BD existente)
 
 Si ya tenias la BD corriendo y agregamos columnas/tablas nuevas, debes aplicarlas
@@ -104,11 +139,19 @@ USB y lo mande por HTTP al backend.
 
 ### Instalacion del lector en una PC (Windows)
 
+El lector USB **no viaja por la red**: debe estar enchufado en la PC donde
+corres el helper. El helper solo manda el UID al backend por HTTP.
+
 1. Conectar el lector ACR122U e instalar sus drivers.
 2. Copiar `nfc_reader.exe` (ya compilado) o instalar Python + `pip install pyscard requests`.
-3. Ejecutar `iniciar_nfc.bat` (o dejarlo en auto-inicio con `iniciar_nfc_silencioso.vbs`).
-4. Ajustar la URL si el backend no esta en `http://localhost:8000`:
-   `nfc_reader.exe --url https://tu-dominio.com/api/v1/nfc/scan`
+3. Si el backend **no** esta en esta misma PC (`localhost`), crea `nfc_url.txt`
+   junto al `.bat` con la URL del servidor, por ejemplo:
+   `http://192.168.1.50:8000/api/v1/nfc/scan`
+   (o el tunel Cloudflare: `https://algo.trycloudflare.com/api/v1/nfc/scan`).
+   Tambien puedes pasar la URL: `iniciar_nfc.bat http://IP-SERVIDOR:8000/api/v1/nfc/scan`
+4. Ejecutar `iniciar_nfc.bat` (o auto-inicio con `iniciar_nfc_silencioso.vbs`).
+5. En el servidor, el puerto **8000** debe estar accesible desde la red
+   (firewall de Windows: permitir entrada TCP 8000).
 
 ### Recompilar el .exe del lector
 

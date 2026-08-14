@@ -6,6 +6,7 @@ import {
 } from 'lucide-react';
 import { registrosApi, retardosApi, alumnosApi, reportesApi, gruposApi } from '../api';
 import type { RegistroAcceso, Retardo, Alumno, Reporte, Grupo } from '../types';
+import Loader from '../components/Loader';
 
 const tipoConfig: Record<string, { label: string; color: string; bg: string; icon: string }> = {
   ENTRADA: { label: 'Entrada', color: '#0F8122', bg: '#E8F5E9', icon: '✓' },
@@ -33,6 +34,8 @@ export default function DashboardPage() {
   const [alumnosData, setAlumnosData] = useState<Alumno[]>([]);
   const [reportesData, setReportesData] = useState<Reporte[]>([]);
   const [gruposData, setGruposData] = useState<Grupo[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   const alumnoMap = Object.fromEntries(alumnosData.map(a => [a.id, a]));
   const grupoMap = Object.fromEntries(gruposData.map(g => [g.id, g.nombre]));
@@ -44,6 +47,8 @@ export default function DashboardPage() {
 
   useEffect(() => {
     const fetchData = async () => {
+      setLoading(true);
+      setError(null);
       try {
         const [registrosRes, retardosRes, alumnosRes, reportesRes, gruposRes] = await Promise.all([
           registrosApi.getAll(),
@@ -57,8 +62,11 @@ export default function DashboardPage() {
         setAlumnosData(alumnosRes);
         setReportesData(reportesRes);
         setGruposData(gruposRes);
-      } catch (error) {
-        console.error('Error fetching dashboard data:', error);
+      } catch (err) {
+        console.error('Error fetching dashboard data:', err);
+        setError('No se pudo conectar con el servidor. Revisa que el backend este corriendo.');
+      } finally {
+        setLoading(false);
       }
     };
     fetchData();
@@ -109,10 +117,12 @@ export default function DashboardPage() {
   const attendanceByGroup = Array.from(new Set(alumnosData.map(s => s.id_grupo ? s.id_grupo : 0))).map(idGrupo => {
     const groupStudents = alumnosData.filter(s => (s.id_grupo ?? 0) === idGrupo);
     const groupRegistros = registros.filter(r => {
+      if (!esHoy(r.fecha_hora, hoy)) return false;
       const alumno = r.alumno || alumnoMap[r.alumno_id];
       return (alumno?.id_grupo ?? 0) === idGrupo;
     });
     const groupRetardos = retardosData.filter(r => {
+      if (!esHoy(r.fecha, hoy)) return false;
       const alumno = r.alumno || alumnoMap[r.alumno_id];
       return (alumno?.id_grupo ?? 0) === idGrupo;
     });
@@ -138,6 +148,29 @@ export default function DashboardPage() {
 
   const currentTimeStr = currentTime.toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' });
   const currentDateStr = currentTime.toLocaleDateString('es-MX', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
+
+  if (loading) {
+    return <Loader message="Cargando datos del panel..." height={300} />;
+  }
+
+  if (error) {
+    return (
+      <div style={{
+        background: '#fff', borderRadius: 12, border: '1px solid #FEEBEE',
+        padding: 40, textAlign: 'center', color: '#5F5657', fontSize: 15,
+      }}>
+        <AlertTriangle size={32} color="#EB2466" style={{ marginBottom: 12 }} />
+        <div>{error}</div>
+        <button
+          className="btn btn--primary"
+          style={{ marginTop: 16 }}
+          onClick={() => window.location.reload()}
+        >
+          Reintentar
+        </button>
+      </div>
+    );
+  }
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>

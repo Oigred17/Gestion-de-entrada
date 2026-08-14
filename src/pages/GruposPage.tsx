@@ -7,6 +7,7 @@ import { registrosApi } from '../api/registros';
 import { credencialesApi } from '../api/credenciales';
 import { gruposApi } from '../api';
 import type { Alumno, Credencial, RegistroAcceso } from '../types';
+import Loader from '../components/Loader';
 
 export default function GruposPage() {
   const [search, setSearch] = useState('');
@@ -17,9 +18,12 @@ export default function GruposPage() {
   const [registrosData, setRegistrosData] = useState<RegistroAcceso[]>([]);
   const [gruposMap, setGruposMap] = useState<Record<number, string>>({});
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     async function fetchData() {
+      setLoading(true);
+      setError(null);
       try {
         const [al, cr, rg, gr] = await Promise.all([
           alumnosApi.getAll(),
@@ -37,6 +41,7 @@ export default function GruposPage() {
         setGruposMap(map);
       } catch (err) {
         console.error('Error fetching data:', err);
+        setError('No se pudo conectar con el servidor. Revisa que el backend este corriendo.');
       } finally {
         setLoading(false);
       }
@@ -50,13 +55,18 @@ export default function GruposPage() {
 
   const hoy = new Date().toISOString().slice(0, 10);
 
-  const grupos = Array.from(new Set(alumnosData.map(s => getNombreGrupo(s.id_grupo))))
+  const grupos = Array.from(
+    new Set([
+      ...Object.values(gruposMap),
+      ...alumnosData.map(s => getNombreGrupo(s.id_grupo)),
+    ])
+  )
     .sort()
     .map(grupo => {
       const groupStudents = alumnosData.filter(s => {
         return getNombreGrupo(s.id_grupo) === grupo;
       });
-      const activos = groupStudents.filter(s => s.estatus === 'Activo').length;
+      const activos = groupStudents.filter(s => (s.estatus ?? 'Activo').toLowerCase() === 'activo').length;
       const groupCreds = credencialesData.filter(c =>
         groupStudents.some(s => s.id === c.alumno_id)
       );
@@ -89,9 +99,23 @@ export default function GruposPage() {
   };
 
   if (loading) {
+    return <Loader message="Cargando datos..." height={200} />;
+  }
+
+  if (error) {
     return (
-      <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: 200, color: '#85787A', fontSize: 15 }}>
-        Cargando datos...
+      <div style={{
+        background: '#fff', borderRadius: 12, border: '1px solid #FEEBEE',
+        padding: 40, textAlign: 'center', color: '#5F5657', fontSize: 15,
+      }}>
+        <div>{error}</div>
+        <button
+          className="btn btn--primary"
+          style={{ marginTop: 16 }}
+          onClick={() => window.location.reload()}
+        >
+          Reintentar
+        </button>
       </div>
     );
   }
@@ -231,10 +255,10 @@ export default function GruposPage() {
                               <td style={{ padding: '12px 16px' }}>
                                 <span style={{
                                   padding: '3px 10px', borderRadius: 12, fontSize: 12, fontWeight: 600,
-                                  background: s.estatus === 'Activo' ? '#E8F5E9' : '#FEEBEE',
-                                  color: s.estatus === 'Activo' ? '#0F8122' : '#EB2466',
+                                  background: (s.estatus ?? 'Activo').toLowerCase() === 'activo' ? '#E8F5E9' : '#FEEBEE',
+                                  color: (s.estatus ?? 'Activo').toLowerCase() === 'activo' ? '#0F8122' : '#EB2466',
                                 }}>
-                                  {s.estatus === 'Activo' ? 'Activo' : 'Inactivo'}
+                                  {(s.estatus ?? 'Activo').toLowerCase() === 'activo' ? 'Activo' : 'Inactivo'}
                                 </span>
                               </td>
                               <td style={{ padding: '12px 16px' }}>
