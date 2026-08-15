@@ -95,5 +95,10 @@ async def validar_codigo_permiso(data: CodigoValidacion, db: AsyncSession = Depe
             status_code=400,
             detail=f"El permiso no esta aprobado (estado: {permiso.estado})",
         )
+    if await crud_permiso.expirar_si_vencido(db, permiso):
+        raise HTTPException(
+            status_code=400,
+            detail="El permiso ya vencio: paso la hora de salida autorizada",
+        )
     await _adjuntar_alumno(db, permiso)
     return permiso

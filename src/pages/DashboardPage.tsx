@@ -4,8 +4,8 @@ import {
   UserCheck, Clock, AlertTriangle, LogOut, TrendingUp,
   ChevronRight, Bell, ScanLine,
 } from 'lucide-react';
-import { registrosApi, retardosApi, alumnosApi, reportesApi, gruposApi } from '../api';
-import type { RegistroAcceso, Retardo, Alumno, Reporte, Grupo } from '../types';
+import { registrosApi, retardosApi, alumnosApi, reportesApi, gruposApi, permisosApi } from '../api';
+import type { RegistroAcceso, Retardo, Alumno, Reporte, Grupo, Permiso } from '../types';
 import Loader from '../components/Loader';
 
 const tipoConfig: Record<string, { label: string; color: string; bg: string; icon: string }> = {
@@ -34,6 +34,7 @@ export default function DashboardPage() {
   const [alumnosData, setAlumnosData] = useState<Alumno[]>([]);
   const [reportesData, setReportesData] = useState<Reporte[]>([]);
   const [gruposData, setGruposData] = useState<Grupo[]>([]);
+  const [permisosData, setPermisosData] = useState<Permiso[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -50,18 +51,20 @@ export default function DashboardPage() {
       setLoading(true);
       setError(null);
       try {
-        const [registrosRes, retardosRes, alumnosRes, reportesRes, gruposRes] = await Promise.all([
+        const [registrosRes, retardosRes, alumnosRes, reportesRes, gruposRes, permisosRes] = await Promise.all([
           registrosApi.getAll(),
           retardosApi.getAll(),
           alumnosApi.getAll(),
           reportesApi.getAll(),
           gruposApi.getAll(),
+          permisosApi.getAll(),
         ]);
         setRegistros(registrosRes);
         setRetardosData(retardosRes);
         setAlumnosData(alumnosRes);
         setReportesData(reportesRes);
         setGruposData(gruposRes);
+        setPermisosData(permisosRes);
       } catch (err) {
         console.error('Error fetching dashboard data:', err);
         setError('No se pudo conectar con el servidor. Revisa que el backend este corriendo.');
@@ -83,11 +86,19 @@ export default function DashboardPage() {
   const salidas = Array.from(estadoAlumno.values()).filter(v => v === 'SALIDA').length;
   const retardosCount = retardosData.filter(r => esHoy(r.fecha, hoy)).length;
   const reportesCount = reportesData.length;
+  const presentesSet = new Set(Array.from(estadoAlumno.entries()).filter(([, v]) => v === 'ENTRADA').map(([id]) => id));
+  const conPermisoHoy = new Set(
+    permisosData
+      .filter(p => p.estado === 'Aprobado' && (p.fecha_salida || '').startsWith(hoy))
+      .map(p => p.id_alumno)
+  );
+  const conPermisoAusentes = [...conPermisoHoy].filter(id => !presentesSet.has(id)).length;
+  const faltasCount = Math.max(0, totalAlumnos - presentes - conPermisoAusentes);
 
   const stats = [
     { label: 'Presentes', value: presentes, total: totalAlumnos, color: '#0F8122', bg: '#E8F5E9', icon: UserCheck },
     { label: 'Fuera de horario', value: retardosCount, total: totalAlumnos, color: '#1792AB', bg: '#DCF5FF', icon: Clock },
-    { label: 'Faltas', value: Math.max(0, totalAlumnos - presentes), total: totalAlumnos, color: '#EB2466', bg: '#FEEBEE', icon: AlertTriangle },
+    { label: 'Faltas', value: faltasCount, total: totalAlumnos, color: '#EB2466', bg: '#FEEBEE', icon: AlertTriangle },
     { label: 'Salidas', value: salidas, total: totalAlumnos, color: '#5F5657', bg: '#F0EFEF', icon: LogOut },
     { label: 'Reportes', value: reportesCount, total: totalAlumnos, color: '#AB1748', bg: '#FEEBEE', icon: AlertTriangle },
   ];

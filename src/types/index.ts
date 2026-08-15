@@ -267,6 +267,16 @@ export interface ReporteCreate {
   fecha?: string;
 }
 
+export interface FaltaAsistencia {
+  id: number;
+  id_alumno: number;
+  fecha: string;
+  tipo: 'FALTANTE' | 'SIN_SALIDA';
+  motivo?: string;
+  fecha_registro?: string;
+  alumno?: Alumno;
+}
+
 export interface Usuario {
   id: number;
   username: string;

@@ -3,6 +3,7 @@ from app.models.ciclo_escolar import CicloEscolar
 from app.models.configuracion_asistencia import ConfiguracionAsistencia
 from app.models.configuracion_general import ConfiguracionGeneral
 from app.models.credencial import Credencial
+from app.models.falta_asistencia import FaltaAsistencia
 from app.models.grupo import Grupo
 from app.models.horario import Horario
 from app.models.incidencia import Incidencia

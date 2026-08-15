@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.crud._helpers import build_alumno_dict
@@ -95,3 +95,39 @@ async def delete_permiso(db: AsyncSession, id_permiso: int):
         return False
     await db.delete(permiso)
     return True
+
+
+async def expirar_si_vencido(db: AsyncSession, permiso) -> bool:
+    """Si el permiso aprobado ya paso su fecha_salida, lo marca como Vencido
+    y persiste el cambio (commit). Devuelve True si vencio."""
+    if permiso.estado != "Aprobado" or permiso.fecha_salida is None:
+        return False
+    result = await db.execute(
+        select(Permiso.id_permiso).where(
+            Permiso.id_permiso == permiso.id_permiso,
+            Permiso.fecha_salida < func.now(),
+        )
+    )
+    if result.first() is None:
+        return False
+    permiso.estado = "Vencido"
+    await db.commit()
+    return True
+
+
+async def marcar_vencidos(db: AsyncSession) -> int:
+    """Barrido: marca como Vencido todos los permisos Aprobados cuya
+    fecha_salida ya paso. Devuelve cuantos vencio."""
+    result = await db.execute(
+        select(Permiso).where(
+            Permiso.estado == "Aprobado",
+            Permiso.fecha_salida.isnot(None),
+            Permiso.fecha_salida < func.now(),
+        )
+    )
+    permisos = result.scalars().all()
+    for p in permisos:
+        p.estado = "Vencido"
+    if permisos:
+        await db.commit()
+    return len(permisos)

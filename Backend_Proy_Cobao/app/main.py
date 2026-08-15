@@ -2,9 +2,12 @@
 Punto de entrada de la aplicación FastAPI - COBAO.
 """
 
+import asyncio
 import logging
 from contextlib import asynccontextmanager
 from pathlib import Path
+
+logging.basicConfig(level=logging.INFO)
 
 from fastapi import Depends, FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
@@ -24,6 +27,7 @@ from app.routers import (
     ciclos_escolares,
     configuracion,
     credenciales,
+    faltas_asistencia,
     grupos,
     incidencias,
     inscripciones,
@@ -42,6 +46,7 @@ from app.routers import (
     usuarios,
 )
 from app.routers.auth import hash_password
+from app.services.faltas_asistencia import run_faltas_automaticas_loop
 
 logger = logging.getLogger(__name__)
 
@@ -268,6 +273,31 @@ async def migrate_database():
                 activo       BOOLEAN NOT NULL DEFAULT TRUE
             )
             """,
+        )
+
+        await _exec(
+            conn,
+            """
+            CREATE TABLE IF NOT EXISTS faltas_asistencia (
+                id_falta        SERIAL PRIMARY KEY,
+                id_alumno       INTEGER NOT NULL REFERENCES alumnos(id_alumno),
+                fecha           DATE NOT NULL,
+                tipo            VARCHAR(20) NOT NULL,
+                motivo          TEXT,
+                fecha_registro  TIMESTAMP NOT NULL DEFAULT now(),
+                CONSTRAINT uq_falta_alumno_fecha_tipo UNIQUE (id_alumno, fecha, tipo)
+            )
+            """,
+        )
+        await _exec(
+            conn,
+            "CREATE INDEX IF NOT EXISTS idx_faltas_asistencia_alumno "
+            "ON faltas_asistencia(id_alumno, fecha)",
+        )
+        await _exec(
+            conn,
+            "CREATE INDEX IF NOT EXISTS idx_faltas_asistencia_fecha "
+            "ON faltas_asistencia(fecha)",
         )
 
         await _exec(
@@ -751,7 +781,17 @@ async def lifespan(app: FastAPI):
         )
     await migrate_database()
     await seed_database()
+
+    tarea_faltas = asyncio.create_task(run_faltas_automaticas_loop())
+    logger.info("Tarea de faltas automaticas iniciada.")
+
     yield
+
+    tarea_faltas.cancel()
+    try:
+        await tarea_faltas
+    except asyncio.CancelledError:
+        pass
     await engine.dispose()
 
 
@@ -803,6 +843,11 @@ app.include_router(justificaciones.router, prefix=API_PREFIX)
 app.include_router(permisos.router, prefix=API_PREFIX)
 app.include_router(incidencias.router, prefix=API_PREFIX)
 app.include_router(reportes.router, prefix=API_PREFIX)
+app.include_router(
+    faltas_asistencia.router,
+    prefix=API_PREFIX,
+    dependencies=[Depends(require_roles("Directivo", "Servicios Escolares", "Prefectura"))],
+)
 app.include_router(
     reportes_programados.router,
     prefix=API_PREFIX,

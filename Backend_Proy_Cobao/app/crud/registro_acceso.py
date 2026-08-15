@@ -4,6 +4,7 @@ from fastapi import HTTPException
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.crud.permiso import expirar_si_vencido
 from app.models.credencial import Credencial
 from app.models.permiso import Permiso
 from app.models.registro_acceso import RegistroAcceso
@@ -101,6 +102,11 @@ async def create_registro(db: AsyncSession, data: RegistroAccesoCreate):
             raise HTTPException(
                 status_code=400,
                 detail="Codigo de autorizacion invalido o ya utilizado",
+            )
+        if await expirar_si_vencido(db, permiso):
+            raise HTTPException(
+                status_code=400,
+                detail="El permiso ya vencio: paso la hora de salida autorizada",
             )
         id_permiso = permiso.id_permiso
         permiso.estado = "Utilizado"

@@ -15,9 +15,10 @@ import {
   Filter,
   Plus,
   X,
+  AlertTriangle,
 } from 'lucide-react';
-import { alumnosApi, registrosApi, retardosApi, gruposApi, reportesProgramadosApi } from '../api';
-import type { Alumno, RegistroAcceso, Retardo, Grupo, ReporteProgramado } from '../types';
+import { alumnosApi, registrosApi, retardosApi, gruposApi, reportesProgramadosApi, faltasAsistenciaApi } from '../api';
+import type { Alumno, RegistroAcceso, Retardo, Grupo, ReporteProgramado, FaltaAsistencia } from '../types';
 import Loader from '../components/Loader';
 import ConfirmPasswordModal from '../components/ConfirmPasswordModal';
 import DateRangePicker from '../components/DateRangePicker';
@@ -66,6 +67,8 @@ export default function ReportsPage() {
   const [reportGenerated, setReportGenerated] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
   const [scheduledReports, setScheduledReports] = useState<ReporteProgramado[]>([]);
+  const [faltasData, setFaltasData] = useState<FaltaAsistencia[]>([]);
+  const [faltasLoading, setFaltasLoading] = useState(false);
   const [emailToSend, setEmailToSend] = useState('');
   const [sendByEmail, setSendByEmail] = useState(false);
   const [showStudentDropdown, setShowStudentDropdown] = useState(false);
@@ -106,6 +109,24 @@ export default function ReportsPage() {
     };
     fetchData();
   }, []);
+
+  useEffect(() => {
+    const fetchFaltas = async () => {
+      setFaltasLoading(true);
+      try {
+        const res = await faltasAsistenciaApi.getAll({
+          fecha_inicio: startDate || undefined,
+          fecha_fin: endDate || undefined,
+        });
+        setFaltasData(res);
+      } catch (err) {
+        console.error('Error fetching faltas de asistencia:', err);
+      } finally {
+        setFaltasLoading(false);
+      }
+    };
+    fetchFaltas();
+  }, [startDate, endDate]);
 
   const getGrupoNombre = (grupoId?: number): string => {
     if (!grupoId) return 'Sin grupo';
@@ -429,6 +450,50 @@ export default function ReportsPage() {
         {b.label}
       </span>
     );
+  };
+
+  const faltaBadge = (tipo: string) => {
+    const map: Record<string, { bg: string; color: string; label: string }> = {
+      FALTANTE: { bg: COLORS.lightPink, color: COLORS.primary, label: 'Faltante (sin entrada)' },
+      SIN_SALIDA: { bg: COLORS.lightPink, color: COLORS.info, label: 'Sin salida' },
+    };
+    const b = map[tipo] ?? { bg: COLORS.bg, color: COLORS.textSec, label: tipo };
+    return (
+      <span style={{
+        display: 'inline-block',
+        padding: '3px 10px',
+        borderRadius: 12,
+        fontSize: 12,
+        fontWeight: 600,
+        background: b.bg,
+        color: b.color,
+      }}>
+        {b.label}
+      </span>
+    );
+  };
+
+  const handleDeleteFalta = (falta: FaltaAsistencia) => {
+    setConfirmDelete({
+      title: 'Eliminar falta',
+      message: `¿Eliminar la falta de ${falta.alumno ? getNombreCompleto(falta.alumno) : `alumno #${falta.id_alumno}`} del ${falta.fecha}?`,
+      run: async () => {
+        try {
+          await faltasAsistenciaApi.delete(falta.id);
+          setFaltasData(prev => prev.filter(f => f.id !== falta.id));
+          toastSuccess('Falta eliminada.');
+        } catch (err) {
+          console.error('Error eliminando falta:', err);
+          toastError('No se pudo eliminar la falta.');
+        }
+      },
+    });
+  };
+
+  const faltasCount = {
+    faltantes: faltasData.filter(f => f.tipo === 'FALTANTE').length,
+    sinSalida: faltasData.filter(f => f.tipo === 'SIN_SALIDA').length,
+    total: faltasData.length,
   };
 
   const sectionCard: React.CSSProperties = {
@@ -985,6 +1050,106 @@ export default function ReportsPage() {
           </div>
         </div>
       )}
+
+      {/* Faltas de asistencia (automáticas) */}
+      <div style={sectionCard}>
+        <h2 style={sectionTitle}>
+          <AlertTriangle size={20} />
+          Faltas al reglamento (automáticas)
+        </h2>
+        <p style={{ fontSize: 13, color: COLORS.textMuted, marginTop: -8 }}>
+          Se generan al cierre del día a partir de la hora de salida configurada. Los permisos
+          aprobados evitan registrar una falta por inasistencia.
+        </p>
+
+        <div style={{
+          display: 'grid',
+          gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))',
+          gap: 12,
+          marginBottom: 20,
+        }}>
+          {[
+            { label: 'Faltantes', value: faltasCount.faltantes, bg: COLORS.lightPink, color: COLORS.primary },
+            { label: 'Sin salida', value: faltasCount.sinSalida, bg: COLORS.lightPink, color: COLORS.info },
+            { label: 'Total de faltas', value: faltasCount.total, bg: COLORS.bg, color: COLORS.text },
+          ].map(stat => (
+            <div key={stat.label} style={{
+              padding: 16,
+              borderRadius: 10,
+              background: stat.bg,
+              textAlign: 'center',
+              border: `1px solid ${COLORS.border}`,
+            }}>
+              <div style={{ fontSize: 28, fontWeight: 800, color: stat.color }}>{stat.value}</div>
+              <div style={{ fontSize: 12, fontWeight: 600, color: COLORS.textSec, marginTop: 4 }}>{stat.label}</div>
+            </div>
+          ))}
+        </div>
+
+        <div style={{ overflowX: 'auto' }}>
+          {faltasLoading ? (
+            <Loader message="Cargando faltas..." height={120} />
+          ) : (
+            <table style={tableStyle}>
+              <thead>
+                <tr>
+                  <th style={thStyle}>Fecha</th>
+                  <th style={thStyle}>No. Control</th>
+                  <th style={thStyle}>Alumno</th>
+                  <th style={thStyle}>Grupo</th>
+                  <th style={thStyle}>Tipo</th>
+                  <th style={thStyle}>Motivo</th>
+                  <th style={thStyle}>Acciones</th>
+                </tr>
+              </thead>
+              <tbody>
+                {faltasData.length === 0 ? (
+                  <tr>
+                    <td colSpan={7} style={{ ...tdStyle, textAlign: 'center', padding: 32, color: COLORS.textMuted }}>
+                      No hay faltas registradas en el periodo seleccionado
+                    </td>
+                  </tr>
+                ) : (
+                  faltasData.map(falta => {
+                    const alumno = falta.alumno;
+                    return (
+                      <tr key={falta.id}>
+                        <td style={tdStyle}>{falta.fecha}</td>
+                        <td style={{ ...tdStyle, fontFamily: 'monospace', fontSize: 13, color: COLORS.textSec }}>
+                          {alumno?.matricula ?? '---'}
+                        </td>
+                        <td style={{ ...tdStyle, fontWeight: 600 }}>
+                          {alumno ? getNombreCompleto(alumno) : `Alumno #${falta.id_alumno}`}
+                        </td>
+                        <td style={tdStyle}>{alumno ? getGrupoNombre(alumno.id_grupo) : '---'}</td>
+                        <td style={tdStyle}>{faltaBadge(falta.tipo)}</td>
+                        <td style={{ ...tdStyle, fontSize: 13, color: COLORS.textSec }}>{falta.motivo ?? '---'}</td>
+                        <td style={tdStyle}>
+                          <button
+                            onClick={() => handleDeleteFalta(falta)}
+                            style={{
+                              background: 'none',
+                              border: 'none',
+                              cursor: 'pointer',
+                              color: COLORS.primary,
+                              padding: 4,
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                            }}
+                            title="Eliminar falta"
+                          >
+                            <Trash2 size={16} />
+                          </button>
+                        </td>
+                      </tr>
+                    );
+                  })
+                )}
+              </tbody>
+            </table>
+          )}
+        </div>
+      </div>
 
       {/* Reportes programados */}
       <div style={sectionCard}>
