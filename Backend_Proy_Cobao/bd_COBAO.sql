@@ -269,6 +269,7 @@ CREATE TABLE reportes (
     id_prefecto         INTEGER NOT NULL REFERENCES usuarios(id_usuario),
     motivo               TEXT NOT NULL,
     sancion               TEXT NOT NULL,
+    sancion_cumplida      BOOLEAN NOT NULL DEFAULT FALSE,
     fecha                 DATE NOT NULL DEFAULT current_date,
     fecha_registro        TIMESTAMP NOT NULL DEFAULT now()
 );

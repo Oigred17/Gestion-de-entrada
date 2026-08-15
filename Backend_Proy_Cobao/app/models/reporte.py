@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Date, ForeignKey, Integer, Text
+from sqlalchemy import Boolean, Column, Date, ForeignKey, Integer, Text, text
 from sqlalchemy.sql import func
 
 from app.database import Base
@@ -12,5 +12,6 @@ class Reporte(Base):
     id_prefecto = Column(Integer, ForeignKey("usuarios.id_usuario"), nullable=False)
     motivo = Column(Text, nullable=False)
     sancion = Column(Text, nullable=False)
+    sancion_cumplida = Column(Boolean, nullable=False, server_default=text("false"))
     fecha = Column(Date, nullable=False, server_default=func.current_date())
     fecha_registro = Column(Date, nullable=False, server_default=func.now())

@@ -19,7 +19,7 @@ export const reportesApi = {
     return response.data;
   },
 
-  async update(id: number, data: Partial<ReporteCreate>): Promise<Reporte> {
+  async update(id: number, data: Partial<ReporteCreate> & { sancion_cumplida?: boolean }): Promise<Reporte> {
     const response = await apiClient.put<Reporte>(`/reportes/${id}`, data);
     return response.data;
   },

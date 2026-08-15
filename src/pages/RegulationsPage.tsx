@@ -132,6 +132,49 @@ export default function RegulationsPage({ role }: { role: UserRole }) {
     }
   };
 
+  const handleToggleCumplida = async (r: Reporte) => {
+    try {
+      const updated = await reportesApi.update(r.id, { sancion_cumplida: !r.sancion_cumplida });
+      setReportes(prev => prev.map(x => (x.id === r.id ? updated : x)));
+      toastSuccess(
+        updated.sancion_cumplida ? 'Sancion marcada como cumplida' : 'Sancion marcada como pendiente'
+      );
+    } catch (e: unknown) {
+      const err = e as { response?: { data?: { detail?: string } } };
+      toastError('No se pudo actualizar', err.response?.data?.detail || 'Ocurrio un error');
+    }
+  };
+
+  const sancionToggle = (cumplida: boolean) => (
+    <div
+      onClick={(e) => e.stopPropagation()}
+      style={{
+        width: 40,
+        height: 22,
+        borderRadius: 11,
+        background: cumplida ? '#0F8122' : '#CAC6C7',
+        position: 'relative',
+        cursor: 'pointer',
+        transition: 'background 200ms',
+        display: 'inline-block',
+      }}
+      role="switch"
+      aria-checked={cumplida}
+    >
+      <div style={{
+        width: 18,
+        height: 18,
+        borderRadius: '50%',
+        background: '#FFFFFF',
+        position: 'absolute',
+        top: 2,
+        left: cumplida ? 20 : 2,
+        transition: 'left 200ms',
+        boxShadow: '0 1px 3px rgba(0,0,0,0.2)',
+      }} />
+    </div>
+  );
+
   const handleDelete = (r: Reporte) => {
     setConfirm({
       title: 'Eliminar falta',
@@ -187,7 +230,7 @@ export default function RegulationsPage({ role }: { role: UserRole }) {
           <table className="table">
             <thead>
               <tr>
-                <th>#</th><th>Alumno</th><th>Matricula</th><th>Motivo</th><th>Sancion</th><th>Fecha</th><th>Acciones</th>
+                <th>#</th><th>Alumno</th><th>Matricula</th><th>Motivo</th><th>Sancion</th><th>Cumplida</th><th>Fecha</th><th>Acciones</th>
               </tr>
             </thead>
             <tbody>
@@ -198,6 +241,11 @@ export default function RegulationsPage({ role }: { role: UserRole }) {
                   <td style={{ fontFamily: 'var(--font-mono)' }}>{r.alumno?.matricula ?? '---'}</td>
                   <td>{r.motivo}</td>
                   <td>{r.sancion}</td>
+                  <td>
+                    <div onClick={() => handleToggleCumplida(r)} title={r.sancion_cumplida ? 'Marcar pendiente' : 'Marcar cumplida'}>
+                      {sancionToggle(r.sancion_cumplida)}
+                    </div>
+                  </td>
                   <td>{r.fecha}</td>
                   <td>
                     <button className="table-action" title="Ver detalle" onClick={() => setDetailModal(r)}>
@@ -213,7 +261,7 @@ export default function RegulationsPage({ role }: { role: UserRole }) {
                 </tr>
               ))}
               {filtered.length === 0 && (
-                <tr><td colSpan={7} style={{ textAlign: 'center', padding: 24, color: '#85787A' }}>No hay reportes registrados</td></tr>
+                <tr><td colSpan={8} style={{ textAlign: 'center', padding: 24, color: '#85787A' }}>No hay reportes registrados</td></tr>
               )}
             </tbody>
           </table>
@@ -298,6 +346,11 @@ export default function RegulationsPage({ role }: { role: UserRole }) {
               </div>
               <div><span style={{ color: '#5F5657', fontSize: 12 }}>Sancion</span>
                 <div>{detailModal.sancion}</div>
+              </div>
+              <div><span style={{ color: '#5F5657', fontSize: 12 }}>Sancion cumplida</span>
+                <div style={{ fontWeight: 500, color: detailModal.sancion_cumplida ? '#0F8122' : '#5F5657' }}>
+                  {detailModal.sancion_cumplida ? 'Si' : 'No'}
+                </div>
               </div>
               <div><span style={{ color: '#5F5657', fontSize: 12 }}>Registrado por</span>
                 <div>{detailModal.prefecto?.nombre_completo ?? (role === 'Directivo' ? 'Directivo' : 'Prefectura')}</div>

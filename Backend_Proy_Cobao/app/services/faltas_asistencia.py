@@ -1,9 +1,12 @@
 """Generacion automatica de faltas de asistencia.
 
 Reglas:
-- FALTANTE: alumno inscrito (ciclo activo) sin registro de ENTRADA en el dia
-  y sin permiso aprobado que cubra esa fecha.
-- SIN_SALIDA: alumno con ENTRADA pero sin SALIDA en el dia.
+- FALTANTE: alumno activo (grupo del ciclo activo) sin registro de ENTRADA en
+  el dia y sin permiso aprobado que cubra esa fecha. Se registra como
+  INCIDENCIA ("Falta por inasistencia") en la ventana de Incidencias.
+- SIN_SALIDA: alumno con ENTRADA pero sin SALIDA en el dia. Se registra como
+  REPORTE ("Registro de entrada sin salida") en la ventana de Faltas al
+  Reglamento.
 """
 
 import asyncio
@@ -17,18 +20,24 @@ from app.models.alumno import Alumno
 from app.models.ciclo_escolar import CicloEscolar
 from app.models.configuracion_general import ConfiguracionGeneral
 from app.models.credencial import Credencial
-from app.models.falta_asistencia import FaltaAsistencia
 from app.models.grupo import Grupo
 from app.models.horario import Horario
+from app.models.incidencia import Incidencia
 from app.models.permiso import Permiso
 from app.models.registro_acceso import RegistroAcceso
+from app.models.reporte import Reporte
+from app.models.rol import Rol
+from app.models.usuario import Usuario
 
 logger = logging.getLogger(__name__)
 
 DIAS_NOMBRES = ["Lunes", "Martes", "Miercoles", "Jueves", "Viernes", "Sabado", "Domingo"]
 
-MOTIVO_FALTANTE = "No registro entrada (faltante)"
-MOTIVO_SIN_SALIDA = "Registro entrada sin salida"
+INCIDENCIA_TIPO = "Falta por inasistencia"
+INCIDENCIA_DESC = "No registro entrada (faltante)"
+
+REPORTE_MOTIVO = "Registro de entrada sin salida"
+REPORTE_SANCION = "Pendiente de sancion"
 
 HORA_SALIDA_DEFECTO = "14:00"
 
@@ -69,10 +78,32 @@ def _descanso_activo(general: ConfiguracionGeneral | None, fecha: date) -> bool:
     return not es_dia_habile(fecha, general)
 
 
-async def generar_faltas(db, fecha: date) -> dict:
-    """Genera (o revalida) las faltas de asistencia para una fecha.
+async def _usuario_sistema(db) -> int:
+    """Usuario que registra las incidencias automaticas (admin)."""
+    result = await db.execute(select(Usuario.id_usuario).where(Usuario.username == "admin"))
+    uid = result.scalar_one_or_none()
+    return uid or 1
 
-    Idempotente: no duplica faltas ya existentes.
+
+async def _usuario_prefecto(db) -> int:
+    """Usuario prefecto para reportes (el trigger valida ese rol)."""
+    result = await db.execute(
+        select(Usuario.id_usuario)
+        .join(Rol, Rol.id_rol == Usuario.id_rol)
+        .where(func.lower(Rol.nombre).in_(["prefecto", "prefectura"]))
+        .order_by(Usuario.id_usuario)
+        .limit(1)
+    )
+    uid = result.scalar_one_or_none()
+    return uid or 1
+
+
+async def generar_faltas(db, fecha: date) -> dict:
+    """Genera (o revalida) las faltas de asistencia de una fecha.
+
+    FALTANTE -> incidencia "Falta por inasistencia"
+    SIN_SALIDA -> reporte "Registro de entrada sin salida"
+    Idempotente: no duplica registros ya existentes para esa fecha.
     """
     general = (
         await db.execute(select(ConfiguracionGeneral).where(ConfiguracionGeneral.id == 1))
@@ -95,7 +126,8 @@ async def generar_faltas(db, fecha: date) -> dict:
         return resultado
 
     horarios = (await db.execute(select(Horario))).scalars().all()
-    resultado["hora_cierre"] = hora_salida_para(fecha, general, horarios).strftime("%H:%M")
+    cierre = hora_salida_para(fecha, general, horarios)
+    resultado["hora_cierre"] = cierre.strftime("%H:%M")
 
     # Alumnos activos cuyo grupo pertenece al ciclo escolar activo.
     alumnos = (
@@ -140,46 +172,73 @@ async def generar_faltas(db, fecha: date) -> dict:
     permisos_set = set(permisos)
 
     # Faltas ya registradas para esa fecha (para no duplicar).
-    existentes = (
+    incidencias_existentes = (
         await db.execute(
-            select(FaltaAsistencia.id_alumno, FaltaAsistencia.tipo).where(
-                FaltaAsistencia.fecha == fecha
+            select(Incidencia.id_alumno).where(
+                Incidencia.tipo == INCIDENCIA_TIPO,
+                func.date(Incidencia.fecha_registro) == fecha,
             )
         )
-    ).all()
-    ya_existentes = {
-        (id_alumno, tipo) for id_alumno, tipo in existentes
-    }
+    ).scalars().all()
+    reportes_existentes = (
+        await db.execute(
+            select(Reporte.id_alumno).where(
+                Reporte.motivo == REPORTE_MOTIVO,
+                Reporte.fecha == fecha,
+            )
+        )
+    ).scalars().all()
+    ya_incidencias = set(incidencias_existentes)
+    ya_reportes = set(reportes_existentes)
+    resultado["ya_existentes"] = len(ya_incidencias) + len(ya_reportes)
 
-    nuevas: list[FaltaAsistencia] = []
+    usuario_sistema = await _usuario_sistema(db)
+    nuevas_incidencias: list[Incidencia] = []
+    nuevos_reportes: list[Reporte] = []
+    momento = datetime.combine(fecha, cierre)
+
     for alumno in alumnos:
         aid = alumno.id_alumno
         if aid not in entradas and aid not in permisos_set:
-            if (aid, "FALTANTE") not in ya_existentes:
-                nuevas.append(
-                    FaltaAsistencia(
-                        id_alumno=aid, fecha=fecha, tipo="FALTANTE", motivo=MOTIVO_FALTANTE
+            if aid not in ya_incidencias:
+                nuevas_incidencias.append(
+                    Incidencia(
+                        id_alumno=aid,
+                        tipo=INCIDENCIA_TIPO,
+                        descripcion=INCIDENCIA_DESC,
+                        estado="Abierto",
+                        notificar=False,
+                        id_usuario_registro=usuario_sistema,
+                        fecha_registro=momento,
                     )
                 )
         elif aid in entradas and aid not in salidas:
-            if (aid, "SIN_SALIDA") not in ya_existentes:
-                nuevas.append(
-                    FaltaAsistencia(
-                        id_alumno=aid, fecha=fecha, tipo="SIN_SALIDA", motivo=MOTIVO_SIN_SALIDA
+            if aid not in ya_reportes:
+                nuevos_reportes.append(
+                    Reporte(
+                        id_alumno=aid,
+                        id_prefecto=usuario_sistema,
+                        motivo=REPORTE_MOTIVO,
+                        sancion=REPORTE_SANCION,
+                        sancion_cumplida=False,
+                        fecha=fecha,
                     )
                 )
 
-    if nuevas:
-        db.add_all(nuevas)
+    if nuevas_incidencias:
+        db.add_all(nuevas_incidencias)
+    if nuevos_reportes:
+        db.add_all(nuevos_reportes)
+    if nuevas_incidencias or nuevos_reportes:
         await db.flush()
 
-    resultado["faltantes"] = sum(1 for f in nuevas if f.tipo == "FALTANTE")
-    resultado["sin_salida"] = sum(1 for f in nuevas if f.tipo == "SIN_SALIDA")
-    resultado["total"] = len(nuevas)
-    resultado["ya_existentes"] = len(ya_existentes)
+    resultado["faltantes"] = len(nuevas_incidencias)
+    resultado["sin_salida"] = len(nuevos_reportes)
+    resultado["total"] = len(nuevas_incidencias) + len(nuevos_reportes)
     resultado["mensaje"] = (
         f"Se registraron {resultado['total']} faltas "
-        f"({resultado['faltantes']} faltantes, {resultado['sin_salida']} sin salida)."
+        f"({resultado['faltantes']} faltantes como incidencias, "
+        f"{resultado['sin_salida']} sin salida como faltas al reglamento)."
     )
     return resultado
 

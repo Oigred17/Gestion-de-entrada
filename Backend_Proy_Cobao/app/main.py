@@ -27,7 +27,6 @@ from app.routers import (
     ciclos_escolares,
     configuracion,
     credenciales,
-    faltas_asistencia,
     grupos,
     incidencias,
     inscripciones,
@@ -277,28 +276,48 @@ async def migrate_database():
 
         await _exec(
             conn,
-            """
-            CREATE TABLE IF NOT EXISTS faltas_asistencia (
-                id_falta        SERIAL PRIMARY KEY,
-                id_alumno       INTEGER NOT NULL REFERENCES alumnos(id_alumno),
-                fecha           DATE NOT NULL,
-                tipo            VARCHAR(20) NOT NULL,
-                motivo          TEXT,
-                fecha_registro  TIMESTAMP NOT NULL DEFAULT now(),
-                CONSTRAINT uq_falta_alumno_fecha_tipo UNIQUE (id_alumno, fecha, tipo)
+            "ALTER TABLE reportes ADD COLUMN IF NOT EXISTS sancion_cumplida "
+            "BOOLEAN NOT NULL DEFAULT FALSE",
+        )
+
+        # Migracion unica: convertir faltas de asistencia (tabla antigua) en
+        # incidencias (FALTANTE) y reportes (SIN_SALIDA), luego eliminar la tabla.
+        existe_faltas = (
+            await conn.execute(text("SELECT to_regclass('public.faltas_asistencia')"))
+        ).scalar_one_or_none()
+        if existe_faltas:
+            await _exec(
+                conn,
+                """
+                INSERT INTO incidencias (id_alumno, tipo, descripcion, estado, notificar, id_usuario_registro, fecha_registro)
+                SELECT fa.id_alumno, 'Falta por inasistencia', 'No registro entrada (faltante)', 'Abierto', FALSE,
+                       1, fa.fecha
+                FROM faltas_asistencia fa
+                WHERE fa.tipo = 'FALTANTE'
+                  AND NOT EXISTS (
+                      SELECT 1 FROM incidencias i
+                      WHERE i.id_alumno = fa.id_alumno
+                        AND i.tipo = 'Falta por inasistencia'
+                        AND i.fecha_registro::date = fa.fecha
+                  )
+                """,
             )
-            """,
-        )
-        await _exec(
-            conn,
-            "CREATE INDEX IF NOT EXISTS idx_faltas_asistencia_alumno "
-            "ON faltas_asistencia(id_alumno, fecha)",
-        )
-        await _exec(
-            conn,
-            "CREATE INDEX IF NOT EXISTS idx_faltas_asistencia_fecha "
-            "ON faltas_asistencia(fecha)",
-        )
+            await _exec(
+                conn,
+                """
+                INSERT INTO reportes (id_alumno, id_prefecto, motivo, sancion, sancion_cumplida, fecha)
+                SELECT fa.id_alumno, 1, 'Registro de entrada sin salida', 'Pendiente de sancion', FALSE, fa.fecha
+                FROM faltas_asistencia fa
+                WHERE fa.tipo = 'SIN_SALIDA'
+                  AND NOT EXISTS (
+                      SELECT 1 FROM reportes r
+                      WHERE r.id_alumno = fa.id_alumno
+                        AND r.fecha = fa.fecha
+                        AND r.motivo = 'Registro de entrada sin salida'
+                  )
+                """,
+            )
+            await _exec(conn, "DROP TABLE IF EXISTS faltas_asistencia")
 
         await _exec(
             conn,
@@ -843,11 +862,6 @@ app.include_router(justificaciones.router, prefix=API_PREFIX)
 app.include_router(permisos.router, prefix=API_PREFIX)
 app.include_router(incidencias.router, prefix=API_PREFIX)
 app.include_router(reportes.router, prefix=API_PREFIX)
-app.include_router(
-    faltas_asistencia.router,
-    prefix=API_PREFIX,
-    dependencies=[Depends(require_roles("Directivo", "Servicios Escolares", "Prefectura"))],
-)
 app.include_router(
     reportes_programados.router,
     prefix=API_PREFIX,

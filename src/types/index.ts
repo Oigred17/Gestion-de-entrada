@@ -253,6 +253,7 @@ export interface Reporte {
   id_prefecto: number;
   motivo: string;
   sancion: string;
+  sancion_cumplida: boolean;
   fecha: string;
   fecha_registro?: string;
   alumno?: Alumno;
@@ -265,16 +266,6 @@ export interface ReporteCreate {
   motivo: string;
   sancion: string;
   fecha?: string;
-}
-
-export interface FaltaAsistencia {
-  id: number;
-  id_alumno: number;
-  fecha: string;
-  tipo: 'FALTANTE' | 'SIN_SALIDA';
-  motivo?: string;
-  fecha_registro?: string;
-  alumno?: Alumno;
 }
 
 export interface Usuario {

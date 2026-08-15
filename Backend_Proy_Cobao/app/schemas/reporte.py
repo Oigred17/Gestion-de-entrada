@@ -16,6 +16,7 @@ class ReporteCreate(BaseModel):
 class ReporteUpdate(BaseModel):
     motivo: TextoLibreStr | None = None
     sancion: TextoLibreStr | None = None
+    sancion_cumplida: bool | None = None
 
 
 class ReporteResponse(BaseModel):
@@ -26,6 +27,7 @@ class ReporteResponse(BaseModel):
     id_prefecto: int
     motivo: str
     sancion: str
+    sancion_cumplida: bool = False
     fecha: str
     fecha_registro: str | None = None
     alumno: dict | None = None
@@ -41,6 +43,7 @@ class ReporteResponse(BaseModel):
                 "id_prefecto": data.id_prefecto,
                 "motivo": data.motivo,
                 "sancion": data.sancion,
+                "sancion_cumplida": bool(getattr(data, "sancion_cumplida", False)),
                 "fecha": str(data.fecha),
                 "fecha_registro": str(data.fecha_registro) if getattr(data, "fecha_registro", None) else None,
                 "alumno": getattr(data, "alumno", None),

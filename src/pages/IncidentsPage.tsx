@@ -23,6 +23,7 @@ export default function IncidentsPage({ role }: IncidentsPageProps) {
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<TabType>('Todas');
   const [searchQuery, setSearchQuery] = useState('');
+  const [tipoFilter, setTipoFilter] = useState('');
   const [modalOpen, setModalOpen] = useState(false);
   const [detail, setDetail] = useState<Incidencia | null>(null);
   const [page, setPage] = useState(1);
@@ -39,6 +40,10 @@ export default function IncidentsPage({ role }: IncidentsPageProps) {
   const [formErrors, setFormErrors] = useState<Record<string, string>>({});
 
   const registradoPor = role === 'Directivo' ? 'Directivo' : 'Prefectura';
+
+  const tipoFilterOptions = Array.from(
+    new Set([...tipoOptions, ...incidentsList.map(i => i.tipo)])
+  );
 
   const nombreAlumno = (inc: Incidencia) =>
     inc.alumno
@@ -78,7 +83,8 @@ export default function IncidentsPage({ role }: IncidentsPageProps) {
       alumnoName.toLowerCase().includes(searchQuery.toLowerCase()) ||
       inc.descripcion.toLowerCase().includes(searchQuery.toLowerCase()) ||
       inc.tipo.toLowerCase().includes(searchQuery.toLowerCase());
-    return matchTab && matchSearch;
+    const matchTipo = tipoFilter === '' || inc.tipo === tipoFilter;
+    return matchTab && matchSearch && matchTipo;
   });
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / perPage));
@@ -182,6 +188,15 @@ export default function IncidentsPage({ role }: IncidentsPageProps) {
             <Search size={18} className="input-icon" />
             <input type="text" className="input input--search" placeholder="Buscar incidencia..." value={searchQuery} onChange={(e) => { setSearchQuery(e.target.value); setPage(1); }} />
           </div>
+          <select
+            className="select"
+            style={{ width: 220 }}
+            value={tipoFilter}
+            onChange={(e) => { setTipoFilter(e.target.value); setPage(1); }}
+          >
+            <option value="">Todos los tipos</option>
+            {tipoFilterOptions.map(t => (<option key={t} value={t}>{t}</option>))}
+          </select>
         </div>
         <div className="toolbar-right">
           <button className="btn btn--primary" onClick={handleOpenModal}>

@@ -35,6 +35,7 @@ def _row_to_dict(reporte: Reporte, alumno: Alumno | None, grupo_nombre: str | No
         "id_prefecto": reporte.id_prefecto,
         "motivo": reporte.motivo,
         "sancion": reporte.sancion,
+        "sancion_cumplida": bool(reporte.sancion_cumplida),
         "fecha": str(reporte.fecha),
         "fecha_registro": str(reporte.fecha_registro) if reporte.fecha_registro else None,
         "alumno": alumno_dict,
