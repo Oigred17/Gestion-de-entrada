@@ -28,6 +28,9 @@ frontend (raiz)
   iniciar_nfc.bat            -- Arranca el lector (usa nfc_reader.exe si existe, si no Python)
   iniciar_nfc_silencioso.vbs -- Auto-inicio en Windows (carpeta Inicio)
   build_nfc_reader.bat       -- Empaqueta nfc_reader.py en nfc_reader.exe (PyInstaller)
+  lector_nfc/                -- Carpeta lista para copiar a cada PC con lector
+                             -- (nfc_reader.exe, iniciar_nfc.bat, nfc_url.txt, nfc_key.txt,
+                             --  iniciar_nfc_silencioso.vbs, LEEME.txt, requirements-nfc.txt)
   docker-compose.yml         -- Postgres + contenedor app (FastAPI + SPA + lector)
 
 Backend_Proy_Cobao/
@@ -142,16 +145,26 @@ USB y lo mande por HTTP al backend.
 El lector USB **no viaja por la red**: debe estar enchufado en la PC donde
 corres el helper. El helper solo manda el UID al backend por HTTP.
 
+En la carpeta `lector_nfc/` esta todo lo necesario para instalar en una PC
+con lector. **Copia la carpeta entera** a la PC (mantenlos juntos):
+
 1. Conectar el lector ACR122U e instalar sus drivers.
-2. Copiar `nfc_reader.exe` (ya compilado) o instalar Python + `pip install pyscard requests`.
-3. Si el backend **no** esta en esta misma PC (`localhost`), crea `nfc_url.txt`
-   junto al `.bat` con la URL del servidor, por ejemplo:
+2. `nfc_url.txt` ya viene con la URL del backend (el tunel Cloudflare).
+   Si el backend esta en otra IP, editalo, por ejemplo:
    `http://192.168.1.50:8000/api/v1/nfc/scan`
-   (o el tunel Cloudflare: `https://algo.trycloudflare.com/api/v1/nfc/scan`).
-   Tambien puedes pasar la URL: `iniciar_nfc.bat http://IP-SERVIDOR:8000/api/v1/nfc/scan`
-4. Ejecutar `iniciar_nfc.bat` (o auto-inicio con `iniciar_nfc_silencioso.vbs`).
+   (tambien puedes pasar la URL: `iniciar_nfc.bat http://IP-SERVIDOR:8000/api/v1/nfc/scan`).
+3. `nfc_key.txt` ya viene con la llave de API del backend (**no lo borres ni
+   lo edites**). Debe ser la misma que `NFC_API_KEY` en el `.env` del servidor.
+   Si el servidor responde 401, la llave no coincide.
+4. Ejecutar `iniciar_nfc.bat` (usa `nfc_reader.exe`, o Python si lo borras).
+   Debe mostrar "Lector encontrado: ACS ACR122U..." y "Esperando tarjetas NFC...".
+   Para arranque automatico al iniciar Windows: `iniciar_nfc_silencioso.vbs`.
 5. En el servidor, el puerto **8000** debe estar accesible desde la red
    (firewall de Windows: permitir entrada TCP 8000).
+
+> Si la PC no tiene Python, usa el `nfc_reader.exe` de esa carpeta (ya
+> compilado y con soporte de llave de API). Si usas Python, instala:
+> `pip install -r requirements-nfc.txt`.
 
 ### Recompilar el .exe del lector
 
@@ -162,12 +175,13 @@ build_nfc_reader.bat    # genera nfc_reader.exe (no requiere Python en la PC des
 ## Produccion (Opcion A: servidor + helper por PC)
 
 La **persona que ve tu pagina web no instala nada**. Solo la PC que tiene el lector
-fisico necesita el helper (`nfc_reader.exe`). Pasos para el dueno de cada PC con lector:
+fisico necesita la carpeta `lector_nfc/`. Pasos para el dueno de cada PC con lector:
 
 1. Conectar el lector ACR122U + drivers.
-2. Copiar `nfc_reader.exe` a la PC.
-3. Ejecutar: `nfc_reader.exe --url https://tudominio.com/api/v1/nfc/scan`
-   (crear un .bat con esa linea y ponerlo en auto-inicio).
+2. Copiar la carpeta `lector_nfc/` completa (contiene `nfc_reader.exe`,
+   `nfc_url.txt` con la URL del servidor y `nfc_key.txt` con la llave de API).
+3. Doble clic en `iniciar_nfc.bat` (o `iniciar_nfc_silencioso.vbs` para
+   auto-inicio sin ventana). Debe aparecer "Lector encontrado: ACS ACR122U...".
 4. Abrir la pagina web desde cualquier navegador y usar el usuario `entrada` para el
    registro de entradas/salidas, o el rol que corresponda.
 
@@ -179,8 +193,10 @@ detras de un dominio con HTTPS sin puertos hardcodeados.
 
 - [ ] Dominio + HTTPS (obligatorio para WebSocket `wss://`).
 - [ ] Cambiar `SECRET_KEY` y contrasenas de usuarios (hoy son por defecto).
+- [ ] Configurar `NFC_API_KEY` (OBLIGATORIA: sin ella los lectores no pueden
+      enviar lecturas; la misma llave va en `nfc_key.txt` de cada PC con lector).
 - [ ] Configurar `VITE_API_URL` al buildeo si la API no esta en el mismo origen.
-- [ ] Revisar CORS (`allow_origins` hoy es `*`).
+- [x] CORS ya no es `*`: usa la lista de `CORS_ORIGINS` (default: dev de Vite).
 - [ ] No exponer el puerto 5432 de Postgres publicamente.
 
 ## Funcionalidades por pagina

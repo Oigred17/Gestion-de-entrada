@@ -1,9 +1,10 @@
 from datetime import datetime, timedelta, timezone
 
 import bcrypt
-from fastapi import APIRouter, Depends, HTTPException, status
+import jwt
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from fastapi.security import OAuth2PasswordBearer
-from jose import JWTError, jwt
+from jwt import InvalidTokenError as JWTError
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -21,6 +22,7 @@ from app.schemas.auth import (
     VerifyPasswordResponse,
 )
 from app.services import email_service, recovery
+from app.services.rate_limit import login_limiter, recovery_limiter
 
 router = APIRouter(prefix="/auth", tags=["Auth"])
 
@@ -49,6 +51,27 @@ def create_access_token(data: dict) -> str:
     return jwt.encode(to_encode, settings.SECRET_KEY, algorithm=settings.ALGORITHM)
 
 
+async def decode_token(token: str, db: AsyncSession) -> Usuario | None:
+    """Decodifica un JWT y carga el usuario. Devuelve None si es invalido o el
+    usuario no existe / esta desactivado."""
+    try:
+        payload = jwt.decode(
+            token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM]
+        )
+        user_id_str: str | None = payload.get("sub")
+        if user_id_str is None:
+            return None
+        user_id = int(user_id_str)
+    except (JWTError, ValueError, TypeError):
+        return None
+
+    result = await db.execute(select(Usuario).where(Usuario.id_usuario == user_id))
+    usuario = result.scalar_one_or_none()
+    if usuario is None or not usuario.activo:
+        return None
+    return usuario
+
+
 async def get_current_user(
     token: str = Depends(oauth2_scheme),
     db: AsyncSession = Depends(get_db),
@@ -58,26 +81,28 @@ async def get_current_user(
         detail="Credenciales invalidas",
         headers={"WWW-Authenticate": "Bearer"},
     )
-    try:
-        payload = jwt.decode(
-            token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM]
-        )
-        user_id_str: str | None = payload.get("sub")
-        if user_id_str is None:
-            raise credentials_exception
-        user_id = int(user_id_str)
-    except JWTError:
-        raise credentials_exception
-
-    result = await db.execute(select(Usuario).where(Usuario.id_usuario == user_id))
-    usuario = result.scalar_one_or_none()
-    if usuario is None or not usuario.activo:
+    usuario = await decode_token(token, db)
+    if usuario is None:
         raise credentials_exception
     return usuario
 
 
+def _client_ip(request: Request) -> str:
+    forwarded = request.headers.get("x-forwarded-for", "")
+    if forwarded:
+        return forwarded.split(",")[0].strip()
+    return request.client.host if request.client else "unknown"
+
+
 @router.post("/login", response_model=TokenResponse)
-async def login(data: LoginRequest, db: AsyncSession = Depends(get_db)):
+async def login(data: LoginRequest, request: Request, db: AsyncSession = Depends(get_db)):
+    ip = _client_ip(request)
+    if not login_limiter.allow(f"login:{ip}"):
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail="Demasiados intentos. Espera unos minutos e intenta de nuevo.",
+        )
+
     result = await db.execute(
         select(Usuario).where(Usuario.username == data.username)
     )
@@ -95,6 +120,7 @@ async def login(data: LoginRequest, db: AsyncSession = Depends(get_db)):
             detail="Usuario desactivado",
         )
 
+    login_limiter.reset(f"login:{ip}")
     token = create_access_token({"sub": str(usuario.id_usuario)})
     return TokenResponse(access_token=token)
 
@@ -136,9 +162,18 @@ async def get_me(
 
 @router.post("/recover/request")
 async def request_recovery(
-    data: RecoverRequest, db: AsyncSession = Depends(get_db)
+    data: RecoverRequest,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
 ):
     """Solicita el envio de un codigo de verificacion al correo del usuario."""
+    ip = _client_ip(request)
+    if not recovery_limiter.allow(f"recover:{ip}"):
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail="Demasiadas solicitudes. Espera unos minutos e intenta de nuevo.",
+        )
+
     username = data.username.strip()
     resultado = {
         "status": "ok",
@@ -156,7 +191,7 @@ async def request_recovery(
     if not usuario or not usuario.email:
         return resultado
 
-    if not email_service.smtp_configured():
+    if not await email_service.smtp_configured(db):
         return {
             "status": "error",
             "email": recovery.mask_email(usuario.email),
@@ -177,7 +212,7 @@ async def request_recovery(
         f"Si no solicitaste este cambio, ignora este correo.\n\n"
         f"COBAO Plantel 27 Miahuatlan"
     )
-    sent = email_service.send_email(usuario.email, subject, body)
+    sent = await email_service.send_email(db, usuario.email, subject, body)
 
     if not sent:
         return {
@@ -195,16 +230,28 @@ async def request_recovery(
 
 @router.post("/recover/reset")
 async def reset_password(
-    data: ResetPasswordRequest, db: AsyncSession = Depends(get_db)
+    data: ResetPasswordRequest,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
 ):
     """Valida el codigo y establece la nueva contrasena."""
+    ip = _client_ip(request)
+    if not recovery_limiter.allow(f"reset:{ip}"):
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail="Demasiados intentos. Espera unos minutos e intenta de nuevo.",
+        )
+
     username = data.username.strip()
     code = data.code.strip()
 
-    if len(data.new_password) < 4:
+    if len(data.new_password) < settings.MIN_PASSWORD_LENGTH:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="La contrasena debe tener al menos 4 caracteres.",
+            detail=(
+                "La contrasena debe tener al menos "
+                f"{settings.MIN_PASSWORD_LENGTH} caracteres."
+            ),
         )
 
     if not code.isdigit() or len(code) != 6:

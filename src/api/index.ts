@@ -16,4 +16,6 @@ export { reportesApi } from './reportes';
 export { reportesProgramadosApi } from './reportesProgramados';
 export { justificacionesApi } from './justificaciones';
 export { reposicionesApi } from './reposiciones';
+export { notificacionesApi } from './notificaciones';
+export { respaldosApi } from './respaldos';
 export { default as apiClient } from './client';

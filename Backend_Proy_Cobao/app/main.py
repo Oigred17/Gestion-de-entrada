@@ -6,14 +6,16 @@ import logging
 from contextlib import asynccontextmanager
 from pathlib import Path
 
-from fastapi import FastAPI, Request
+from fastapi import Depends, FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from sqlalchemy import select, text
 from uvicorn.middleware.proxy_headers import ProxyHeadersMiddleware
 
+from app.config import settings
 from app.database import async_session, engine
+from app.dependencies import AuthMiddleware, require_roles
 from app.models.rol import Rol
 from app.models.usuario import Usuario
 from app.routers import (
@@ -27,12 +29,14 @@ from app.routers import (
     inscripciones,
     justificaciones,
     nfc,
+    notificaciones,
     permisos,
     profesores,
     registros_acceso,
     reportes,
     reportes_programados,
     reposiciones,
+    respaldos,
     retardos,
     roles,
     usuarios,
@@ -224,6 +228,32 @@ async def migrate_database():
         await _exec(
             conn,
             "INSERT INTO configuracion_general (id) VALUES (1) ON CONFLICT (id) DO NOTHING",
+        )
+        await _exec(
+            conn,
+            "ALTER TABLE configuracion_general ADD COLUMN IF NOT EXISTS "
+            "dias_habiles VARCHAR(200) "
+            "DEFAULT 'Lunes,Martes,Miercoles,Jueves,Viernes'",
+        )
+        await _exec(
+            conn,
+            "UPDATE configuracion_general SET dias_habiles = "
+            "'Lunes,Martes,Miercoles,Jueves,Viernes' "
+            "WHERE dias_habiles IS NULL OR dias_habiles = ''",
+        )
+
+        await _exec(
+            conn,
+            """
+            CREATE TABLE IF NOT EXISTS respaldos (
+                id_respaldo   SERIAL PRIMARY KEY,
+                fecha         TIMESTAMP NOT NULL DEFAULT now(),
+                tamano_bytes  INTEGER NOT NULL DEFAULT 0,
+                tipo          VARCHAR(20) NOT NULL DEFAULT 'Manual',
+                estado        VARCHAR(20) NOT NULL DEFAULT 'Completado',
+                contenido     TEXT NOT NULL
+            )
+            """,
         )
 
         await _exec(
@@ -708,6 +738,17 @@ async def seed_database():
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    if settings.secret_key_insecure:
+        logger.warning(
+            "SECRET_KEY no configurado (usa el valor por defecto). "
+            "Configuralo via variable de entorno SECRET_KEY antes de produccion."
+        )
+    if not settings.nfc_api_key_set:
+        logger.warning(
+            "NFC_API_KEY vacio: los lectores NFC externos no podran enviar "
+            "lecturas. Configura NFC_API_KEY y pon la misma en nfc_key.txt "
+            "de cada PC con lector."
+        )
     await migrate_database()
     await seed_database()
     yield
@@ -720,9 +761,10 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
+app.add_middleware(AuthMiddleware)
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=settings.cors_origins_list,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -731,13 +773,27 @@ app.add_middleware(
 # Detras de Cloudflare/nginx el TLS termina en el proxy y la app recibe HTTP.
 # Sin esto, FastAPI genera redirects (trailing slash) con Location: http://...
 # y el navegador bloquea Mixed Content en paginas HTTPS.
-app.add_middleware(ProxyHeadersMiddleware, trusted_hosts="*")
+app.add_middleware(
+    ProxyHeadersMiddleware, trusted_hosts=settings.trusted_hosts_set
+)
 
 app.include_router(auth.router, prefix=API_PREFIX)
-app.include_router(roles.router, prefix=API_PREFIX)
-app.include_router(usuarios.router, prefix=API_PREFIX)
+app.include_router(
+    roles.router,
+    prefix=API_PREFIX,
+    dependencies=[Depends(require_roles("Directivo", "Servicios Escolares"))],
+)
+app.include_router(
+    usuarios.router,
+    prefix=API_PREFIX,
+    dependencies=[Depends(require_roles("Directivo", "Servicios Escolares"))],
+)
 app.include_router(ciclos_escolares.router, prefix=API_PREFIX)
-app.include_router(configuracion.router, prefix=API_PREFIX)
+app.include_router(
+    configuracion.router,
+    prefix=API_PREFIX,
+    dependencies=[Depends(require_roles("Directivo", "Servicios Escolares"))],
+)
 app.include_router(alumnos.router, prefix=API_PREFIX)
 app.include_router(profesores.router, prefix=API_PREFIX)
 app.include_router(grupos.router, prefix=API_PREFIX)
@@ -747,10 +803,20 @@ app.include_router(justificaciones.router, prefix=API_PREFIX)
 app.include_router(permisos.router, prefix=API_PREFIX)
 app.include_router(incidencias.router, prefix=API_PREFIX)
 app.include_router(reportes.router, prefix=API_PREFIX)
-app.include_router(reportes_programados.router, prefix=API_PREFIX)
+app.include_router(
+    reportes_programados.router,
+    prefix=API_PREFIX,
+    dependencies=[Depends(require_roles("Directivo", "Prefectura"))],
+)
 app.include_router(reposiciones.router, prefix=API_PREFIX)
 app.include_router(registros_acceso.router, prefix=API_PREFIX)
 app.include_router(retardos.router, prefix=API_PREFIX)
+app.include_router(notificaciones.router, prefix=API_PREFIX)
+app.include_router(
+    respaldos.router,
+    prefix=API_PREFIX,
+    dependencies=[Depends(require_roles("Directivo", "Servicios Escolares"))],
+)
 app.include_router(nfc.router, prefix=API_PREFIX)
 
 
@@ -762,10 +828,26 @@ async def root():
 # --- Servir React SPA ---
 FRONTEND_DIR = Path(__file__).resolve().parent.parent / "frontend" / "dist"
 
+CACHEABLE_IMAGE_EXTENSIONS = {".png", ".webp", ".jpg", ".jpeg", ".gif", ".svg", ".ico"}
+
+
+class CachedStaticFiles(StaticFiles):
+    """Sirve los assets hasheados (JS/CSS/img) con cache inmutable por 1 anio."""
+
+    async def get_response(self, path, scope):
+        response = await super().get_response(path, scope)
+        response.headers["Cache-Control"] = "public, max-age=31536000, immutable"
+        return response
+
+
 if FRONTEND_DIR.exists():
     assets_dir = FRONTEND_DIR / "assets"
     if assets_dir.exists():
-        app.mount("/assets", StaticFiles(directory=str(assets_dir)), name="static-assets")
+        app.mount(
+            "/assets",
+            CachedStaticFiles(directory=str(assets_dir)),
+            name="static-assets",
+        )
 
     SPA_INDEX = FRONTEND_DIR / "index.html"
 
@@ -776,6 +858,9 @@ if FRONTEND_DIR.exists():
         if response.status_code == 404 and not path.startswith("/api/"):
             file_path = FRONTEND_DIR / path.lstrip("/")
             if file_path.is_file():
-                return FileResponse(str(file_path))
+                headers = {}
+                if file_path.suffix.lower() in CACHEABLE_IMAGE_EXTENSIONS:
+                    headers["Cache-Control"] = "public, max-age=604800"
+                return FileResponse(str(file_path), headers=headers)
             return FileResponse(str(SPA_INDEX))
         return response

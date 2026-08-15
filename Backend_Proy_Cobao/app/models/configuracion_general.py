@@ -15,6 +15,7 @@ class ConfiguracionGeneral(Base):
     logo_base64 = Column(Text, nullable=True)
     hora_entrada = Column(String(5), nullable=False, server_default="07:00")
     hora_salida = Column(String(5), nullable=False, server_default="14:00")
+    dias_habiles = Column(String(200), nullable=False, server_default="Lunes,Martes,Miercoles,Jueves,Viernes")
     smtp_host = Column(String(120), nullable=False, server_default="")
     smtp_port = Column(Integer, nullable=False, server_default="587")
     smtp_user = Column(String(120), nullable=False, server_default="")

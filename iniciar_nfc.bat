@@ -13,6 +13,9 @@ rem   iniciar_nfc.bat https://algo.trycloudflare.com/api/v1/nfc/scan
 rem
 rem O crea nfc_url.txt en esta carpeta con una sola linea:
 rem   http://192.168.1.50:8000/api/v1/nfc/scan
+rem
+rem Llave de API (si el backend la exige): crea nfc_key.txt con la llave,
+rem o usa la variable de entorno NFC_API_KEY, o el arg --key.
 rem ============================================================
 
 set "NFC_URL="
@@ -32,6 +35,7 @@ echo.
 echo  COBAO NFC Reader
 echo  Backend: %NFC_URL%
 echo  (Para cambiar la URL: edita nfc_url.txt o pasa la URL como argumento)
+if exist "%~dp0nfc_key.txt" echo  Llave de API: nfc_key.txt
 echo.
 
 if exist "%~dp0nfc_reader.exe" (

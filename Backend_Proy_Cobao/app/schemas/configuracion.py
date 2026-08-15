@@ -52,6 +52,7 @@ class ConfiguracionGeneralUpdate(BaseModel):
     logo_base64: str | None = None
     hora_entrada: HoraStr | None = None
     hora_salida: HoraStr | None = None
+    dias_habiles: str | None = None
     smtp_host: str | None = None
     smtp_port: int | None = None
     smtp_user: str | None = None

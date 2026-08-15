@@ -1,24 +1,30 @@
+import { lazy, Suspense, type ReactNode } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider, useAuth } from './context/AuthContext';
 
 export type UserRole = 'Directivo' | 'Prefectura' | 'Servicios Escolares' | 'Entrada';
 import Layout from './components/Layout';
-import LoginPage from './pages/LoginPage';
-import ScanPage from './pages/ScanPage';
-import DashboardPage from './pages/DashboardPage';
-import StudentsPage from './pages/StudentsPage';
-import CredentialsPage from './pages/CredentialsPage';
-import CredentialDetailPage from './pages/CredentialDetailPage';
-import PermissionsPage from './pages/PermissionsPage';
-import IncidentsPage from './pages/IncidentsPage';
-import ReportsPage from './pages/ReportsPage';
-import ConfigPage from './pages/ConfigPage';
-import GruposPage from './pages/GruposPage';
-import RegulationsPage from './pages/RegulationsPage';
-import ProfesoresPage from './pages/ProfesoresPage';
-import KioscoEntradasPage from './pages/KioscoEntradasPage';
 import { Toaster } from './components/ui/toast';
 import Loader from './components/Loader';
+
+const LoginPage = lazy(() => import('./pages/LoginPage'));
+const ScanPage = lazy(() => import('./pages/ScanPage'));
+const DashboardPage = lazy(() => import('./pages/DashboardPage'));
+const StudentsPage = lazy(() => import('./pages/StudentsPage'));
+const CredentialsPage = lazy(() => import('./pages/CredentialsPage'));
+const CredentialDetailPage = lazy(() => import('./pages/CredentialDetailPage'));
+const PermissionsPage = lazy(() => import('./pages/PermissionsPage'));
+const IncidentsPage = lazy(() => import('./pages/IncidentsPage'));
+const ReportsPage = lazy(() => import('./pages/ReportsPage'));
+const ConfigPage = lazy(() => import('./pages/ConfigPage'));
+const GruposPage = lazy(() => import('./pages/GruposPage'));
+const RegulationsPage = lazy(() => import('./pages/RegulationsPage'));
+const ProfesoresPage = lazy(() => import('./pages/ProfesoresPage'));
+const KioscoEntradasPage = lazy(() => import('./pages/KioscoEntradasPage'));
+
+function SuspenseBoundary({ children }: { children: ReactNode }) {
+  return <Suspense fallback={<Loader message="Cargando..." fullScreen />}>{children}</Suspense>;
+}
 
 function AppRoutes() {
   const { isAuthenticated, isLoading, user, logout } = useAuth();
@@ -28,7 +34,7 @@ function AppRoutes() {
   }
 
   if (!isAuthenticated) {
-    return <LoginPage />;
+    return <SuspenseBoundary><LoginPage /></SuspenseBoundary>;
   }
 
   const userRole = user?.rol || 'Directivo';
@@ -36,9 +42,11 @@ function AppRoutes() {
   if (userRole === 'Entrada') {
     return (
       <BrowserRouter>
-        <Routes>
-          <Route path="*" element={<KioscoEntradasPage />} />
-        </Routes>
+        <SuspenseBoundary>
+          <Routes>
+            <Route path="*" element={<KioscoEntradasPage />} />
+          </Routes>
+        </SuspenseBoundary>
       </BrowserRouter>
     );
   }
@@ -46,7 +54,8 @@ function AppRoutes() {
   return (
     <BrowserRouter>
       <Layout role={userRole as UserRole} onLogout={logout}>
-        <Routes>
+        <SuspenseBoundary>
+          <Routes>
           {userRole === 'Directivo' ? (
             <>
               <Route path="/" element={<DashboardPage />} />
@@ -89,7 +98,8 @@ function AppRoutes() {
               <Route path="*" element={<Navigate to="/escaneo" replace />} />
             </>
           )}
-        </Routes>
+          </Routes>
+        </SuspenseBoundary>
       </Layout>
     </BrowserRouter>
   );

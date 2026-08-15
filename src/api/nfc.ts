@@ -56,7 +56,10 @@ export const nfcApi = {
     }
     const protocol = base.startsWith('https') ? 'wss:' : 'ws:';
     const host = base.replace(/^https?:\/\//, '');
-    const url = `${protocol}//${host}/api/v1/nfc/ws`;
+    const token =
+      localStorage.getItem('access_token') ?? sessionStorage.getItem('access_token');
+    const query = token ? `?token=${encodeURIComponent(token)}` : '';
+    const url = `${protocol}//${host}/api/v1/nfc/ws${query}`;
 
     const ws = new WebSocket(url);
     ws.onopen = () => onOpen?.();

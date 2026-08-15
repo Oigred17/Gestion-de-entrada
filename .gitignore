@@ -1,5 +1,6 @@
 # Secrets
 .env
+nfc_key.txt
 
 # Node
 node_modules/

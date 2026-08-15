@@ -13,6 +13,17 @@ from app.schemas.configuracion import (
 
 router = APIRouter(prefix="/configuracion", tags=["Configuracion"])
 
+SECRET_PLACEHOLDER = "********"
+
+SECRET_FIELDS = {"smtp_password", "sms_api_key", "whatsapp_api_key"}
+
+
+def _secret(value: str | None) -> str:
+    """Nunca se devuelve un secreto real en la respuesta."""
+    if value in (None, "", SECRET_PLACEHOLDER):
+        return ""
+    return SECRET_PLACEHOLDER
+
 
 def _general_dict(general) -> dict:
     if not general:
@@ -25,15 +36,16 @@ def _general_dict(general) -> dict:
         "logo_base64": general.logo_base64,
         "hora_entrada": general.hora_entrada,
         "hora_salida": general.hora_salida,
+        "dias_habiles": general.dias_habiles or "",
         "smtp_host": general.smtp_host,
         "smtp_port": general.smtp_port,
         "smtp_user": general.smtp_user,
-        "smtp_password": general.smtp_password,
+        "smtp_password": _secret(general.smtp_password),
         "smtp_from": general.smtp_from,
         "sms_proveedor": general.sms_proveedor,
-        "sms_api_key": general.sms_api_key,
+        "sms_api_key": _secret(general.sms_api_key),
         "sms_remitente": general.sms_remitente,
-        "whatsapp_api_key": general.whatsapp_api_key,
+        "whatsapp_api_key": _secret(general.whatsapp_api_key),
         "whatsapp_numero": general.whatsapp_numero,
         "notif_email": bool(general.notif_email),
         "notif_sms": bool(general.notif_sms),

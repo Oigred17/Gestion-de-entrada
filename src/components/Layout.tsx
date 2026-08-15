@@ -7,6 +7,7 @@ import {
 } from 'lucide-react';
 import type { UserRole } from '../App';
 import { useAuth } from '../context/AuthContext';
+import { notificacionesApi, type NotificationItem } from '../api/notificaciones';
 import Loader from './Loader';
 
 interface LayoutProps {
@@ -14,7 +15,6 @@ interface LayoutProps {
   role: UserRole;
   onLogout: () => void;
 }
-
 
 const directivoMenu = [
   { icon: LayoutDashboard, label: 'Dashboard', path: '/dashboard' },
@@ -49,31 +49,54 @@ const prefectoMenu = [
   { icon: FileText, label: 'Reportes', path: '/reportes' },
 ];
 
-interface NotificationItem {
-  id: number;
-  type: 'success' | 'info' | 'warning' | 'error';
-  title: string;
-  text: string;
-  time: string;
-  unread: boolean;
-}
-
 export default function Layout({ children, role, onLogout }: LayoutProps) {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [collapsed, setCollapsed] = useState(false);
   const [notifOpen, setNotifOpen] = useState(false);
   const [notifLoading, setNotifLoading] = useState(false);
-  const [notifications, setNotifications] = useState<NotificationItem[]>([
-    { id: 1, type: 'warning', title: 'Acceso sin credencial', text: 'Un alumno ingresó sin escanear su credencial.', time: '12 min', unread: true },
-    { id: 2, type: 'error', title: 'Credencial por vencer', text: 'La credencial del alumno Luis García está por vencer.', time: '35 min', unread: true },
-    { id: 3, type: 'info', title: 'Nuevo permiso registrado', text: 'Se registró un permiso de salida para el grupo 3°B.', time: '1 h', unread: true },
-    { id: 4, type: 'success', title: 'Registro completado', text: 'La entrada del alumno se registró correctamente.', time: '2 h', unread: false },
-  ]);
+  const [notifications, setNotifications] = useState<NotificationItem[]>([]);
   const notifTimer = useRef<number | undefined>(undefined);
   const location = useLocation();
   const navigate = useNavigate();
   const { user } = useAuth();
   const menu = role === 'Directivo' ? directivoMenu : role === 'Servicios Escolares' ? serviciosEscolaresMenu : prefectoMenu;
+
+  const readKey = `notif_read_${user?.username ?? 'anon'}`;
+
+  const loadReadIds = () => {
+    try {
+      return JSON.parse(localStorage.getItem(readKey) ?? '[]') as string[];
+    } catch {
+      return [];
+    }
+  };
+
+  const fetchNotifications = async () => {
+    try {
+      const items = await notificacionesApi.getAll();
+      const read = loadReadIds();
+      const readSet = new Set(read);
+      setNotifications(items.map(n => ({ ...n, unread: !readSet.has(n.id) })));
+    } catch {
+      setNotifications([]);
+    }
+  };
+
+  useEffect(() => {
+    let mounted = true;
+    (async () => {
+      try {
+        const items = await notificacionesApi.getAll();
+        if (!mounted) return;
+        const read = loadReadIds();
+        const readSet = new Set(read);
+        setNotifications(items.map(n => ({ ...n, unread: !readSet.has(n.id) })));
+      } catch {
+        if (mounted) setNotifications([]);
+      }
+    })();
+    return () => { mounted = false; };
+  }, [readKey]);
 
   const userFullName = user ? `${user.nombre} ${user.apellido_paterno} ${user.apellido_materno}`.trim() : 'Usuario';
   const userInitials = (user ? `${user.nombre?.[0] ?? ''}${user.apellido_paterno?.[0] ?? ''}` : '').trim().toUpperCase() || (user?.username?.[0]?.toUpperCase() ?? 'U');
@@ -85,8 +108,34 @@ export default function Layout({ children, role, onLogout }: LayoutProps) {
     : menu.find(m => location.pathname.startsWith(m.path))?.label ?? 'Sistema NFC';
 
   const markAllAsRead = () => {
+    const all = notifications.map(n => n.id);
+    const merged = Array.from(new Set([...loadReadIds(), ...all]));
+    localStorage.setItem(readKey, JSON.stringify(merged));
     setNotifications(prev => prev.map(n => ({ ...n, unread: false })));
     setNotifOpen(false);
+  };
+
+  const markAsRead = (id: string) => {
+    if (notifications.find(n => n.id === id)?.unread) {
+      const merged = Array.from(new Set([...loadReadIds(), id]));
+      localStorage.setItem(readKey, JSON.stringify(merged));
+      setNotifications(prev => prev.map(n => (n.id === id ? { ...n, unread: false } : n)));
+    }
+  };
+
+  const formatRelativeTime = (iso: string | null): string => {
+    if (!iso) return '';
+    const fecha = new Date(iso);
+    if (Number.isNaN(fecha.getTime())) return '';
+    const segundos = Math.max(0, Math.floor((Date.now() - fecha.getTime()) / 1000));
+    if (segundos < 60) return 'hace un momento';
+    const minutos = Math.floor(segundos / 60);
+    if (minutos < 60) return `hace ${minutos} min`;
+    const horas = Math.floor(minutos / 60);
+    if (horas < 24) return `hace ${horas} h`;
+    const dias = Math.floor(horas / 24);
+    if (dias < 7) return `hace ${dias} d`;
+    return fecha.toLocaleDateString('es-MX', { day: 'numeric', month: 'short' });
   };
 
   const handleToggleNotifications = () => {
@@ -94,7 +143,10 @@ export default function Layout({ children, role, onLogout }: LayoutProps) {
     window.clearTimeout(notifTimer.current);
     if (opening) {
       setNotifLoading(true);
-      notifTimer.current = window.setTimeout(() => setNotifLoading(false), 900);
+      fetchNotifications().finally(() => {
+        notifTimer.current = window.setTimeout(() => setNotifLoading(false), 300);
+      });
+      notifTimer.current = window.setTimeout(() => setNotifLoading(false), 4000);
     }
     setNotifOpen(opening);
   };
@@ -196,12 +248,16 @@ export default function Layout({ children, role, onLogout }: LayoutProps) {
                   ) : (
                     <div className="notification-list">
                       {notifications.map(n => (
-                        <div key={n.id} className={`notification-card ${n.unread ? 'unread' : ''}`}>
+                        <div
+                          key={n.id}
+                          className={`notification-card ${n.unread ? 'unread' : ''}`}
+                          onClick={() => markAsRead(n.id)}
+                        >
                           <div className={`notification-card__img notification-card__img--${n.type}`} />
                           <div className="notification-card__text">
                             <div className="notification-card__textContent">
                               <p className="notification-card__h1">{n.title}</p>
-                              <span className="notification-card__span">{n.time}</span>
+                              <span className="notification-card__span">{formatRelativeTime(n.time)}</span>
                             </div>
                             <p className="notification-card__p">{n.text}</p>
                           </div>

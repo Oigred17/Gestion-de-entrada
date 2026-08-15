@@ -74,23 +74,20 @@ export default function DashboardPage() {
 
   const hoy = new Date().toISOString().slice(0, 10);
   const totalAlumnos = alumnosData.length;
-  const presentes = new Set(
-    registros
-      .filter(r => r.tipo_acceso === 'ENTRADA' && esHoy(r.fecha_hora, hoy))
-      .map(r => r.alumno_id)
-  ).size;
-  const salidas = new Set(
-    registros
-      .filter(r => r.tipo_acceso === 'SALIDA' && esHoy(r.fecha_hora, hoy))
-      .map(r => r.alumno_id)
-  ).size;
+  const registrosHoy = registros.filter(r => esHoy(r.fecha_hora, hoy));
+  const estadoAlumno = new Map<number, string>();
+  for (const r of [...registrosHoy].sort((a, b) => (a.fecha_hora || '').localeCompare(b.fecha_hora || ''))) {
+    estadoAlumno.set(r.alumno_id, r.tipo_acceso);
+  }
+  const presentes = Array.from(estadoAlumno.values()).filter(v => v === 'ENTRADA').length;
+  const salidas = Array.from(estadoAlumno.values()).filter(v => v === 'SALIDA').length;
   const retardosCount = retardosData.filter(r => esHoy(r.fecha, hoy)).length;
   const reportesCount = reportesData.length;
 
   const stats = [
     { label: 'Presentes', value: presentes, total: totalAlumnos, color: '#0F8122', bg: '#E8F5E9', icon: UserCheck },
     { label: 'Fuera de horario', value: retardosCount, total: totalAlumnos, color: '#1792AB', bg: '#DCF5FF', icon: Clock },
-    { label: 'Faltas', value: Math.max(0, totalAlumnos - presentes - retardosCount), total: totalAlumnos, color: '#EB2466', bg: '#FEEBEE', icon: AlertTriangle },
+    { label: 'Faltas', value: Math.max(0, totalAlumnos - presentes), total: totalAlumnos, color: '#EB2466', bg: '#FEEBEE', icon: AlertTriangle },
     { label: 'Salidas', value: salidas, total: totalAlumnos, color: '#5F5657', bg: '#F0EFEF', icon: LogOut },
     { label: 'Reportes', value: reportesCount, total: totalAlumnos, color: '#AB1748', bg: '#FEEBEE', icon: AlertTriangle },
   ];
@@ -121,6 +118,10 @@ export default function DashboardPage() {
       const alumno = r.alumno || alumnoMap[r.alumno_id];
       return (alumno?.id_grupo ?? 0) === idGrupo;
     });
+    const groupEstados = new Map<number, string>();
+    for (const r of [...groupRegistros].sort((a, b) => (a.fecha_hora || '').localeCompare(b.fecha_hora || ''))) {
+      groupEstados.set(r.alumno_id, r.tipo_acceso);
+    }
     const groupRetardos = retardosData.filter(r => {
       if (!esHoy(r.fecha, hoy)) return false;
       const alumno = r.alumno || alumnoMap[r.alumno_id];
@@ -130,7 +131,7 @@ export default function DashboardPage() {
       idGrupo,
       group: idGrupo ? (grupoMap[idGrupo] || `Grupo ${idGrupo}`) : 'Sin grupo',
       total: groupStudents.length,
-      presentes: new Set(groupRegistros.filter(r => r.tipo_acceso === 'ENTRADA').map(r => r.alumno_id)).size,
+      presentes: Array.from(groupEstados.values()).filter(v => v === 'ENTRADA').length,
       retardos: groupRetardos.length,
     };
   }).sort((a, b) => b.total - a.total);

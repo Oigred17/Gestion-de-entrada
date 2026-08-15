@@ -20,6 +20,7 @@ import { alumnosApi, registrosApi, retardosApi, gruposApi, reportesProgramadosAp
 import type { Alumno, RegistroAcceso, Retardo, Grupo, ReporteProgramado } from '../types';
 import Loader from '../components/Loader';
 import ConfirmPasswordModal from '../components/ConfirmPasswordModal';
+import DateRangePicker from '../components/DateRangePicker';
 import { toastSuccess, toastError } from '../lib/toast';
 import { jsPDF } from 'jspdf';
 
@@ -741,20 +742,15 @@ export default function ReportsPage() {
             </select>
           </div>
 
-          <div>
-            <label style={fieldLabel}>
-              <Calendar size={14} style={{ marginRight: 4, verticalAlign: -2 }} />
-              Desde
-            </label>
-            <input type="date" style={formInput} value={startDate} onChange={e => setStartDate(e.target.value)} />
-          </div>
-          <div>
-            <label style={fieldLabel}>
-              <Calendar size={14} style={{ marginRight: 4, verticalAlign: -2 }} />
-              Hasta
-            </label>
-            <input type="date" style={formInput} value={endDate} onChange={e => setEndDate(e.target.value)} />
-          </div>
+          <DateRangePicker
+            startDate={startDate}
+            endDate={endDate}
+            onRangeChange={(start, end) => {
+              setStartDate(start);
+              setEndDate(end);
+              setReportGenerated(false);
+            }}
+          />
 
           <button
             onClick={handleGenerate}

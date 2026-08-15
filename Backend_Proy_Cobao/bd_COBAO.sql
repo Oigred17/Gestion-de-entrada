@@ -157,6 +157,86 @@ CREATE TABLE justificaciones (
 CREATE INDEX idx_justificaciones_alumno ON justificaciones(id_alumno, fecha_inicio, fecha_fin);
 CREATE INDEX idx_justificaciones_grupo ON justificaciones(id_grupo, fecha_inicio, fecha_fin);
 
+-- Tabla propia del proyecto: permisos de salida de alumnos
+CREATE TABLE permisos (
+    id_permiso          SERIAL PRIMARY KEY,
+    id_alumno           INTEGER NOT NULL REFERENCES alumnos(id_alumno),
+    motivo              TEXT NOT NULL,
+    fecha_salida        TIMESTAMP,
+    fecha_solicitud     TIMESTAMP NOT NULL DEFAULT now(),
+    estado              VARCHAR(20) NOT NULL DEFAULT 'Pendiente',
+    codigo_autorizacion VARCHAR(8),
+    notificar_tutor     BOOLEAN NOT NULL DEFAULT FALSE,
+    id_usuario_registro INTEGER NOT NULL REFERENCES usuarios(id_usuario),
+    fecha_registro      TIMESTAMP NOT NULL DEFAULT now()
+);
+
+-- registros_acceso puede ligarse a un permiso de salida
+ALTER TABLE registros_acceso
+    ADD COLUMN IF NOT EXISTS id_permiso INTEGER REFERENCES permisos(id_permiso);
+
+-- Tabla propia del proyecto: incidencias disciplinarias
+CREATE TABLE incidencias (
+    id_incidencia       SERIAL PRIMARY KEY,
+    id_alumno           INTEGER NOT NULL REFERENCES alumnos(id_alumno),
+    tipo                VARCHAR(30) NOT NULL,
+    descripcion         TEXT NOT NULL,
+    estado              VARCHAR(20) NOT NULL DEFAULT 'Abierto',
+    notificar           BOOLEAN NOT NULL DEFAULT FALSE,
+    evidencia_base64    TEXT,
+    id_usuario_registro INTEGER NOT NULL REFERENCES usuarios(id_usuario),
+    fecha_registro      TIMESTAMP NOT NULL DEFAULT now(),
+    fecha_resolucion    TIMESTAMP
+);
+
+-- Tabla propia del proyecto: configuracion general (datos del plantel y notificaciones)
+CREATE TABLE configuracion_general (
+    id              SMALLINT PRIMARY KEY DEFAULT 1 CHECK (id = 1),
+    plantel_nombre  VARCHAR(150) DEFAULT 'COBAO Plantel 27 Miahuatlan',
+    telefono        VARCHAR(15) DEFAULT '',
+    direccion       VARCHAR(255) DEFAULT '',
+    correo          VARCHAR(120) DEFAULT '',
+    logo_base64     TEXT,
+    hora_entrada    VARCHAR(5) DEFAULT '07:00',
+    hora_salida     VARCHAR(5) DEFAULT '14:00',
+    dias_habiles    VARCHAR(200) DEFAULT 'Lunes,Martes,Miercoles,Jueves,Viernes',
+    smtp_host       VARCHAR(120) DEFAULT '',
+    smtp_port       INTEGER DEFAULT 587,
+    smtp_user       VARCHAR(120) DEFAULT '',
+    smtp_password   VARCHAR(200) DEFAULT '',
+    smtp_from       VARCHAR(120) DEFAULT '',
+    sms_proveedor   VARCHAR(60) DEFAULT '',
+    sms_api_key     VARCHAR(200) DEFAULT '',
+    sms_remitente   VARCHAR(30) DEFAULT '',
+    whatsapp_api_key VARCHAR(200) DEFAULT '',
+    whatsapp_numero VARCHAR(30) DEFAULT '',
+    notif_email     BOOLEAN NOT NULL DEFAULT TRUE,
+    notif_sms       BOOLEAN NOT NULL DEFAULT FALSE,
+    notif_whatsapp  BOOLEAN NOT NULL DEFAULT FALSE,
+    updated_at      TIMESTAMP NOT NULL DEFAULT now()
+);
+INSERT INTO configuracion_general (id) VALUES (1) ON CONFLICT (id) DO NOTHING;
+
+-- Tabla propia del proyecto: respaldos de la base de datos
+CREATE TABLE respaldos (
+    id_respaldo   SERIAL PRIMARY KEY,
+    fecha         TIMESTAMP NOT NULL DEFAULT now(),
+    tamano_bytes  INTEGER NOT NULL DEFAULT 0,
+    tipo          VARCHAR(20) NOT NULL DEFAULT 'Manual',
+    estado        VARCHAR(20) NOT NULL DEFAULT 'Completado',
+    contenido     TEXT NOT NULL
+);
+
+-- Tabla propia del proyecto: horarios de entrada/salida
+CREATE TABLE horarios (
+    id           SERIAL PRIMARY KEY,
+    descripcion  VARCHAR(120) NOT NULL,
+    hora_entrada VARCHAR(5) NOT NULL,
+    hora_salida  VARCHAR(5) NOT NULL,
+    dias         VARCHAR(200) DEFAULT '',
+    activo       BOOLEAN NOT NULL DEFAULT TRUE
+);
+
 -- Tabla propia del proyecto (no existe en el esquema oficial)
 CREATE TABLE reportes_programados (
     id_reporte_programado SERIAL PRIMARY KEY,

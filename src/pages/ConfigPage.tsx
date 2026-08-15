@@ -22,6 +22,7 @@ import {
 import { DEFAULT_CREDENTIAL_LAYOUT, LAYOUT_VERSION, type CredentialLayout } from '../utils/generateCredentialsPDF';
 import { usuariosApi } from '../api/usuarios';
 import { configuracionApi } from '../api/configuracion';
+import { respaldosApi } from '../api/respaldos';
 import { toastSuccess, toastError, toastWarning, toastInfo } from '../lib/toast';
 import type { UserRole } from '../App';
 import ConfirmPasswordModal from '../components/ConfirmPasswordModal';
@@ -110,7 +111,6 @@ export default function ConfigPage({ role }: ConfigPageProps) {
   const [direccion, setDireccion] = useState('');
   const [telefono, setTelefono] = useState('');
   const [correoInstitucional, setCorreoInstitucional] = useState('');
-  const [zonaHoraria, setZonaHoraria] = useState('America/Mexico_City');
   const [logo, setLogo] = useState<string | null>(null);
 
   const [horaEntrada, setHoraEntrada] = useState('07:00');
@@ -148,6 +148,19 @@ export default function ConfigPage({ role }: ConfigPageProps) {
       fecha: h.dias ?? '',
     }));
 
+  const DIAS_ORDEN = ['Lunes', 'Martes', 'Miercoles', 'Jueves', 'Viernes', 'Sabado', 'Domingo'];
+  const parseDias = (s?: string): Record<string, boolean> => {
+    const base = Object.fromEntries(DIAS_ORDEN.map(d => [d, false])) as Record<string, boolean>;
+    if (!s) return { ...base, Lunes: true, Martes: true, Miercoles: true, Jueves: true, Viernes: true };
+    for (const d of s.split(',')) {
+      const key = d.trim();
+      if (key in base) base[key] = true;
+    }
+    return base;
+  };
+  const diasAHabiles = (dias: Record<string, boolean>): string =>
+    DIAS_ORDEN.filter(d => dias[d]).join(',');
+
   useEffect(() => {
     let mounted = true;
     configuracionApi.getAll()
@@ -161,6 +174,7 @@ export default function ConfigPage({ role }: ConfigPageProps) {
         if (p.logo_base64) setLogo(p.logo_base64);
         if (p.hora_entrada) setHoraEntrada(String(p.hora_entrada).slice(0, 5));
         if (p.hora_salida) setHoraSalida(String(p.hora_salida).slice(0, 5));
+        setDiasHabiles(parseDias(p.dias_habiles));
         setSmtp({
           servidor: p.smtp_host ?? 'smtp.gmail.com',
           puerto: String(p.smtp_port ?? 587),
@@ -168,11 +182,7 @@ export default function ConfigPage({ role }: ConfigPageProps) {
           contrasena: p.smtp_password ?? '',
           remitente: p.smtp_from ?? '',
         });
-        setSmsApi({ proveedor: p.sms_proveedor ?? '', apiToken: p.sms_api_key ?? '', remitente: p.sms_remitente ?? '' });
-        setWhatsappApi({ phoneNumberId: p.whatsapp_numero ?? '', accessToken: p.whatsapp_api_key ?? '', businessAccountId: '' });
         setNotifEmail(p.notif_email ?? false);
-        setNotifSMS(p.notif_sms ?? false);
-        setNotifWhatsApp(p.notif_whatsapp ?? false);
         if (cfg.asistencia?.minutos_tolerancia != null) setToleranciaRetardo(cfg.asistencia.minutos_tolerancia);
         if (Array.isArray(cfg.horarios)) setHorariosEspeciales(mapHorarios(cfg.horarios));
       })
@@ -185,17 +195,16 @@ export default function ConfigPage({ role }: ConfigPageProps) {
     if (activeTab === 'usuarios') {
       usuariosApi.getAll().then(setUsuarios).catch(() => {});
     }
+    if (activeTab === 'respaldo') {
+      respaldosApi.getAll().then(setRespaldos).catch(() => {});
+    }
   }, [activeTab]);
 
   const [notifEmail, setNotifEmail] = useState(true);
-  const [notifSMS, setNotifSMS] = useState(false);
-  const [notifWhatsApp, setNotifWhatsApp] = useState(false);
 
   const [smtp, setSmtp] = useState({ servidor: 'smtp.gmail.com', puerto: '587', usuario: '', contrasena: '', remitente: '' });
-  const [smsApi, setSmsApi] = useState({ proveedor: '', apiToken: '', remitente: '' });
-  const [whatsappApi, setWhatsappApi] = useState({ phoneNumberId: '', accessToken: '', businessAccountId: '' });
 
-  const [plantillas, setPlantillas] = useState<Plantilla[]>([
+  const PLANTILLAS_DEFAULT: Plantilla[] = [
     {
       id: 1,
       nombre: 'Entrada registrada',
@@ -245,17 +254,21 @@ export default function ConfigPage({ role }: ConfigPageProps) {
       cuerpo: 'La credencial del alumno {nombre_alumno} del grupo {grupo} ha sido bloqueada. Motivo: {motivo}.',
       variables: ['{nombre_alumno}', '{grupo}', '{motivo}'],
     },
-  ]);
+  ];
+  const [plantillas, setPlantillas] = useState<Plantilla[]>(() => {
+    try {
+      const saved = localStorage.getItem('plantillas_notif');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      }
+    } catch { }
+    return [...PLANTILLAS_DEFAULT];
+  });
   const [editingPlantilla, setEditingPlantilla] = useState<number | null>(null);
 
-  const [frecuencia, setFrecuencia] = useState('Diario');
-  const [ubicacion, setUbicacion] = useState('Local');
-  const [retencion, setRetencion] = useState(30);
-  const [respaldos] = useState<Respaldo[]>([
-    { id: 1, fecha: '2026-07-12 23:00', tamano: '15.4 MB', tipo: 'Automatico', estado: 'Completado' },
-    { id: 2, fecha: '2026-07-11 23:00', tamano: '15.2 MB', tipo: 'Automatico', estado: 'Completado' },
-    { id: 3, fecha: '2026-07-10 15:30', tamano: '14.9 MB', tipo: 'Manual', estado: 'Completado' },
-  ]);
+  const [respaldos, setRespaldos] = useState<Respaldo[]>([]);
+  const [generandoRespaldo, setGenerandoRespaldo] = useState(false);
 
   // Estado del layout de credencial (cargado de localStorage o defaults, con auto-reset por version)
   const [credLayout, setCredLayout] = useState<CredentialLayout>(() => {
@@ -421,6 +434,7 @@ export default function ConfigPage({ role }: ConfigPageProps) {
         hora_entrada: horaEntrada,
         hora_salida: horaSalida,
         minutos_tolerancia: toleranciaRetardo,
+        dias_habiles: diasAHabiles(diasHabiles),
       });
       for (const h of horariosEspeciales) {
         if (h.id > 0) {
@@ -445,20 +459,14 @@ export default function ConfigPage({ role }: ConfigPageProps) {
     try {
       await configuracionApi.save({
         notif_email: notifEmail,
-        notif_sms: notifSMS,
-        notif_whatsapp: notifWhatsApp,
         smtp_host: smtp.servidor,
         smtp_port: Number(smtp.puerto) || 587,
         smtp_user: smtp.usuario,
         smtp_password: smtp.contrasena,
         smtp_from: smtp.remitente,
-        sms_proveedor: smsApi.proveedor,
-        sms_api_key: smsApi.apiToken,
-        sms_remitente: smsApi.remitente,
-        whatsapp_api_key: whatsappApi.accessToken,
-        whatsapp_numero: whatsappApi.phoneNumberId,
       });
-      toastSuccess('Notificaciones guardadas', 'La configuracion de canales de notificacion se actualizo.');
+      localStorage.setItem('plantillas_notif', JSON.stringify(plantillas));
+      toastSuccess('Notificaciones guardadas', 'La configuracion de canales y las plantillas se actualizaron.');
     } catch (err) {
       toastError('No se pudo guardar', errMsg(err, 'Ocurrio un error'));
     } finally {
@@ -577,15 +585,6 @@ export default function ConfigPage({ role }: ConfigPageProps) {
           <div style={s.field}>
             <label style={s.label}>Correo Institucional</label>
             <input type="email" style={s.input} value={correoInstitucional} onChange={e => setCorreoInstitucional(e.target.value)} placeholder="contacto@plantel27.edu.mx" onFocus={handleInputFocus} onBlur={handleInputBlur} />
-          </div>
-          <div style={s.field}>
-            <label style={s.label}>Zona Horaria</label>
-            <select style={s.select} value={zonaHoraria} onChange={e => setZonaHoraria(e.target.value)} onFocus={handleInputFocus} onBlur={handleInputBlur}>
-              <option value="America/Mexico_City">America/Mexico_City (UTC-6)</option>
-              <option value="America/Mexico_Cancun">America/Mexico_Cancun (UTC-5)</option>
-              <option value="America/Tijuana">America/Tijuana (UTC-8)</option>
-              <option value="America/Mazatlan">America/Mazatlan (UTC-7)</option>
-            </select>
           </div>
         </div>
       </div>
@@ -818,8 +817,6 @@ export default function ConfigPage({ role }: ConfigPageProps) {
       <div style={s.section}>
         <h3 style={s.sectionTitle}>Canales de Notificacion</h3>
         {renderToggle(notifEmail, setNotifEmail, 'Correo electronico')}
-        {renderToggle(notifSMS, setNotifSMS, 'SMS')}
-        {renderToggle(notifWhatsApp, setNotifWhatsApp, 'WhatsApp')}
       </div>
 
       {notifEmail && (
@@ -850,48 +847,11 @@ export default function ConfigPage({ role }: ConfigPageProps) {
         </div>
       )}
 
-      {notifSMS && (
-        <div style={s.section}>
-          <h3 style={s.sectionTitle}>Configuracion SMS API</h3>
-          <div style={s.grid2}>
-            <div style={s.field}>
-              <label style={s.label}>Proveedor</label>
-              <input style={s.input} value={smsApi.proveedor} onChange={e => setSmsApi({ ...smsApi, proveedor: e.target.value })} placeholder="Twilio / Vonage / etc." onFocus={handleInputFocus} onBlur={handleInputBlur} />
-            </div>
-            <div style={s.field}>
-              <label style={s.label}>API Token</label>
-              <input type="password" style={s.input} value={smsApi.apiToken} onChange={e => setSmsApi({ ...smsApi, apiToken: e.target.value })} onFocus={handleInputFocus} onBlur={handleInputBlur} />
-            </div>
-          </div>
-          <div style={s.field}>
-            <label style={s.label}>Numero remitente</label>
-            <input style={s.input} value={smsApi.remitente} onChange={e => setSmsApi({ ...smsApi, remitente: e.target.value })} placeholder="+52 123 456 7890" onFocus={handleInputFocus} onBlur={handleInputBlur} />
-          </div>
-        </div>
-      )}
-
-      {notifWhatsApp && (
-        <div style={s.section}>
-          <h3 style={s.sectionTitle}>Configuracion WhatsApp Business API</h3>
-          <div style={s.grid2}>
-            <div style={s.field}>
-              <label style={s.label}>Phone Number ID</label>
-              <input style={s.input} value={whatsappApi.phoneNumberId} onChange={e => setWhatsappApi({ ...whatsappApi, phoneNumberId: e.target.value })} onFocus={handleInputFocus} onBlur={handleInputBlur} />
-            </div>
-            <div style={s.field}>
-              <label style={s.label}>Business Account ID</label>
-              <input style={s.input} value={whatsappApi.businessAccountId} onChange={e => setWhatsappApi({ ...whatsappApi, businessAccountId: e.target.value })} onFocus={handleInputFocus} onBlur={handleInputBlur} />
-            </div>
-          </div>
-          <div style={s.field}>
-            <label style={s.label}>Access Token</label>
-            <input type="password" style={s.input} value={whatsappApi.accessToken} onChange={e => setWhatsappApi({ ...whatsappApi, accessToken: e.target.value })} onFocus={handleInputFocus} onBlur={handleInputBlur} />
-          </div>
-        </div>
-      )}
-
       <div style={s.section}>
-        <h3 style={s.sectionTitle}>Plantillas de Mensajes</h3>
+        <div style={s.sectionHeader}>
+          <h3 style={{ ...s.sectionTitle, marginBottom: 0 }}>Plantillas de Mensajes</h3>
+          <span style={{ fontSize: 12, color: colors.textMuted }}>Se guardan en este dispositivo</span>
+        </div>
         <div style={s.plantillasList}>
           {plantillas.map(p => (
             <div key={p.id} style={s.plantillaCard}>
@@ -1355,36 +1315,31 @@ export default function ConfigPage({ role }: ConfigPageProps) {
   const renderRespaldoTab = () => (
     <div style={s.tabContent}>
       <div style={s.section}>
-        <h3 style={s.sectionTitle}>Configuracion de Respaldo</h3>
-        <div style={s.grid2}>
-          <div style={s.field}>
-            <label style={s.label}>Frecuencia</label>
-            <select style={s.select} value={frecuencia} onChange={e => setFrecuencia(e.target.value)} onFocus={handleInputFocus} onBlur={handleInputBlur}>
-              <option value="Hora">Cada hora</option>
-              <option value="Diario">Diario</option>
-              <option value="Semanal">Semanal</option>
-              <option value="Mensual">Mensual</option>
-            </select>
-          </div>
-          <div style={s.field}>
-            <label style={s.label}>Retention de respaldos (dias)</label>
-            <input type="number" style={s.input} value={retencion} onChange={e => setRetencion(Number(e.target.value))} min={1} max={365} onFocus={handleInputFocus} onBlur={handleInputBlur} />
-          </div>
+        <div style={s.sectionHeader}>
+          <h3 style={{ ...s.sectionTitle, marginBottom: 0 }}>Respaldo de la base de datos</h3>
+          <button
+            style={s.btnPrimary}
+            disabled={generandoRespaldo}
+            onClick={async () => {
+              setGenerandoRespaldo(true);
+              try {
+                const nuevo = await respaldosApi.generar();
+                setRespaldos(prev => [nuevo, ...prev]);
+                toastSuccess('Respaldo generado', `El respaldo quedo listo (${nuevo.tamano}).`);
+              } catch (err) {
+                toastError('No se pudo generar el respaldo', errMsg(err, 'Ocurrio un error'));
+              } finally {
+                setGenerandoRespaldo(false);
+              }
+            }}
+          >
+            <RefreshCw size={16} /> {generandoRespaldo ? 'Generando...' : 'Generar respaldo manual'}
+          </button>
         </div>
-        <div style={s.field}>
-          <label style={s.label}>Ubicacion de almacenamiento</label>
-          <div style={s.radioGroup}>
-            <label style={ubicacion === 'Local' ? s.radioActive : s.radio}>
-              <input type="radio" name="ubicacion" value="Local" checked={ubicacion === 'Local'} onChange={e => setUbicacion(e.target.value)} style={{ accentColor: colors.primary }} />
-              Local (Dispositivo)
-            </label>
-            <label style={ubicacion === 'Nube' ? s.radioActive : s.radio}>
-              <input type="radio" name="ubicacion" value="Nube" checked={ubicacion === 'Nube'} onChange={e => setUbicacion(e.target.value)} style={{ accentColor: colors.primary }} />
-              Nube (Almacenamiento remoto)
-            </label>
-          </div>
-        </div>
-        <button style={s.btnPrimary} onClick={() => toastInfo('Respaldo', 'La generacion manual de respaldos estara disponible proximamente.')}><RefreshCw size={16} /> Generar respaldo manual</button>
+        <p style={{ fontSize: 13, color: colors.textSecondary, margin: 0, marginBottom: 16 }}>
+          Genera un volcado JSON de todas las tablas del sistema. Puedes descargarlo
+          como respaldo o guardar una copia en otro dispositivo.
+        </p>
       </div>
 
       <div style={s.section}>
@@ -1401,16 +1356,62 @@ export default function ConfigPage({ role }: ConfigPageProps) {
               </tr>
             </thead>
             <tbody>
-              {respaldos.map(r => (
+              {respaldos.length === 0 ? (
+                <tr>
+                  <td style={{ ...s.td, textAlign: 'center', color: colors.textMuted }} colSpan={5}>
+                    Aun no hay respaldos. Genera uno con el boton de arriba.
+                  </td>
+                </tr>
+              ) : respaldos.map(r => (
                 <tr key={r.id}>
-                  <td style={s.td}>{r.fecha}</td>
+                  <td style={s.td}>{new Date(r.fecha).toLocaleString('es-MX')}</td>
                   <td style={s.td}>{r.tamano}</td>
                   <td style={s.td}><span style={s.badge(r.tipo === 'Manual' ? 'blue' : 'green')}>{r.tipo}</span></td>
                   <td style={s.td}><span style={s.badge('green')}>{r.estado}</span></td>
                   <td style={s.td}>
                     <div style={s.actionsCell}>
-                      <button style={s.btnIcon()}><Download size={16} /></button>
-                      <button style={s.btnIcon(true)}><Trash2 size={16} /></button>
+                      <button
+                        style={s.btnIcon()}
+                        title="Descargar"
+                        onClick={async () => {
+                          try {
+                            const data = await respaldosApi.descargar(r.id);
+                            const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+                            const url = URL.createObjectURL(blob);
+                            const a = document.createElement('a');
+                            a.href = url;
+                            a.download = `respaldo_cobao_${r.id}.json`;
+                            document.body.appendChild(a);
+                            a.click();
+                            a.remove();
+                            URL.revokeObjectURL(url);
+                          } catch (err) {
+                            toastError('No se pudo descargar', errMsg(err, 'Ocurrio un error'));
+                          }
+                        }}
+                      >
+                        <Download size={16} />
+                      </button>
+                      <button
+                        style={s.btnIcon(true)}
+                        title="Eliminar"
+                        onClick={() => setConfirm({
+                          title: 'Eliminar respaldo',
+                          message: '¿Seguro que deseas eliminar este respaldo? Esta accion no se puede deshacer. Ingrese su contrasena para confirmar.',
+                          confirmLabel: 'Eliminar',
+                          run: async () => {
+                            try {
+                              await respaldosApi.eliminar(r.id);
+                              setRespaldos(prev => prev.filter(x => x.id !== r.id));
+                              toastSuccess('Respaldo eliminado');
+                            } catch (err) {
+                              toastError('No se pudo eliminar el respaldo', errMsg(err, 'Ocurrio un error'));
+                            }
+                          },
+                        })}
+                      >
+                        <Trash2 size={16} />
+                      </button>
                     </div>
                   </td>
                 </tr>

@@ -43,6 +43,10 @@ async def update_usuario(db: AsyncSession, id_usuario: int, data: UsuarioUpdate)
     if not usuario:
         return None
     update_data = data.model_dump(exclude_unset=True)
+    if "password_user" in update_data and update_data["password_user"]:
+        update_data["password_user"] = bcrypt.hashpw(
+            update_data["password_user"].encode("utf-8"), bcrypt.gensalt()
+        ).decode("utf-8")
     if "estatus" in update_data:
         estatus = update_data.pop("estatus")
         if estatus is not None:

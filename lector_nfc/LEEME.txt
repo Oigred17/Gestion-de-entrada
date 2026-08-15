@@ -13,7 +13,12 @@ INSTRUCCIONES: Lector NFC en otra PC (vía túnel)
    (La URL del túnel cambia cada vez que se reinicia; revisar con:
       docker logs cobao-tunnel | Select-String trycloudflare.com)
 
-5) EJECUTAR iniciar_nfc.bat (doble clic). Debe mostrar:
+5) LLAVE DE API (OBLIGATORIA): el backend ya exige llave en los endpoints NFC.
+   En esta carpeta ya viene nfc_key.txt con la llave correcta. NO la borres ni
+   la cambies salvo que cambies NFC_API_KEY en el servidor (.env del backend).
+   Si el servidor rechaza lecturas con "No autorizado" (401), la llave no coincide.
+
+6) EJECUTAR iniciar_nfc.bat (doble clic). Debe mostrar:
       Lector encontrado: ACS ACR122U ...
       Esperando tarjetas NFC...
    y al pasar una tarjeta: "Enviado al backend: XX:XX:XX:XX"
@@ -23,15 +28,21 @@ INSTRUCCIONES: Lector NFC en otra PC (vía túnel)
 ARCHIVOS DE LA CARPETA
   iniciar_nfc.bat            -> arranca el lector (obligatorio)
   nfc_url.txt                -> URL del backend (obligatorio)
-  nfc_reader.exe             -> programa lector (obligatorio)
+  nfc_key.txt                -> llave de API del backend (obligatorio)
+  nfc_reader.py              -> programa lector (obligatorio, requiere Python)
   iniciar_nfc_silencioso.vbs -> arranque sin ventana (opcional)
-  nfc_reader.py              -> fuente (solo si usas Python en vez del .exe)
-  requirements-nfc.txt       -> dependencias si usas Python
+  nfc_reader.exe             -> binario antiguo: NO soporta la llave. BORRALO
+                                y usa Python (el .bat usara nfc_reader.py).
+  requirements-nfc.txt       -> dependencias de Python
+  nfc_key.txt.example        -> plantilla (innecesaria si ya esta nfc_key.txt)
 
 NOTAS
   - Si la PC destino no tiene lector aún instalado, el .bat intenta
     "Esperando lector NFC..." cada 5s; conecta el lector y continúa solo.
   - El túnel debe estar levantado y el backend corriendo para que funcione.
-  - Si usas Python en vez del .exe: instala Python y
-    pip install -r requirements-nfc.txt, y borra nfc_reader.exe
+  - Para instalar Python (una vez por PC):
+      https://www.python.org/downloads/  (marcar "Add to PATH")
+      luego:  pip install -r requirements-nfc.txt
+  - El binario nfc_reader.exe es un build antiguo y NO soporta la llave de
+    API. Si el backend exige llave, borra nfc_reader.exe y usa Python
     (el .bat usará nfc_reader.py automáticamente).

@@ -43,8 +43,8 @@ async def update_general(db: AsyncSession, data: ConfiguracionGeneralUpdate) -> 
 
     general_fields = {
         "plantel_nombre", "telefono", "direccion", "correo", "logo_base64",
-        "hora_entrada", "hora_salida", "smtp_host", "smtp_port", "smtp_user",
-        "smtp_password", "smtp_from", "sms_proveedor", "sms_api_key",
+        "hora_entrada", "hora_salida", "dias_habiles", "smtp_host", "smtp_port",
+        "smtp_user", "smtp_password", "smtp_from", "sms_proveedor", "sms_api_key",
         "sms_remitente", "whatsapp_api_key", "whatsapp_numero",
         "notif_email", "notif_sms", "notif_whatsapp",
     }
@@ -52,7 +52,13 @@ async def update_general(db: AsyncSession, data: ConfiguracionGeneralUpdate) -> 
         "hora_entrada_limite", "minutos_tolerancia", "segundos_antirebote",
     }
 
+    # Campos de secreto: si llegan vacios o con el placeholder no se tocan,
+    # asi el frontend puede guardar el formulario sin reescribir los secretos.
+    secret_fields = {"smtp_password", "sms_api_key", "whatsapp_api_key"}
+
     for key, value in data.model_dump(exclude_unset=True).items():
+        if key in secret_fields and value in ("", "********"):
+            continue
         if key in general_fields and hasattr(general, key):
             setattr(general, key, value)
         elif key in asistencia_fields and hasattr(asistencia, key):
