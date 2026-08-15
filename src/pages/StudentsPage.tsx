@@ -68,6 +68,7 @@ export default function StudentsPage() {
   const [newName, setNewName] = useState("");
   const [newControl, setNewControl] = useState("");
   const [newGrupo, setNewGrupo] = useState("");
+  const [newGrupoManual, setNewGrupoManual] = useState("");
   const [newCapacitacion, setNewCapacitacion] = useState("");
   const [newTurno, setNewTurno] = useState<"Matutino" | "Vespertino">("Matutino");
   const [newCurp, setNewCurp] = useState("");
@@ -306,6 +307,7 @@ export default function StudentsPage() {
     setNewName("");
     setNewControl("");
     setNewGrupo("");
+    setNewGrupoManual("");
     setNewCapacitacion("");
     setNewTurno("Matutino");
     setNewCurp("");
@@ -328,9 +330,33 @@ export default function StudentsPage() {
   };
 
   const handleSaveNewStudent = async () => {
-    if (!newName.trim() || !newControl.trim() || !newGrupo.trim()) {
+    const grupoManual = newGrupoManual.trim();
+    const grupoSeleccionado = newGrupo.trim();
+    if (!newName.trim() || !newControl.trim() || (!grupoManual && !grupoSeleccionado)) {
       showToast("Nombre, numero de control y grupo son obligatorios", "error");
       return;
+    }
+    let id_grupo: number | undefined;
+    if (grupoManual) {
+      const clave = Number(grupoManual);
+      if (isNaN(clave)) {
+        showToast("El grupo debe ser un numero (ej. 201)", "error");
+        return;
+      }
+      try {
+        const groups = await gruposApi.getAll();
+        const resolved = await resolveGroupId(clave, groups);
+        if (resolved === null) {
+          showToast("No se pudo crear el grupo. Revisa que exista un ciclo escolar activo", "error");
+          return;
+        }
+        id_grupo = resolved;
+      } catch {
+        showToast("Error al verificar el grupo", "error");
+        return;
+      }
+    } else if (grupoSeleccionado) {
+      id_grupo = Number(grupoSeleccionado);
     }
     try {
       const nameParts = newName.trim().split(' ');
@@ -349,7 +375,7 @@ export default function StudentsPage() {
         fecha_nacimiento: newFechaNacimiento.trim(),
         tutor_nombre: newTutor.trim(),
         nss: newNumAfiliacion.trim(),
-        id_grupo: newGrupo.trim() ? Number(newGrupo.trim()) : undefined,
+        id_grupo,
       });
       setShowNewStudentModal(false);
       showToast(`Alumno "${newName.trim()}" agregado correctamente`);
@@ -1704,14 +1730,23 @@ export default function StudentsPage() {
                       <span style={{ color: "#5F5657", fontSize: 12 }}>No. Control *</span>
                       <input type="text" value={newControl} onChange={(e) => setNewControl(e.target.value)} placeholder="Ej: 2024001" style={{ width: "100%", padding: "8px 10px", border: "1px solid #CAC6C7", borderRadius: 6, fontSize: 14, marginTop: 4, fontFamily: "monospace", boxSizing: "border-box" }} />
                     </div>
-                    <div>
+                    <div style={{ gridColumn: "span 2" }}>
                       <span style={{ color: "#5F5657", fontSize: 12 }}>Grupo *</span>
-                      <select value={newGrupo} onChange={(e) => setNewGrupo(e.target.value)} style={{ width: "100%", padding: "8px 10px", border: "1px solid #CAC6C7", borderRadius: 6, fontSize: 14, marginTop: 4, fontFamily: "var(--font-sans)", background: "#fff", boxSizing: "border-box" }}>
-                        <option value="">Selecciona un grupo</option>
-                        {gruposList.map((g) => (
-                          <option key={g.id} value={g.id}>{g.nombre}</option>
-                        ))}
-                      </select>
+                      <div style={{ display: "flex", gap: 8, marginTop: 4 }}>
+                        <select value={newGrupo} onChange={(e) => { setNewGrupo(e.target.value); if (e.target.value) setNewGrupoManual(""); }} style={{ flex: 1, padding: "8px 10px", border: "1px solid #CAC6C7", borderRadius: 6, fontSize: 14, fontFamily: "var(--font-sans)", background: "#fff", boxSizing: "border-box" }}>
+                          <option value="">Selecciona un grupo</option>
+                          {gruposList.map((g) => (
+                            <option key={g.id} value={g.id}>{g.nombre}</option>
+                          ))}
+                        </select>
+                        <input
+                          type="text"
+                          value={newGrupoManual}
+                          onChange={(e) => setNewGrupoManual(e.target.value)}
+                          placeholder="O escribe la clave (ej. 201)"
+                          style={{ flex: 1, padding: "8px 10px", border: "1px solid #CAC6C7", borderRadius: 6, fontSize: 14, fontFamily: "var(--font-sans)", boxSizing: "border-box" }}
+                        />
+                      </div>
                     </div>
                     <div>
                       <span style={{ color: "#5F5657", fontSize: 12 }}>Capacitacion</span>

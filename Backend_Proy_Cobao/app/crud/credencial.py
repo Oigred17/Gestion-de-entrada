@@ -1,8 +1,12 @@
-from sqlalchemy import select
+from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.credencial import Credencial
 from app.schemas.credencial import CredencialCreate, CredencialUpdate
+
+
+def _normalize_uid(uid_nfc: str) -> str:
+    return (uid_nfc or "").replace(":", "").upper()
 
 
 async def get_credenciales(
@@ -31,7 +35,10 @@ async def get_credencial(db: AsyncSession, id_credencial: int):
 
 async def get_credencial_by_uid(db: AsyncSession, uid_nfc: str):
     result = await db.execute(
-        select(Credencial).where(Credencial.uid_nfc == uid_nfc)
+        select(Credencial).where(
+            func.upper(func.replace(Credencial.uid_nfc, ":", ""))
+            == _normalize_uid(uid_nfc)
+        )
     )
     return result.scalar_one_or_none()
 
@@ -41,7 +48,8 @@ async def get_credencial_by_uid_excluding(
 ):
     result = await db.execute(
         select(Credencial).where(
-            Credencial.uid_nfc == uid_nfc,
+            func.upper(func.replace(Credencial.uid_nfc, ":", ""))
+            == _normalize_uid(uid_nfc),
             Credencial.id_credencial != exclude_id,
         )
     )
