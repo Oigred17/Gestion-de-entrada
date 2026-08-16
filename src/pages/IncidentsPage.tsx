@@ -9,10 +9,7 @@ import Loader from '../components/Loader';
 
 const tipoOptions = ['Acceso sin credencial', 'Credencial danada', 'Acceso fuera de horario', 'Alumno no registrado', 'Intento no autorizado', 'Salida sin credencial', 'Otro'];
 
-const INCIDENCIA_AUTOMATICA = 'Falta por inasistencia';
-const esAutomatica = (tipo: string) => tipo === INCIDENCIA_AUTOMATICA;
-
-const TABS = ["Todas", "Abiertas", "En revision", "Resueltas"] as const;
+const TABS = ["Todas", "Abiertas"] as const;
 type TabType = (typeof TABS)[number];
 
 interface IncidentsPageProps {
@@ -78,9 +75,7 @@ export default function IncidentsPage({ role }: IncidentsPageProps) {
   const filtered = incidentsList.filter((inc) => {
     const matchTab =
       activeTab === 'Todas' ||
-      (activeTab === 'Abiertas' && inc.estado === 'Abierto') ||
-      (activeTab === 'En revision' && inc.estado === 'En revision') ||
-      (activeTab === 'Resueltas' && inc.estado === 'Resuelto');
+      (activeTab === 'Abiertas' && inc.estado === 'Abierto');
     const alumnoName = nombreAlumno(inc);
     const matchSearch = searchQuery === '' ||
       alumnoName.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -148,18 +143,6 @@ export default function IncidentsPage({ role }: IncidentsPageProps) {
       toastError('No se pudo registrar', err.response?.data?.detail || 'Ocurrio un error');
     } finally {
       setSaving(false);
-    }
-  };
-
-  const handleMarkResolved = async (inc: Incidencia) => {
-    try {
-      const updated = await incidenciasApi.update(inc.id, { estado: 'Resuelto' });
-      setIncidentsList(prev => prev.map(x => (x.id === inc.id ? updated : x)));
-      if (detail?.id === inc.id) setDetail(updated);
-      toastSuccess('Incidencia resuelta');
-    } catch (e: unknown) {
-      const err = e as { response?: { data?: { detail?: string } } };
-      toastError('No se pudo actualizar', err.response?.data?.detail || 'Ocurrio un error');
     }
   };
 
@@ -244,9 +227,6 @@ export default function IncidentsPage({ role }: IncidentsPageProps) {
                   <td>
                     <div style={{ display: 'flex', gap: 4 }}>
                       <button className="table-action" title="Ver detalles" onClick={() => setDetail(inc)}><Eye size={18} /></button>
-                      {inc.estado !== 'Resuelto' && !esAutomatica(inc.tipo) && (
-                        <button className="table-action" title="Marcar como resuelta" onClick={() => handleMarkResolved(inc)}><Check size={18} /></button>
-                      )}
                     </div>
                   </td>
                 </tr>
@@ -441,9 +421,6 @@ export default function IncidentsPage({ role }: IncidentsPageProps) {
             </div>
             <div className="modal-footer">
               <button className="btn btn--secondary" onClick={() => setDetail(null)}>Cerrar</button>
-              {detail.estado !== 'Resuelto' && !esAutomatica(detail.tipo) && (
-                <button className="btn btn--primary" onClick={() => handleMarkResolved(detail)}><Check size={16} /> Marcar resuelta</button>
-              )}
             </div>
           </div>
         </div>
