@@ -9,9 +9,6 @@ import Loader from '../components/Loader';
 
 const tipoOptions = ['Acceso sin credencial', 'Credencial danada', 'Acceso fuera de horario', 'Alumno no registrado', 'Intento no autorizado', 'Salida sin credencial', 'Otro'];
 
-const TABS = ["Todas", "Abiertas"] as const;
-type TabType = (typeof TABS)[number];
-
 interface IncidentsPageProps {
   role: UserRole;
 }
@@ -21,7 +18,6 @@ export default function IncidentsPage({ role }: IncidentsPageProps) {
   const [apiAlumnos, setApiAlumnos] = useState<Alumno[]>([]);
   const [incidentsList, setIncidentsList] = useState<Incidencia[]>([]);
   const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState<TabType>('Todas');
   const [searchQuery, setSearchQuery] = useState('');
   const [tipoFilter, setTipoFilter] = useState('');
   const [modalOpen, setModalOpen] = useState(false);
@@ -73,16 +69,13 @@ export default function IncidentsPage({ role }: IncidentsPageProps) {
   }, [formAlumnoQuery, formAlumnoSelected, apiAlumnos]);
 
   const filtered = incidentsList.filter((inc) => {
-    const matchTab =
-      activeTab === 'Todas' ||
-      (activeTab === 'Abiertas' && inc.estado === 'Abierto');
     const alumnoName = nombreAlumno(inc);
     const matchSearch = searchQuery === '' ||
       alumnoName.toLowerCase().includes(searchQuery.toLowerCase()) ||
       inc.descripcion.toLowerCase().includes(searchQuery.toLowerCase()) ||
       inc.tipo.toLowerCase().includes(searchQuery.toLowerCase());
     const matchTipo = tipoFilter === '' || inc.tipo === tipoFilter;
-    return matchTab && matchSearch && matchTipo;
+    return matchSearch && matchTipo;
   });
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / perPage));
@@ -157,15 +150,6 @@ export default function IncidentsPage({ role }: IncidentsPageProps) {
   const handleDrop = (e: React.DragEvent) => { e.preventDefault(); const file = e.dataTransfer.files?.[0]; if (file) setFormFoto(file); };
   const handleFileInput = (e: React.ChangeEvent<HTMLInputElement>) => { const file = e.target.files?.[0]; if (file) setFormFoto(file); };
 
-  const getEstadoBadge = (estado: string) => {
-    switch (estado) {
-      case 'Abierto': return 'badge badge--alert';
-      case 'En revision': return 'badge badge--pending';
-      case 'Resuelto': return 'badge badge--active';
-      default: return 'badge badge--inactive';
-    }
-  };
-
   return (
     <div>
       <div className="toolbar">
@@ -191,25 +175,17 @@ export default function IncidentsPage({ role }: IncidentsPageProps) {
         </div>
       </div>
 
-      <div className="filter-tabs" style={{ padding: '12px 0' }}>
-        {TABS.map((tab) => (
-          <button key={tab} className={`filter-tab ${activeTab === tab ? 'active' : ''}`} onClick={() => { setActiveTab(tab); setPage(1); }}>
-            {tab}
-          </button>
-        ))}
-      </div>
-
       {loading ? (
         <Loader message="Cargando incidencias..." height={220} />
       ) : (
         <div className="table-container">
           <table className="table">
             <thead>
-              <tr><th>#</th><th>Fecha y Hora</th><th>Tipo</th><th>Alumno</th><th>Descripcion</th><th>Registrado por</th><th>Estado</th><th>Acciones</th></tr>
+              <tr><th>#</th><th>Fecha y Hora</th><th>Tipo</th><th>Alumno</th><th>Descripcion</th><th>Registrado por</th><th>Acciones</th></tr>
             </thead>
             <tbody>
               {paginated.length === 0 && (
-                <tr><td colSpan={8} style={{ textAlign: 'center', padding: 24, color: '#5F5657' }}>No se encontraron incidencias.</td></tr>
+                <tr><td colSpan={7} style={{ textAlign: 'center', padding: 24, color: '#5F5657' }}>No se encontraron incidencias.</td></tr>
               )}
               {paginated.map((inc, idx) => (
                 <tr key={inc.id}>
@@ -223,7 +199,6 @@ export default function IncidentsPage({ role }: IncidentsPageProps) {
                   <td style={{ fontWeight: 500 }}>{nombreAlumno(inc)}</td>
                   <td style={{ maxWidth: 200, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{inc.descripcion}</td>
                   <td>{registradoPor}</td>
-                  <td><span className={getEstadoBadge(inc.estado)}>{inc.estado}</span></td>
                   <td>
                     <div style={{ display: 'flex', gap: 4 }}>
                       <button className="table-action" title="Ver detalles" onClick={() => setDetail(inc)}><Eye size={18} /></button>
@@ -383,10 +358,6 @@ export default function IncidentsPage({ role }: IncidentsPageProps) {
             </div>
             <div className="modal-body" style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
               <div>
-                <span className="field-label">Estado</span>
-                <div style={{ marginTop: 4 }}><span className={getEstadoBadge(detail.estado)}>{detail.estado}</span></div>
-              </div>
-              <div>
                 <span className="field-label">Tipo</span>
                 <div style={{ fontWeight: 500 }}>{detail.tipo}</div>
               </div>
@@ -406,12 +377,6 @@ export default function IncidentsPage({ role }: IncidentsPageProps) {
                 <span className="field-label">Descripcion</span>
                 <div>{detail.descripcion}</div>
               </div>
-              {detail.fecha_resolucion && (
-                <div>
-                  <span className="field-label">Fecha de resolucion</span>
-                  <div>{new Date(detail.fecha_resolucion).toLocaleString('es-MX', { dateStyle: 'long', timeStyle: 'short' })}</div>
-                </div>
-              )}
               {detail.evidencia_base64 && (
                 <div>
                   <span className="field-label">Evidencia</span>
