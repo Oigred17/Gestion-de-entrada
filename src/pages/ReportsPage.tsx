@@ -358,7 +358,7 @@ export default function ReportsPage() {
     const headers = reportMode === 'individual'
       ? '<tr><th>Fecha</th><th>Hora</th><th>Tipo</th></tr>'
       : '<tr><th>Grupo</th><th>Entradas</th><th>Retardos</th><th>Salidas</th><th>Total</th></tr>';
-    printWindow.document.write(`<!DOCTYPE html><html><head><title>${reporteTitulo}</title><style>body{font-family:Arial,sans-serif;padding:24px}h1{color:#1C1819;font-size:18px}table{width:100%;border-collapse:collapse;margin-top:16px}th,td{border:1px solid #CAC6C7;padding:8px;text-align:left;font-size:13px}th{background:#F0EFEF}</style></head><body><h1>COBAO Plantel 27 - ${reporteTitulo}</h1><p style="color:#5F5657">Tipo: ${reportTypes.find(r => r.id === reportType)?.label ?? reportType} | Periodo: ${startDate || 'inicio'} - ${endDate || 'hoy'}</p><table>${headers}${rows}</table></body></html>`);
+    printWindow.document.write(`<!DOCTYPE html><html><head><title>${reporteTitulo}</title><style>body{font-family:'IBM Plex Sans',Arial,sans-serif;padding:24px}h1{color:#1C1819;font-size:18px}table{width:100%;border-collapse:collapse;margin-top:16px}th,td{border:1px solid #CAC6C7;padding:8px;text-align:left;font-size:13px}th{background:#F0EFEF}</style></head><body><h1>COBAO Plantel 27 - ${reporteTitulo}</h1><p style="color:#5F5657">Tipo: ${reportTypes.find(r => r.id === reportType)?.label ?? reportType} | Periodo: ${startDate || 'inicio'} - ${endDate || 'hoy'}</p><table>${headers}${rows}</table></body></html>`);
     printWindow.document.close();
     printWindow.focus();
     printWindow.print();
