@@ -686,74 +686,80 @@ a:hover { text-decoration: underline; }
 .notification-list {
   max-height: 480px;
   overflow-y: auto;
-  padding: 12px;
+  padding: 10px 12px;
   display: flex;
   flex-direction: column;
-  align-items: center;
-  gap: 10px;
+  gap: 8px;
 }
 .notification-panel .data-loader__message { color: var(--color-gris-carbon); }
 
 .notification-card {
   position: relative;
   width: 100%;
-  max-width: 290px;
-  height: 70px;
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 12px 14px;
   background: #ffffff;
   border: 1px solid rgba(28, 24, 25, 0.08);
-  border-radius: 16px;
-  display: flex;
-  align-items: center;
-  justify-content: left;
-  box-shadow: 0 2px 8px rgba(28, 24, 25, 0.05);
-  transition: 0.25s ease-in-out;
-}
-.notification-card.unread {
-  background: #fdf7f9;
-  border-color: rgba(235, 36, 102, 0.28);
-  box-shadow: 0 3px 10px rgba(235, 36, 102, 0.08);
+  border-radius: 14px;
+  box-shadow: 0 1px 4px rgba(28, 24, 25, 0.04);
+  cursor: pointer;
+  transition: transform 160ms ease, box-shadow 160ms ease, border-color 160ms ease, background 160ms ease;
 }
 .notification-card:hover {
-  cursor: pointer;
-  transform: scale(1.03);
-  box-shadow: 0 6px 16px rgba(28, 24, 25, 0.1);
+  transform: translateY(-1px);
+  border-color: rgba(235, 36, 102, 0.35);
+  box-shadow: 0 6px 18px rgba(28, 24, 25, 0.1);
 }
-.notification-card__img {
-  width: 50px;
-  height: 50px;
-  margin-left: 10px;
-  border-radius: 10px;
-  background: linear-gradient(#d7cfcf, #9198e5);
+.notification-card:focus-visible {
+  outline: 2px solid var(--color-magenta);
+  outline-offset: 2px;
+}
+.notification-card.unread {
+  background: linear-gradient(180deg, #fdf3f6, #ffffff);
+  border-color: rgba(235, 36, 102, 0.3);
+}
+.notification-card__icon {
   flex-shrink: 0;
-  transition: 0.3s ease-in-out;
+  width: 40px;
+  height: 40px;
+  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #fff;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.25);
 }
-.notification-card:hover > .notification-card__img {
-  background: linear-gradient(#9198e5, #712020);
-}
-.notification-card__img--success { background: linear-gradient(#70FE7D, #0F8122); }
-.notification-card__img--info { background: linear-gradient(#79E0FE, #1792AB); }
-.notification-card__img--warning { background: linear-gradient(#FBB4C0, #EB2466); }
-.notification-card__img--error { background: linear-gradient(#F87793, #6F0B2C); }
+.notification-card__icon--success { background: linear-gradient(135deg, #70FE7D, #0F8122); }
+.notification-card__icon--info { background: linear-gradient(135deg, #79E0FE, #1792AB); }
+.notification-card__icon--warning { background: linear-gradient(135deg, #FBB4C0, #EB2466); }
+.notification-card__icon--error { background: linear-gradient(135deg, #F87793, #6F0B2C); }
 .notification-card__text {
-  width: calc(100% - 90px);
-  margin-left: 10px;
+  flex: 1;
+  min-width: 0;
   color: var(--color-negro-suave);
   font-family: var(--font-sans);
 }
 .notification-card__textContent {
   display: flex;
-  align-items: center;
+  align-items: baseline;
   justify-content: space-between;
   gap: 8px;
+}
+.notification-card__meta {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
 }
 .notification-card__span {
   font-size: 10px;
   color: var(--color-text-muted, #A79F9F);
-  flex-shrink: 0;
 }
 .notification-card__h1 {
-  font-size: 15px;
-  font-weight: bold;
+  font-size: 13px;
+  font-weight: 700;
   color: var(--color-negro-suave);
   white-space: nowrap;
   overflow: hidden;
@@ -761,22 +767,21 @@ a:hover { text-decoration: underline; }
 }
 .notification-card__p {
   font-size: 12px;
-  font-weight: lighter;
+  line-height: 1.4;
   color: var(--color-gris-carbon);
-  white-space: nowrap;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
   overflow: hidden;
-  text-overflow: ellipsis;
-  margin-top: 2px;
+  margin-top: 3px;
 }
 .notification-card__dot {
-  position: absolute;
-  top: 10px;
-  right: 10px;
   width: 8px;
   height: 8px;
   border-radius: 50%;
   background: var(--color-magenta);
-  box-shadow: 0 0 6px rgba(235, 36, 102, 0.8);
+  box-shadow: 0 0 6px rgba(235, 36, 102, 0.7);
+  flex-shrink: 0;
 }
 
 /* ============================================

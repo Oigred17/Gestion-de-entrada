@@ -4,6 +4,7 @@ import {
   LayoutDashboard, Users, Building2, CreditCard, FileText,
   CalendarCheck, AlertTriangle, Settings, LogOut, Bell, Menu, X,
   ScanLine, ChevronLeft, ChevronRight, Shield, UserCheck,
+  CheckCircle2, Info, XCircle,
 } from 'lucide-react';
 import type { UserRole } from '../App';
 import { useAuth } from '../context/AuthContext';
@@ -138,6 +139,24 @@ export default function Layout({ children, role, onLogout }: LayoutProps) {
     return fecha.toLocaleDateString('es-MX', { day: 'numeric', month: 'short' });
   };
 
+  const notifIcon = (type: string) => {
+    switch (type) {
+      case 'success': return <CheckCircle2 size={20} />;
+      case 'info': return <Info size={20} />;
+      case 'error': return <XCircle size={20} />;
+      default: return <AlertTriangle size={20} />;
+    }
+  };
+
+  const notifPath = (id: string, menuPaths: string[]): string => {
+    const target = id.startsWith('inc:') ? '/incidencias'
+      : id.startsWith('perm:') ? '/permisos'
+      : id.startsWith('ret:') ? '/reportes'
+      : id.startsWith('cred:') ? '/credenciales'
+      : '';
+    return target && menuPaths.includes(target) ? target : menuPaths[0] ?? '/dashboard';
+  };
+
   const handleToggleNotifications = () => {
     const opening = !notifOpen;
     window.clearTimeout(notifTimer.current);
@@ -247,23 +266,40 @@ export default function Layout({ children, role, onLogout }: LayoutProps) {
                     </div>
                   ) : (
                     <div className="notification-list">
-                      {notifications.map(n => (
-                        <div
-                          key={n.id}
-                          className={`notification-card ${n.unread ? 'unread' : ''}`}
-                          onClick={() => markAsRead(n.id)}
-                        >
-                          <div className={`notification-card__img notification-card__img--${n.type}`} />
-                          <div className="notification-card__text">
-                            <div className="notification-card__textContent">
-                              <p className="notification-card__h1">{n.title}</p>
-                              <span className="notification-card__span">{formatRelativeTime(n.time)}</span>
+                      {notifications.map(n => {
+                        const target = notifPath(n.id, menu.map(m => m.path));
+                        return (
+                          <div
+                            key={n.id}
+                            role="button"
+                            tabIndex={0}
+                            className={`notification-card ${n.unread ? 'unread' : ''}`}
+                            onClick={() => { markAsRead(n.id); setNotifOpen(false); navigate(target); }}
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter' || e.key === ' ') {
+                                e.preventDefault();
+                                markAsRead(n.id);
+                                setNotifOpen(false);
+                                navigate(target);
+                              }
+                            }}
+                          >
+                            <span className={`notification-card__icon notification-card__icon--${n.type}`}>
+                              {notifIcon(n.type)}
+                            </span>
+                            <div className="notification-card__text">
+                              <div className="notification-card__textContent">
+                                <p className="notification-card__h1">{n.title}</p>
+                                <span className="notification-card__meta">
+                                  {n.unread && <span className="notification-card__dot" />}
+                                  <span className="notification-card__span">{formatRelativeTime(n.time)}</span>
+                                </span>
+                              </div>
+                              <p className="notification-card__p">{n.text}</p>
                             </div>
-                            <p className="notification-card__p">{n.text}</p>
                           </div>
-                          {n.unread && <div className="notification-card__dot" />}
-                        </div>
-                      ))}
+                        );
+                      })}
                     </div>
                   )}
                 </div>
