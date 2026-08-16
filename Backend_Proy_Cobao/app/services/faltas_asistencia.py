@@ -193,6 +193,7 @@ async def generar_faltas(db, fecha: date) -> dict:
     resultado["ya_existentes"] = len(ya_incidencias) + len(ya_reportes)
 
     usuario_sistema = await _usuario_sistema(db)
+    usuario_prefecto = await _usuario_prefecto(db)
     nuevas_incidencias: list[Incidencia] = []
     nuevos_reportes: list[Reporte] = []
     momento = datetime.combine(fecha, cierre)
@@ -217,7 +218,7 @@ async def generar_faltas(db, fecha: date) -> dict:
                 nuevos_reportes.append(
                     Reporte(
                         id_alumno=aid,
-                        id_prefecto=usuario_sistema,
+                        id_prefecto=usuario_prefecto,
                         motivo=REPORTE_MOTIVO,
                         sancion=REPORTE_SANCION,
                         sancion_cumplida=False,

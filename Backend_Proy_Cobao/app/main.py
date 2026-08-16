@@ -306,7 +306,14 @@ async def migrate_database():
                 conn,
                 """
                 INSERT INTO reportes (id_alumno, id_prefecto, motivo, sancion, sancion_cumplida, fecha)
-                SELECT fa.id_alumno, 1, 'Registro de entrada sin salida', 'Pendiente de sancion', FALSE, fa.fecha
+                SELECT fa.id_alumno,
+                       COALESCE(
+                           (SELECT u.id_usuario FROM usuarios u
+                            JOIN roles r ON r.id_rol = u.id_rol
+                            WHERE LOWER(r.nombre) IN ('prefecto', 'prefectura')
+                            ORDER BY u.id_usuario LIMIT 1),
+                           1),
+                       'Registro de entrada sin salida', 'Pendiente de sancion', FALSE, fa.fecha
                 FROM faltas_asistencia fa
                 WHERE fa.tipo = 'SIN_SALIDA'
                   AND NOT EXISTS (
