@@ -9,6 +9,9 @@ import Loader from '../components/Loader';
 
 const tipoOptions = ['Acceso sin credencial', 'Credencial danada', 'Acceso fuera de horario', 'Alumno no registrado', 'Intento no autorizado', 'Salida sin credencial', 'Otro'];
 
+const INCIDENCIA_AUTOMATICA = 'Falta por inasistencia';
+const esAutomatica = (tipo: string) => tipo === INCIDENCIA_AUTOMATICA;
+
 const TABS = ["Todas", "Abiertas", "En revision", "Resueltas"] as const;
 type TabType = (typeof TABS)[number];
 
@@ -241,7 +244,7 @@ export default function IncidentsPage({ role }: IncidentsPageProps) {
                   <td>
                     <div style={{ display: 'flex', gap: 4 }}>
                       <button className="table-action" title="Ver detalles" onClick={() => setDetail(inc)}><Eye size={18} /></button>
-                      {inc.estado !== 'Resuelto' && (
+                      {inc.estado !== 'Resuelto' && !esAutomatica(inc.tipo) && (
                         <button className="table-action" title="Marcar como resuelta" onClick={() => handleMarkResolved(inc)}><Check size={18} /></button>
                       )}
                     </div>
@@ -438,7 +441,7 @@ export default function IncidentsPage({ role }: IncidentsPageProps) {
             </div>
             <div className="modal-footer">
               <button className="btn btn--secondary" onClick={() => setDetail(null)}>Cerrar</button>
-              {detail.estado !== 'Resuelto' && (
+              {detail.estado !== 'Resuelto' && !esAutomatica(detail.tipo) && (
                 <button className="btn btn--primary" onClick={() => handleMarkResolved(detail)}><Check size={16} /> Marcar resuelta</button>
               )}
             </div>
