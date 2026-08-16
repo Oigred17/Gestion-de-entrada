@@ -4,7 +4,6 @@ import {
   LayoutDashboard, Users, Building2, CreditCard, FileText,
   CalendarCheck, AlertTriangle, Settings, LogOut, Bell, Menu, X,
   ScanLine, ChevronLeft, ChevronRight, Shield, UserCheck,
-  CheckCircle2, Info, XCircle,
 } from 'lucide-react';
 import type { UserRole } from '../App';
 import { useAuth } from '../context/AuthContext';
@@ -137,15 +136,6 @@ export default function Layout({ children, role, onLogout }: LayoutProps) {
     const dias = Math.floor(horas / 24);
     if (dias < 7) return `hace ${dias} d`;
     return fecha.toLocaleDateString('es-MX', { day: 'numeric', month: 'short' });
-  };
-
-  const notifIcon = (type: string) => {
-    switch (type) {
-      case 'success': return <CheckCircle2 size={20} />;
-      case 'info': return <Info size={20} />;
-      case 'error': return <XCircle size={20} />;
-      default: return <AlertTriangle size={20} />;
-    }
   };
 
   const notifPath = (id: string, menuPaths: string[]): string => {
@@ -284,9 +274,6 @@ export default function Layout({ children, role, onLogout }: LayoutProps) {
                               }
                             }}
                           >
-                            <span className={`notification-card__icon notification-card__icon--${n.type}`}>
-                              {notifIcon(n.type)}
-                            </span>
                             <div className="notification-card__text">
                               <div className="notification-card__textContent">
                                 <p className="notification-card__h1">{n.title}</p>
