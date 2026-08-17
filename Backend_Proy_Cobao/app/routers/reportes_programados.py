@@ -55,7 +55,7 @@ async def eliminar_reporte_programado(id_reporte: int, db: AsyncSession = Depend
 
 @router.post("/{id_reporte}/ejecutar")
 async def ejecutar_reporte_programado(id_reporte: int, db: AsyncSession = Depends(get_db)):
-    """Ejecuta el reporte programado ahora: genera el CSV y lo envia por correo."""
+    """Ejecuta el reporte programado ahora: genera el CSV y lo envía por correo."""
     reporte = await crud_reporte.get_reporte_programado(db, id_reporte)
     if not reporte:
         raise HTTPException(status_code=404, detail="Reporte programado no encontrado")

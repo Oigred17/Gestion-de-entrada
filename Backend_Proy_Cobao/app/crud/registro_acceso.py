@@ -87,7 +87,7 @@ async def create_registro(db: AsyncSession, data: RegistroAccesoCreate):
                 detail="El alumno no tiene una credencial asignada",
             )
 
-    # Si es salida con codigo de autorizacion, se valida el permiso
+    # Si es salida con código de autorización, se valida el permiso
     id_permiso = None
     if tipo == "SALIDA" and data.codigo_autorizacion:
         codigo = data.codigo_autorizacion.strip().upper()
@@ -101,12 +101,12 @@ async def create_registro(db: AsyncSession, data: RegistroAccesoCreate):
         if not permiso:
             raise HTTPException(
                 status_code=400,
-                detail="Codigo de autorizacion invalido o ya utilizado",
+                detail="Código de autorización inválido o ya utilizado",
             )
         if await expirar_si_vencido(db, permiso):
             raise HTTPException(
                 status_code=400,
-                detail="El permiso ya vencio: paso la hora de salida autorizada",
+                detail="El permiso ya venció: pasó la hora de salida autorizada",
             )
         id_permiso = permiso.id_permiso
         permiso.estado = "Utilizado"

@@ -161,7 +161,7 @@ export default function CredentialsPage() {
         clearInterval(pollInterval);
         setNfcStatus('idle');
         nfcApi.stopCapture().catch(() => {});
-        reject(new Error('Tiempo de espera agotado. Retire la tarjeta, espere un segundo y acerquela de nuevo.'));
+        reject(new Error('Tiempo de espera agotado. Retire la tarjeta, espere un segundo y acérquela de nuevo.'));
       }, timeoutMs);
     });
   }, []);
@@ -251,7 +251,7 @@ export default function CredentialsPage() {
       open: true,
       action: 'desactivar',
       title: 'Desactivar credencial',
-      message: 'Esta accion desactivara permanentemente la credencial y el alumno no podra acceder al plantel. Ingrese su contrasena para confirmar.',
+      message: 'Esta acción desactivará permanentemente la credencial y el alumno no podrá acceder al plantel. Ingrese su contraseña para confirmar.',
       confirmLabel: 'Desactivar',
       credId,
     });
@@ -262,7 +262,7 @@ export default function CredentialsPage() {
       open: true,
       action: 'activar',
       title: 'Activar credencial',
-      message: 'Esta accion activara la credencial NFC y el alumno podra acceder al plantel. Ingrese su contrasena para confirmar.',
+      message: 'Esta acción activará la credencial NFC y el alumno podrá acceder al plantel. Ingrese su contraseña para confirmar.',
       confirmLabel: 'Activar',
       credId,
     });
@@ -293,9 +293,9 @@ export default function CredentialsPage() {
         fecha_entrega: new Date().toISOString().split('T')[0],
       }).then((updated) => {
         setReposiciones(prev => prev.map(r => r.id === updated.id ? updated : r));
-        showToast('Reposicion marcada como entregada.');
+        showToast('Reposición marcada como entregada.');
       }).catch((err) => {
-        const msg = (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail ?? 'No se pudo actualizar la reposicion.';
+        const msg = (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail ?? 'No se pudo actualizar la reposición.';
         showToast(msg, 'error');
       });
     }
@@ -345,7 +345,7 @@ export default function CredentialsPage() {
           autoCaptureRef.current = '';
           if (lastRejectedUidRef.current !== uid) {
             lastRejectedUidRef.current = uid;
-            showToast(`Este chip ya esta asignado a ${existing.alumno?.nombre || `alumno #${existing.alumno_id}`}. Usa otro chip.`, 'error');
+              showToast(`Este chip ya está asignado a ${existing.alumno?.nombre || `alumno #${existing.alumno_id}`}. Usa otro chip.`, 'error');
           }
           return;
         }
@@ -384,7 +384,7 @@ export default function CredentialsPage() {
       if (uid.toUpperCase() === _chipIdToVerify.toUpperCase()) {
         setVerifying(false);
         setVerified(true);
-        showToast('Verificacion correcta. La credencial ya esta guardada.');
+        showToast('Verificación correcta. La credencial ya está guardada.');
         onDone();
       } else {
         setVerifying(false);
@@ -413,7 +413,7 @@ export default function CredentialsPage() {
         if (existing) {
           setBatchWriting(false);
           autoCaptureRef.current = '';
-          showToast(`Este chip ya esta asignado a ${existing.alumno?.nombre || `alumno #${existing.alumno_id}`}. Usa otro chip.`, 'error');
+          showToast(`Este chip ya está asignado a ${existing.alumno?.nombre || `alumno #${existing.alumno_id}`}. Usa otro chip.`, 'error');
           return;
         }
       } catch {
@@ -476,12 +476,12 @@ export default function CredentialsPage() {
         if (isReposicion) {
           reposicionesApi.create({
             id_alumno: student.id,
-            motivo: reposicionMotivo || 'Credencial extraviada o danada',
+            motivo: reposicionMotivo || 'Credencial extraviada o dañada',
           }).then((created) => {
             setReposiciones(prev => [created, ...prev]);
-            showToast('Reposicion registrada correctamente.');
+            showToast('Reposición registrada correctamente.');
           }).catch((err) => {
-            const msg = err?.response?.data?.detail ?? 'No se pudo registrar la reposicion.';
+            const msg = err?.response?.data?.detail ?? 'No se pudo registrar la reposición.';
             showToast(msg, 'error');
           });
         }
@@ -501,7 +501,7 @@ export default function CredentialsPage() {
         Promise.all(
           toExport.map(s => reposicionesApi.create({
             id_alumno: s.id,
-            motivo: reposicionMotivo || 'Credencial extraviada o danada',
+            motivo: reposicionMotivo || 'Credencial extraviada o dañada',
           }))
         ).then(() => {
           reposicionesApi.getAll().then(setReposiciones).catch(() => {});
@@ -520,8 +520,8 @@ export default function CredentialsPage() {
     setConfirm({
       open: true,
       action: 'marcar_entregada',
-      title: 'Marcar reposicion como entregada',
-      message: `¿Seguro que deseas marcar como entregada la reposicion de ${getStudentName(repo.id_alumno)}? Ingrese su contrasena para confirmar.`,
+      title: 'Marcar reposición como entregada',
+      message: `¿Seguro que deseas marcar como entregada la reposición de ${getStudentName(repo.id_alumno)}? Ingrese su contraseña para confirmar.`,
       confirmLabel: 'Marcar entregada',
       repoId: repo.id,
     });
@@ -652,7 +652,7 @@ export default function CredentialsPage() {
         <table className="table">
           <thead>
             <tr>
-              <th>#</th><th>Alumno</th><th>Matricula</th><th>UID NFC</th><th>Fecha Emision</th><th>Estado</th><th>Acciones</th>
+              <th>#</th><th>Alumno</th><th>Matrícula</th><th>UID NFC</th><th>Fecha Emisión</th><th>Estado</th><th>Acciones</th>
             </tr>
           </thead>
           <tbody>
@@ -751,7 +751,7 @@ export default function CredentialsPage() {
                       <div className="input-group" style={{ marginBottom: 16 }}>
                         <div className="input-wrapper">
                           <Search size={18} className="input-icon" />
-                          <input type="text" className="input input--search" placeholder="Buscar por nombre, grupo o matricula..." value={studentQuery} onChange={(e) => setStudentQuery(e.target.value)} />
+                          <input type="text" className="input input--search" placeholder="Buscar por nombre, grupo o matrícula..." value={studentQuery} onChange={(e) => setStudentQuery(e.target.value)} />
                         </div>
                       </div>
                       {studentQuery && filteredStudents.length > 0 && (
@@ -759,7 +759,7 @@ export default function CredentialsPage() {
                           {filteredStudents.map((s) => (
                             <div key={s.id} style={{ padding: '10px 16px', cursor: 'pointer', background: selectedStudentId === s.id ? '#FEEBEE' : '#fff', borderBottom: '1px solid #F0EFEF' }} onClick={() => { setSelectedStudentId(s.id); setStudentQuery(getFullName(s)); }}>
                               <div style={{ fontWeight: 600, fontSize: 14 }}>{getFullName(s)}</div>
-                              <div style={{ fontSize: 13, color: '#5F5657' }}>Grupo: {getGrupoNombre(s.id_grupo)} &mdash; Matricula: {s.matricula}</div>
+                              <div style={{ fontSize: 13, color: '#5F5657' }}>Grupo: {getGrupoNombre(s.id_grupo)} &mdash; Matrícula: {s.matricula}</div>
                             </div>
                           ))}
                         </div>
@@ -768,7 +768,7 @@ export default function CredentialsPage() {
                         <div style={{ marginTop: 16, padding: 16, background: '#F0EFEF', borderRadius: 8 }}>
                           <div style={{ fontSize: 12, color: '#5F5657', marginBottom: 4 }}>Alumno seleccionado</div>
                           <div style={{ fontWeight: 700, fontSize: 16 }}>{getStudentName(selectedStudentId)}</div>
-                          <div style={{ fontSize: 14, color: '#5F5657' }}>Matricula: {getStudentControl(selectedStudentId)} &mdash; Grupo: {getStudentGroup(selectedStudentId)}</div>
+                          <div style={{ fontSize: 14, color: '#5F5657' }}>Matrícula: {getStudentControl(selectedStudentId)} &mdash; Grupo: {getStudentGroup(selectedStudentId)}</div>
                         </div>
                       )}
                     </div>
@@ -793,7 +793,7 @@ export default function CredentialsPage() {
                             {localStudents.filter(s => getGrupoNombre(s.id_grupo) === assignGroupId && s.estatus === 'Activo').length} alumnos activos
                           </div>
                           <div style={{ fontSize: 13, color: '#5F5657', marginTop: 4 }}>
-                            Se escribiran y verificaran los chips NFC uno por uno
+                            Se escribirán y verificarán los chips NFC uno por uno
                           </div>
                         </div>
                       )}
@@ -807,7 +807,7 @@ export default function CredentialsPage() {
                 <div style={{ textAlign: 'center', padding: 24 }}>
                   <div style={{ marginBottom: 16, padding: 12, background: '#FEEBEE', borderRadius: 8 }}>
                     <div style={{ fontWeight: 600, fontSize: 14 }}>{getStudentName(selectedStudentId!)}</div>
-                    <div style={{ fontSize: 13, color: '#5F5657' }}>Matricula: {getStudentControl(selectedStudentId!)}</div>
+                    <div style={{ fontSize: 13, color: '#5F5657' }}>Matrícula: {getStudentControl(selectedStudentId!)}</div>
                   </div>
                   <NfcZone state={writing ? 'writing' : written ? 'written' : 'idle'} />
                   {nfcStatus === 'connecting' && (
@@ -859,16 +859,16 @@ export default function CredentialsPage() {
                       </div>
                       <div style={{ marginBottom: 16, padding: 12, background: '#FEEBEE', borderRadius: 8 }}>
                         <div style={{ fontWeight: 600, fontSize: 14 }}>{getStudentName(currentBatchStudent)}</div>
-                        <div style={{ fontSize: 13, color: '#5F5657' }}>Matricula: {getStudentControl(currentBatchStudent)}</div>
+                        <div style={{ fontSize: 13, color: '#5F5657' }}>Matrícula: {getStudentControl(currentBatchStudent)}</div>
                       </div>
                       <NfcZone state={batchWriting ? 'writing' : batchVerifying ? 'verifying' : batchWritten || batchVerified ? 'written' : 'idle'} />
                       <p style={{ fontSize: 16, color: '#5F5657', marginBottom: 16 }}>
                         {batchWriting
                           ? 'Leyendo chip NFC...'
                           : batchVerifying
-                            ? 'Retire la tarjeta y acerquela de nuevo para verificar...'
+                            ? 'Retire la tarjeta y acérquela de nuevo para verificar...'
                             : batchVerified
-                              ? 'Verificacion completada (ya guardada en BD)'
+                              ? 'Verificación completada (ya guardada en BD)'
                               : batchWritten
                                 ? 'Guardado en BD. Retire y acerque de nuevo para verificar'
                                 : 'Acerca el chip NFC al lector para escribir'}
@@ -889,7 +889,7 @@ export default function CredentialsPage() {
                 <div style={{ textAlign: 'center', padding: 24 }}>
                   <div style={{ marginBottom: 16, padding: 12, background: '#FEEBEE', borderRadius: 8 }}>
                     <div style={{ fontWeight: 600, fontSize: 14 }}>{getStudentName(selectedStudentId!)}</div>
-                    <div style={{ fontSize: 13, color: '#5F5657' }}>Matricula: {getStudentControl(selectedStudentId!)}</div>
+                    <div style={{ fontSize: 13, color: '#5F5657' }}>Matrícula: {getStudentControl(selectedStudentId!)}</div>
                   </div>
                   <NfcZone state={verifying ? 'verifying' : verified ? 'verified' : 'idle'} />
                   {nfcStatus === 'connecting' && (
@@ -897,11 +897,11 @@ export default function CredentialsPage() {
                   )}
                   {nfcStatus === 'waiting' && (
                     <p style={{ fontSize: 13, color: '#EB2466', marginBottom: 8, fontWeight: 600 }}>
-                      Retire la tarjeta y acerquela de nuevo para verificar
+                      Retire la tarjeta y acérquela de nuevo para verificar
                     </p>
                   )}
                   <p style={{ fontSize: 16, color: '#5F5657', marginBottom: 16 }}>
-                    {verifying ? 'Leyendo tarjeta NFC para verificar...' : verified ? 'Verificacion exitosa. El UID coincide.' : 'Retire el chip del lector y acerquelo otra vez para comprobar'}
+                    {verifying ? 'Leyendo tarjeta NFC para verificar...' : verified ? 'Verificación exitosa. El UID coincide.' : 'Retire el chip del lector y acérquelo otra vez para comprobar'}
                   </p>
                   {verified && (
                     <div style={{ padding: 16, background: '#F0FDF4', borderRadius: 8, border: '1px solid #0F8122', marginBottom: 16 }}>
@@ -926,7 +926,7 @@ export default function CredentialsPage() {
                   <div style={{ width: 64, height: 64, borderRadius: '50%', background: '#0F8122', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 16px' }}>
                     <Check size={32} />
                   </div>
-                  <h3 style={{ fontSize: 18, fontWeight: 700, marginBottom: 8 }}>Verificacion completada</h3>
+                  <h3 style={{ fontSize: 18, fontWeight: 700, marginBottom: 8 }}>Verificación completada</h3>
                   <p style={{ fontSize: 14, color: '#5F5657', marginBottom: 16 }}>
                     Todos los chips han sido verificados exitosamente
                   </p>
@@ -1009,7 +1009,7 @@ export default function CredentialsPage() {
                 <button
                   className="btn btn--secondary"
                   onClick={() => {
-                    showToast(`Credencial ya estaba guardada. Puedes verificar despues.`);
+                    showToast(`Credencial ya estaba guardada. Puedes verificar después.`);
                     handleCloseAssignModal();
                   }}
                 >
@@ -1087,7 +1087,7 @@ export default function CredentialsPage() {
                       <span style={{ fontSize: 13, fontWeight: 600, color: '#1C1819', textAlign: 'right' }}>{scannedStudent ? getFullName(scannedStudent) : '---'}</span>
                     </div>
                     <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 10 }}>
-                      <span style={{ fontSize: 12, color: '#85787A', fontWeight: 600 }}>Matricula</span>
+                      <span style={{ fontSize: 12, color: '#85787A', fontWeight: 600 }}>Matrícula</span>
                       <span style={{ fontSize: 13, fontFamily: 'var(--font-mono)', color: '#1C1819' }}>{scannedStudent?.matricula ?? '---'}</span>
                     </div>
                     <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 10 }}>
@@ -1205,7 +1205,7 @@ export default function CredentialsPage() {
 
               {exportMode === 'alumno' && (
                 <div className="input-group" style={{ marginBottom: 16 }}>
-                  <label className="field-label" style={{ marginBottom: 8, display: 'block' }}>Buscar alumno por nombre, Matricula o grupo</label>
+                  <label className="field-label" style={{ marginBottom: 8, display: 'block' }}>Buscar alumno por nombre, matrícula o grupo</label>
                   <div className="input-wrapper">
                     <Search size={18} className="input-icon" />
                     <input
@@ -1225,7 +1225,7 @@ export default function CredentialsPage() {
                           onClick={() => { setExportStudentId(String(s.id)); setExportStudentQuery(getFullName(s)); }}
                         >
                           <div style={{ fontWeight: 600, fontSize: 14 }}>{getFullName(s)}</div>
-                          <div style={{ fontSize: 13, color: '#5F5657' }}>Matricula: {s.matricula} &mdash; Grupo: {getGrupoNombre(s.id_grupo)}</div>
+                          <div style={{ fontSize: 13, color: '#5F5657' }}>Matrícula: {s.matricula} &mdash; Grupo: {getGrupoNombre(s.id_grupo)}</div>
                         </div>
                       ))}
                     </div>
@@ -1239,7 +1239,7 @@ export default function CredentialsPage() {
                     <div style={{ marginTop: 8, padding: 12, background: '#FEEBEE', borderRadius: 8 }}>
                       <div style={{ fontSize: 12, color: '#5F5657', marginBottom: 2 }}>Alumno seleccionado</div>
                       <div style={{ fontWeight: 700, fontSize: 14 }}>{localStudents.find(s => s.id === Number(exportStudentId)) ? getFullName(localStudents.find(s => s.id === Number(exportStudentId))!) : ''}</div>
-                      <div style={{ fontSize: 13, color: '#5F5657' }}>Matricula: {localStudents.find(s => s.id === Number(exportStudentId))?.matricula}</div>
+                      <div style={{ fontSize: 13, color: '#5F5657' }}>Matrícula: {localStudents.find(s => s.id === Number(exportStudentId))?.matricula}</div>
                     </div>
                   )}
                 </div>
@@ -1277,8 +1277,8 @@ export default function CredentialsPage() {
                 transition: 'background 150ms',
               }}>
                 <div>
-                  <div style={{ fontSize: 14, fontWeight: 600, color: '#1C1819' }}>Reposicion</div>
-                  <div style={{ fontSize: 12, color: '#85787A' }}>Marcar el PDF como reposicion de credencial</div>
+                  <div style={{ fontSize: 14, fontWeight: 600, color: '#1C1819' }}>Reposición</div>
+                  <div style={{ fontSize: 12, color: '#85787A' }}>Marcar el PDF como reposición de credencial</div>
                 </div>
                 <button
                   onClick={() => setIsReposicion(!isReposicion)}
@@ -1299,11 +1299,11 @@ export default function CredentialsPage() {
 
               {isReposicion && (
                 <div className="input-group" style={{ marginBottom: 16 }}>
-                  <label className="field-label" style={{ marginBottom: 8, display: 'block' }}>Motivo de la reposicion</label>
+                  <label className="field-label" style={{ marginBottom: 8, display: 'block' }}>Motivo de la reposición</label>
                   <input
                     type="text"
                     className="input"
-                    placeholder="Ej. Tarjeta extraviada, danada por agua..."
+                    placeholder="Ej. Tarjeta extraviada, dañada por agua..."
                     value={reposicionMotivo}
                     onChange={(e) => setReposicionMotivo(e.target.value)}
                   />
@@ -1352,7 +1352,7 @@ export default function CredentialsPage() {
           try {
             const existing = await credencialesApi.getByUid(newChipId).catch(() => null);
             if (existing) {
-              showToast(`Este chip ya esta asignado a ${existing.alumno?.nombre || `alumno #${existing.alumno_id}`}. Usa otro chip.`, 'error');
+          showToast(`Este chip ya está asignado a ${existing.alumno?.nombre || `alumno #${existing.alumno_id}`}. Usa otro chip.`, 'error');
               return;
             }
           } catch {
@@ -1400,12 +1400,12 @@ export default function CredentialsPage() {
               {panelMode === 'view' && (
                 <>
                   <div style={{ padding: '0 32px', marginBottom: 24 }}>
-                    <h3 style={{ fontSize: 14, fontWeight: 600, color: '#EB2466', textTransform: 'uppercase', marginBottom: 12, letterSpacing: 0.5 }}>Informacion general</h3>
+                    <h3 style={{ fontSize: 14, fontWeight: 600, color: '#EB2466', textTransform: 'uppercase', marginBottom: 12, letterSpacing: 0.5 }}>Información general</h3>
                     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px 24px', fontSize: 14 }}>
                       <div><span style={{ color: '#5F5657', fontSize: 12 }}>Nombre</span><div style={{ fontWeight: 500 }}>{getFullName(student)}</div></div>
-                      <div><span style={{ color: '#5F5657', fontSize: 12 }}>Matricula</span><div style={{ fontWeight: 500, fontFamily: 'monospace' }}>{student.matricula}</div></div>
+                      <div><span style={{ color: '#5F5657', fontSize: 12 }}>Matrícula</span><div style={{ fontWeight: 500, fontFamily: 'monospace' }}>{student.matricula}</div></div>
                       <div><span style={{ color: '#5F5657', fontSize: 12 }}>Grupo</span><div style={{ fontWeight: 500 }}>{getGrupoNombre(student.id_grupo)}</div></div>
-                      <div><span style={{ color: '#5F5657', fontSize: 12 }}>Telefono</span><div style={{ fontWeight: 500 }}>{student.telefono ?? '---'}</div></div>
+                      <div><span style={{ color: '#5F5657', fontSize: 12 }}>Teléfono</span><div style={{ fontWeight: 500 }}>{student.telefono ?? '---'}</div></div>
                       <div><span style={{ color: '#5F5657', fontSize: 12 }}>Estado</span><div><span style={{ display: 'inline-block', padding: '2px 10px', borderRadius: 12, fontSize: 12, fontWeight: 600, background: student.estatus === 'Activo' ? '#FEEBEE' : '#F0EFEF', color: student.estatus === 'Activo' ? '#0F8122' : '#5F5657' }}>{student.estatus === 'Activo' ? 'Activo' : 'Inactivo'}</span></div></div>
                     </div>
                   </div>
@@ -1413,16 +1413,16 @@ export default function CredentialsPage() {
                     <h3 style={{ fontSize: 14, fontWeight: 600, color: '#EB2466', textTransform: 'uppercase', marginBottom: 12, letterSpacing: 0.5 }}>Credencial NFC</h3>
                     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px 24px', fontSize: 14 }}>
                       <div><span style={{ color: '#5F5657', fontSize: 12 }}>UID NFC</span><div style={{ fontWeight: 500, fontFamily: 'monospace', color: '#0F8122' }}>{cred.numero ?? '---'}</div></div>
-                      <div><span style={{ color: '#5F5657', fontSize: 12 }}>Fecha emision</span><div style={{ fontWeight: 500 }}>{cred.fecha_emision ?? '---'}</div></div>
+                      <div><span style={{ color: '#5F5657', fontSize: 12 }}>Fecha emisión</span><div style={{ fontWeight: 500 }}>{cred.fecha_emision ?? '---'}</div></div>
                       <div><span style={{ color: '#5F5657', fontSize: 12 }}>Estado</span><div><span className={estadoBadge[isCredActive ? 'Activa' : 'Inactiva']}>{isCredActive ? 'Activa' : 'Inactiva'}</span></div></div>
                     </div>
                   </div>
                   <div style={{ padding: '0 32px', marginBottom: 32 }}>
                     <h3 style={{ fontSize: 14, fontWeight: 600, color: '#EB2466', textTransform: 'uppercase', marginBottom: 12, letterSpacing: 0.5 }}>Contacto</h3>
                     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px 24px', fontSize: 14 }}>
-                      <div style={{ gridColumn: 'span 2' }}><span style={{ color: '#5F5657', fontSize: 12 }}>Direccion</span><div style={{ fontWeight: 500 }}>{student.direccion ?? '---'}</div></div>
+                      <div style={{ gridColumn: 'span 2' }}><span style={{ color: '#5F5657', fontSize: 12 }}>Dirección</span><div style={{ fontWeight: 500 }}>{student.direccion ?? '---'}</div></div>
                       <div><span style={{ color: '#5F5657', fontSize: 12 }}>Email</span><div style={{ fontWeight: 500 }}>{'---'}</div></div>
-                      <div><span style={{ color: '#5F5657', fontSize: 12 }}>Telefono</span><div style={{ fontWeight: 500, fontFamily: 'monospace' }}>{student.telefono ?? '---'}</div></div>
+                      <div><span style={{ color: '#5F5657', fontSize: 12 }}>Teléfono</span><div style={{ fontWeight: 500, fontFamily: 'monospace' }}>{student.telefono ?? '---'}</div></div>
                     </div>
                   </div>
                 </>
@@ -1436,11 +1436,11 @@ export default function CredentialsPage() {
                       <div style={{ padding: 16, background: '#FEF2F2', borderRadius: 8, border: '1px solid #AB1748', marginBottom: 16 }}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
                           <AlertTriangle size={16} color="#AB1748" />
-                          <span style={{ fontWeight: 600, fontSize: 14, color: '#AB1748' }}>Atencion</span>
+                          <span style={{ fontWeight: 600, fontSize: 14, color: '#AB1748' }}>Atención</span>
                         </div>
                         <p style={{ fontSize: 13, color: '#5F5657', lineHeight: 1.6, margin: 0 }}>
-                          Al reasignar el chip NFC, el chip actual sera <strong>dado de baja</strong> y el alumno no podra usarlo para acceder al plantel.
-                          Se asignara un <strong>nuevo chip NFC</strong> que debera ser escrito y verificado.
+                          Al reasignar el chip NFC, el chip actual será <strong>dado de baja</strong> y el alumno no podrá usarlo para acceder al plantel.
+                          Se asignará un <strong>nuevo chip NFC</strong> que deberá ser escrito y verificado.
                         </p>
                       </div>
                       <div style={{ padding: 16, background: '#F0EFEF', borderRadius: 8, fontSize: 14 }}>
@@ -1453,7 +1453,7 @@ export default function CredentialsPage() {
                           <span style={{ fontFamily: 'monospace', fontWeight: 600, color: '#AB1748' }}>{cred.numero ?? '---'}</span>
                         </div>
                         <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                          <span style={{ color: '#5F5657' }}>Accion:</span>
+                          <span style={{ color: '#5F5657' }}>Acción:</span>
                           <span style={{ fontWeight: 600, color: '#AB1748' }}>Dado de baja + Nuevo chip</span>
                         </div>
                       </div>
@@ -1470,7 +1470,7 @@ export default function CredentialsPage() {
                     <div style={{ textAlign: 'center' }}>
                       <div style={{ marginBottom: 16, padding: 12, background: '#FEEBEE', borderRadius: 8 }}>
                         <div style={{ fontWeight: 600, fontSize: 14 }}>{getFullName(student)}</div>
-                        <div style={{ fontSize: 13, color: '#5F5657' }}>Matricula: {student.matricula}</div>
+                        <div style={{ fontSize: 13, color: '#5F5657' }}>Matrícula: {student.matricula}</div>
                       </div>
                       <div className={`nfc-zone ${reassignWriting ? 'scanning' : reassignWritten ? '' : 'scanning'}`} style={{ margin: '0 auto 16px' }}>
                         <div className="nfc-zone-inner" style={{ background: reassignWritten ? '#70FE7D' : undefined }}>
@@ -1501,7 +1501,7 @@ export default function CredentialsPage() {
                         <div style={{ display: 'flex', gap: 8, justifyContent: 'center' }}>
                           <button onClick={closePanel} style={{ padding: '8px 16px', border: '1px solid #CAC6C7', borderRadius: 8, background: '#fff', color: '#5F5657', fontSize: 14, cursor: 'pointer', fontFamily: 'var(--font-sans)' }}>Cancelar</button>
                           <button onClick={handleConfirmReassign} style={{ padding: '8px 16px', border: 'none', borderRadius: 8, background: '#0F8122', color: '#fff', fontSize: 14, fontWeight: 500, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6, fontFamily: 'var(--font-sans)' }}>
-                            <Check size={16} /> Confirmar reasignacion
+                            <Check size={16} /> Confirmar reasignación
                           </button>
                         </div>
                       )}

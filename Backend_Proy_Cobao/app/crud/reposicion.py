@@ -3,6 +3,8 @@ from datetime import date
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.crud.credencial import get_credenciales
+from app.models.credencial import Credencial
 from app.models.reposicion import Reposicion
 from app.schemas.reposicion import ReposicionCreate, ReposicionUpdate
 
@@ -42,6 +44,18 @@ async def create_reposicion(db: AsyncSession, data: ReposicionCreate):
         id_usuario_registro=data.id_usuario_registro,
     )
     db.add(reposicion)
+    await db.flush()
+    if data.id_credencial is not None:
+        credencial = await db.get(Credencial, data.id_credencial)
+        if credencial is not None:
+            if credencial.id_alumno is not None:
+                otras = await get_credenciales(db, alumno_id=credencial.id_alumno, solo_activas=True)
+            else:
+                otras = await get_credenciales(db, profesor_id=credencial.id_profesor, solo_activas=True)
+            for otra in otras:
+                if otra.id_credencial != credencial.id_credencial:
+                    otra.activa = False
+            credencial.activa = True
     await db.flush()
     await db.refresh(reposicion)
     return reposicion

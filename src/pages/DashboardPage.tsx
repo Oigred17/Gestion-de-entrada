@@ -1,22 +1,35 @@
-import { useState, useEffect } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
-  UserCheck, Clock, AlertTriangle, LogOut, TrendingUp,
-  ChevronRight, Bell, ScanLine,
+  AlarmClock, AlertTriangle, Bell, Check, ChevronRight, Clock,
+  LogOut, MoveRight, ScanLine, ShieldX, TrendingUp, UserCheck, X,
+  type LucideIcon,
 } from 'lucide-react';
 import { registrosApi, retardosApi, alumnosApi, reportesApi, gruposApi, permisosApi } from '../api';
 import type { RegistroAcceso, Retardo, Alumno, Reporte, Grupo, Permiso } from '../types';
 import Loader from '../components/Loader';
+import { useAuth } from '../context/AuthContext';
 
-const tipoConfig: Record<string, { label: string; color: string; bg: string; icon: string }> = {
-  ENTRADA: { label: 'Entrada', color: '#0F8122', bg: '#E8F5E9', icon: '✓' },
-  retardo: { label: 'Entrada fuera de horario', color: '#EB2466', bg: '#FEEBEE', icon: '⏰' },
-  SALIDA: { label: 'Salida', color: '#1792AB', bg: '#DCF5FF', icon: '→' },
-  denegado: { label: 'Denegado', color: '#AB1748', bg: '#FEEBEE', icon: '✗' },
+const tipoConfig: Record<string, { label: string; color: string; bg: string; icon: LucideIcon }> = {
+  ENTRADA: { label: 'Entrada', color: '#0F8122', bg: '#E8F5E9', icon: Check },
+  retardo: { label: 'Fuera de horario', color: '#1792AB', bg: '#DCF5FF', icon: AlarmClock },
+  SALIDA: { label: 'Salida', color: '#1792AB', bg: '#DCF5FF', icon: MoveRight },
+  denegado: { label: 'Denegado', color: '#AB1748', bg: '#FEEBEE', icon: X },
 };
 
 function esHoy(fechaHora: string, hoy: string): boolean {
   return fechaHora.startsWith(hoy);
+}
+
+function formatLocalDate(d: Date): string {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
+}
+
+function nombreCompleto(a?: Alumno | null): string {
+  return a ? `${a.nombre} ${a.apellido_paterno} ${a.apellido_materno}`.trim() : 'Sin datos';
 }
 
 function obtenerGravedad(reporte: Reporte): 'Leve' | 'Moderada' | 'Grave' {
@@ -26,8 +39,17 @@ function obtenerGravedad(reporte: Reporte): 'Leve' | 'Moderada' | 'Grave' {
   return 'Leve';
 }
 
+interface ActivityRecord {
+  key: string;
+  tipo: string;
+  hora: string;
+  alumno: Alumno | null;
+}
+
 export default function DashboardPage() {
   const navigate = useNavigate();
+  const { user } = useAuth();
+  const esServiciosEscolares = user?.rol === 'Servicios Escolares';
   const [currentTime, setCurrentTime] = useState(new Date());
   const [registros, setRegistros] = useState<RegistroAcceso[]>([]);
   const [retardosData, setRetardosData] = useState<Retardo[]>([]);
@@ -37,6 +59,8 @@ export default function DashboardPage() {
   const [permisosData, setPermisosData] = useState<Permiso[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [absentModalOpen, setAbsentModalOpen] = useState(false);
+  const absentCloseRef = useRef<HTMLButtonElement>(null);
 
   const alumnoMap = Object.fromEntries(alumnosData.map(a => [a.id, a]));
   const grupoMap = Object.fromEntries(gruposData.map(g => [g.id, g.nombre]));
@@ -67,7 +91,7 @@ export default function DashboardPage() {
         setPermisosData(permisosRes);
       } catch (err) {
         console.error('Error fetching dashboard data:', err);
-        setError('No se pudo conectar con el servidor. Revisa que el backend este corriendo.');
+        setError('No se pudo conectar con el servidor. Revisa que el backend esté corriendo.');
       } finally {
         setLoading(false);
       }
@@ -75,52 +99,84 @@ export default function DashboardPage() {
     fetchData();
   }, []);
 
-  const hoy = new Date().toISOString().slice(0, 10);
+  useEffect(() => {
+    if (!absentModalOpen) return;
+    absentCloseRef.current?.focus();
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setAbsentModalOpen(false);
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [absentModalOpen]);
+
+  const hoy = formatLocalDate(new Date());
   const totalAlumnos = alumnosData.length;
   const registrosHoy = registros.filter(r => esHoy(r.fecha_hora, hoy));
+  const retardosHoy = retardosData.filter(r => esHoy(r.fecha, hoy));
+
   const estadoAlumno = new Map<number, string>();
   for (const r of [...registrosHoy].sort((a, b) => (a.fecha_hora || '').localeCompare(b.fecha_hora || ''))) {
     estadoAlumno.set(r.alumno_id, r.tipo_acceso);
   }
+
+  const entradosHoy = new Set(registrosHoy.filter(r => r.tipo_acceso === 'ENTRADA').map(r => r.alumno_id));
   const presentes = Array.from(estadoAlumno.values()).filter(v => v === 'ENTRADA').length;
   const salidas = Array.from(estadoAlumno.values()).filter(v => v === 'SALIDA').length;
-  const retardosCount = retardosData.filter(r => esHoy(r.fecha, hoy)).length;
-  const reportesCount = reportesData.length;
-  const presentesSet = new Set(Array.from(estadoAlumno.entries()).filter(([, v]) => v === 'ENTRADA').map(([id]) => id));
+  const retardosCount = retardosHoy.length;
+  const denegadosHoy = registrosHoy.filter(r => r.tipo_acceso === 'denegado').length;
+
   const conPermisoHoy = new Set(
     permisosData
       .filter(p => p.estado === 'Aprobado' && (p.fecha_salida || '').startsWith(hoy))
       .map(p => p.id_alumno)
   );
-  const conPermisoAusentes = [...conPermisoHoy].filter(id => !presentesSet.has(id)).length;
-  const faltasCount = Math.max(0, totalAlumnos - presentes - conPermisoAusentes);
+  const conPermisoAusentes = [...conPermisoHoy].filter(id => !entradosHoy.has(id)).length;
+  const faltasCount = Math.max(0, totalAlumnos - entradosHoy.size - conPermisoAusentes);
 
-  const stats = [
-    { label: 'Presentes', value: presentes, total: totalAlumnos, color: '#0F8122', bg: '#E8F5E9', icon: UserCheck },
-    { label: 'Fuera de horario', value: retardosCount, total: totalAlumnos, color: '#1792AB', bg: '#DCF5FF', icon: Clock },
-    { label: 'Faltas', value: faltasCount, total: totalAlumnos, color: '#EB2466', bg: '#FEEBEE', icon: AlertTriangle },
-    { label: 'Salidas', value: salidas, total: totalAlumnos, color: '#5F5657', bg: '#F0EFEF', icon: LogOut },
-    { label: 'Reportes', value: reportesCount, total: totalAlumnos, color: '#AB1748', bg: '#FEEBEE', icon: AlertTriangle },
-  ];
+  const absentStudents = alumnosData
+    .filter(a => !entradosHoy.has(a.id) && !conPermisoHoy.has(a.id))
+    .sort(
+      (a, b) =>
+        (a.id_grupo ?? 0) - (b.id_grupo ?? 0) ||
+        `${a.apellido_paterno} ${a.nombre}`.localeCompare(`${b.apellido_paterno} ${b.nombre}`)
+    );
 
-  const recentActivity = [
-    ...registros.map(r => ({
-      key: `reg-${r.id}`,
-      tipo: r.tipo_acceso,
-      sort: r.fecha_hora,
-      hora: r.fecha_hora.split('T')[1] || r.fecha_hora.split(' ')[1] || '',
-      fecha: r.fecha_hora.split('T')[0] || r.fecha_hora.split(' ')[0] || '',
-      alumno: r.alumno || alumnoMap[r.alumno_id] || null,
-    })),
-    ...retardosData.map(r => ({
+  const reportesPendientes = reportesData.filter(r => !r.sancion_cumplida);
+  const unresolvedIncidents: Array<{ id: number; tipo: string; alumno?: Alumno; fecha: string; gravedad: string }> = reportesPendientes
+    .sort((a, b) => b.fecha.localeCompare(a.fecha))
+    .slice(0, 5)
+    .map(r => ({
+      id: r.id,
+      tipo: r.motivo,
+      alumno: r.alumno || alumnoMap[r.id_alumno] as Alumno | undefined,
+      fecha: r.fecha,
+      gravedad: obtenerGravedad(r),
+    }));
+
+  const retardoKeys = new Set(
+    retardosHoy.map(r => `${r.alumno_id}|${(r.hora_llegada || '').slice(0, 5)}`)
+  );
+
+  const recentActivity: ActivityRecord[] = [
+    ...registrosHoy
+      .filter(r => {
+        if (r.tipo_acceso !== 'ENTRADA') return true;
+        const hora = (r.fecha_hora.split('T')[1] || r.fecha_hora.split(' ')[1] || '').slice(0, 5);
+        return !retardoKeys.has(`${r.alumno_id}|${hora}`);
+      })
+      .map(r => ({
+        key: `reg-${r.id}`,
+        tipo: r.tipo_acceso,
+        hora: (r.fecha_hora.split('T')[1] || r.fecha_hora.split(' ')[1] || '').slice(0, 5),
+        alumno: r.alumno || alumnoMap[r.alumno_id] || null,
+      })),
+    ...retardosHoy.map(r => ({
       key: `ret-${r.id}`,
       tipo: 'retardo' as const,
-      sort: `${r.fecha}T${r.hora_llegada || '00:00:00'}`,
-      hora: r.hora_llegada,
-      fecha: r.fecha,
+      hora: (r.hora_llegada || '').slice(0, 5),
       alumno: r.alumno || alumnoMap[r.alumno_id] || null,
     })),
-  ].sort((a, b) => b.sort.localeCompare(a.sort)).slice(0, 10);
+  ].sort((a, b) => b.hora.localeCompare(a.hora)).slice(0, 10);
 
   const attendanceByGroup = Array.from(new Set(alumnosData.map(s => s.id_grupo ? s.id_grupo : 0))).map(idGrupo => {
     const groupStudents = alumnosData.filter(s => (s.id_grupo ?? 0) === idGrupo);
@@ -133,8 +189,7 @@ export default function DashboardPage() {
     for (const r of [...groupRegistros].sort((a, b) => (a.fecha_hora || '').localeCompare(b.fecha_hora || ''))) {
       groupEstados.set(r.alumno_id, r.tipo_acceso);
     }
-    const groupRetardos = retardosData.filter(r => {
-      if (!esHoy(r.fecha, hoy)) return false;
+    const groupRetardos = retardosHoy.filter(r => {
       const alumno = r.alumno || alumnoMap[r.alumno_id];
       return (alumno?.id_grupo ?? 0) === idGrupo;
     });
@@ -147,19 +202,16 @@ export default function DashboardPage() {
     };
   }).sort((a, b) => b.total - a.total);
 
-  const unresolvedIncidents: Array<{id: number; tipo: string; alumno?: {nombre: string; apellido_paterno: string; apellido_materno: string}; fecha: string; gravedad: string}> = reportesData
-    .sort((a, b) => b.fecha.localeCompare(a.fecha))
-    .slice(0, 5)
-    .map(r => ({
-      id: r.id,
-      tipo: r.motivo,
-      alumno: r.alumno || alumnoMap[r.id_alumno] as Alumno | undefined,
-      fecha: r.fecha,
-      gravedad: obtenerGravedad(r),
-    }));
-
   const currentTimeStr = currentTime.toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' });
   const currentDateStr = currentTime.toLocaleDateString('es-MX', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
+
+  const stats: Array<{ key: string; label: string; value: number; total: number; color: string; bg: string; icon: LucideIcon; title?: string; action?: () => void }> = [
+    { key: 'presentes', label: 'Presentes', value: presentes, total: totalAlumnos, color: '#0F8122', bg: '#E8F5E9', icon: UserCheck },
+    { key: 'retardos', label: 'Fuera de horario', value: retardosCount, total: totalAlumnos, color: '#1792AB', bg: '#DCF5FF', icon: Clock, title: esServiciosEscolares ? undefined : 'Ver reportes de retardos', action: esServiciosEscolares ? undefined : () => navigate('/reportes') },
+    { key: 'faltas', label: 'Faltas', value: faltasCount, total: totalAlumnos, color: '#EB2466', bg: '#FEEBEE', icon: AlertTriangle, title: 'Ver alumnos ausentes de hoy', action: () => setAbsentModalOpen(true) },
+    { key: 'salidas', label: 'Salidas', value: salidas, total: entradosHoy.size || 1, color: '#5F5657', bg: '#F0EFEF', icon: LogOut },
+    { key: 'denegados', label: 'Denegados', value: denegadosHoy, total: registrosHoy.length || 1, color: '#AB1748', bg: '#FEEBEE', icon: ShieldX, title: esServiciosEscolares ? undefined : 'Ver reportes de denegados', action: esServiciosEscolares ? undefined : () => navigate('/reportes') },
+  ];
 
   if (loading) {
     return <Loader message="Cargando datos del panel..." height={300} />;
@@ -189,18 +241,15 @@ export default function DashboardPage() {
       <div style={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'center', flexWrap: 'wrap', gap: 12 }}>
         <div style={{ textAlign: 'right' }}>
           <div style={{ fontSize: 24, fontWeight: 700, color: '#1C1819', fontFamily: 'var(--font-mono)' }}>{currentTimeStr}</div>
-          <div style={{ fontSize: 13, color: '#85787A', textTransform: 'capitalize' }}>{currentDateStr}</div>
+          <div style={{ fontSize: 13, color: 'var(--color-gris-carbon)', textTransform: 'capitalize' }}>{currentDateStr}</div>
         </div>
       </div>
 
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 16 }}>
         {stats.map(stat => {
           const pct = stat.total > 0 ? Math.round((stat.value / stat.total) * 100) : 0;
-          return (
-            <div key={stat.label} style={{
-              background: '#fff', borderRadius: 12, padding: 20,
-              border: '1px solid #CAC6C7', transition: 'transform 150ms',
-            }}>
+          const content = (
+            <>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 12 }}>
                 <div style={{
                   width: 42, height: 42, borderRadius: 10, background: stat.bg,
@@ -208,14 +257,24 @@ export default function DashboardPage() {
                 }}>
                   <stat.icon size={20} color={stat.color} />
                 </div>
-                <span style={{ fontSize: 12, fontWeight: 600, color: '#85787A' }}>{pct}%</span>
+                <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 12, fontWeight: 600, color: 'var(--color-gris-carbon)' }}>
+                  {pct}%
+                  {stat.action && <ChevronRight size={14} color="var(--color-gris-carbon)" />}
+                </span>
               </div>
               <div style={{ fontSize: 32, fontWeight: 800, color: stat.color, lineHeight: 1 }}>{stat.value}</div>
-              <div style={{ fontSize: 13, fontWeight: 500, color: '#5F5657', marginTop: 4 }}>{stat.label}</div>
-              <div style={{ marginTop: 8, height: 4, borderRadius: 2, background: '#F0EFEF', overflow: 'hidden' }}>
-                <div style={{ height: '100%', width: `${pct}%`, background: stat.color, borderRadius: 2, transition: 'width 400ms' }} />
+              <div style={{ fontSize: 13, fontWeight: 500, color: 'var(--color-gris-carbon)', marginTop: 4 }}>{stat.label}</div>
+              <div style={{ marginTop: 8, height: 4, borderRadius: 2, background: 'var(--color-blanco-grisaceo)', overflow: 'hidden' }}>
+                <div style={{ height: '100%', width: `${pct}%`, background: stat.color, borderRadius: 2 }} />
               </div>
-            </div>
+            </>
+          );
+          return stat.action ? (
+            <button key={stat.key} className="stat-card stat-card--clickable" onClick={stat.action} title={stat.title}>
+              {content}
+            </button>
+          ) : (
+            <div key={stat.key} className="stat-card">{content}</div>
           );
         })}
       </div>
@@ -231,72 +290,61 @@ export default function DashboardPage() {
           }}>
             <h2 style={{ fontSize: 18, fontWeight: 700, color: '#1C1819', margin: 0, display: 'flex', alignItems: 'center', gap: 8 }}>
               <ScanLine size={20} color="#EB2466" />
-              Actividad reciente
+              Actividad de hoy
             </h2>
-            <button
-              onClick={() => navigate('/reportes')}
-              style={{
-                display: 'flex', alignItems: 'center', gap: 4, background: 'none', border: 'none',
-                color: '#EB2466', cursor: 'pointer', fontSize: 13, fontWeight: 600, fontFamily: 'var(--font-sans)',
-              }}
-            >
-              Ver reportes <ChevronRight size={14} />
-            </button>
+            {!esServiciosEscolares && (
+              <button
+                onClick={() => navigate('/reportes')}
+                style={{
+                  display: 'flex', alignItems: 'center', gap: 4, background: 'none', border: 'none',
+                  color: '#EB2466', cursor: 'pointer', fontSize: 13, fontWeight: 600, fontFamily: 'var(--font-sans)',
+                }}
+              >
+                Ver reportes <ChevronRight size={14} />
+              </button>
+            )}
           </div>
 
           <div style={{ overflowX: 'auto' }}>
-            <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+            <table className="table">
               <thead>
-                <tr style={{ background: '#F0EFEF' }}>
-                  <th style={{ textAlign: 'left', padding: '10px 20px', fontSize: 12, fontWeight: 600, color: '#5F5657' }}>Hora</th>
-                  <th style={{ textAlign: 'left', padding: '10px 16px', fontSize: 12, fontWeight: 600, color: '#5F5657' }}>Alumno</th>
-                  <th style={{ textAlign: 'left', padding: '10px 16px', fontSize: 12, fontWeight: 600, color: '#5F5657' }}>No. Control</th>
-                  <th style={{ textAlign: 'left', padding: '10px 16px', fontSize: 12, fontWeight: 600, color: '#5F5657' }}>Grupo</th>
-                  <th style={{ textAlign: 'left', padding: '10px 16px', fontSize: 12, fontWeight: 600, color: '#5F5657' }}>Capacitacion</th>
-                  <th style={{ textAlign: 'left', padding: '10px 16px', fontSize: 12, fontWeight: 600, color: '#5F5657' }}>Tipo</th>
-                  <th style={{ textAlign: 'left', padding: '10px 16px', fontSize: 12, fontWeight: 600, color: '#5F5657' }}>Fecha</th>
+                <tr>
+                  <th>Hora</th>
+                  <th>Alumno</th>
+                  <th>Grupo</th>
+                  <th>Tipo</th>
                 </tr>
               </thead>
               <tbody>
-                {recentActivity.map((record, idx) => {
-                  const cfg = tipoConfig[record.tipo] ?? { label: record.tipo, color: '#5F5657', bg: '#F0EFEF', icon: '?' };
+                {recentActivity.length === 0 ? (
+                  <tr>
+                    <td colSpan={4} style={{ textAlign: 'center', padding: '28px 16px', color: 'var(--color-gris-carbon)', fontSize: 14 }}>
+                      No hay actividad de hoy
+                    </td>
+                  </tr>
+                ) : recentActivity.map(record => {
+                  const cfg = tipoConfig[record.tipo] ?? { label: record.tipo, color: '#5F5657', bg: '#F0EFEF', icon: X };
                   return (
-                    <tr
-                      key={record.key}
-                      style={{
-                        borderBottom: '1px solid #F0EFEF',
-                        background: idx % 2 === 0 ? '#fff' : '#FAFAFA',
-                        transition: 'background 100ms',
-                      }}
-                      onMouseEnter={e => (e.currentTarget.style.background = '#FEEBEE')}
-                      onMouseLeave={e => (e.currentTarget.style.background = idx % 2 === 0 ? '#fff' : '#FAFAFA')}
-                    >
-                      <td style={{ padding: '12px 20px', fontSize: 14, fontWeight: 600, fontFamily: 'var(--font-mono)', color: '#1C1819' }}>
-                        {record.hora}
+                    <tr key={record.key}>
+                      <td style={{ fontFamily: 'var(--font-mono)', fontWeight: 600, color: '#1C1819' }}>{record.hora}</td>
+                      <td>
+                        <div style={{ fontWeight: 600, color: '#1C1819' }}>{nombreCompleto(record.alumno)}</div>
+                        <div style={{ fontSize: 12, color: 'var(--color-gris-carbon)', marginTop: 2 }}>
+                          {record.alumno?.matricula ?? 'Sin datos'}
+                          {record.alumno?.capacitacion ? ` · ${record.alumno.capacitacion}` : ''}
+                        </div>
                       </td>
-                      <td style={{ padding: '12px 16px', fontSize: 14, fontWeight: 600, color: '#1C1819' }}>
-                        {record.alumno ? `${record.alumno.nombre} ${record.alumno.apellido_paterno} ${record.alumno.apellido_materno}`.trim() : 'Desconocido'}
+                      <td style={{ color: 'var(--color-gris-carbon)' }}>
+                        {record.alumno?.id_grupo ? (grupoMap[record.alumno.id_grupo] || `Grupo ${record.alumno.id_grupo}`) : 'Sin grupo'}
                       </td>
-                      <td style={{ padding: '12px 16px', fontSize: 13, fontFamily: 'var(--font-mono)', color: '#5F5657' }}>
-                        {record.alumno?.matricula ?? '---'}
-                      </td>
-                      <td style={{ padding: '12px 16px', fontSize: 14, color: '#5F5657' }}>
-                        {record.alumno?.id_grupo ? (grupoMap[record.alumno.id_grupo] || `Grupo ${record.alumno.id_grupo}`) : '---'}
-                      </td>
-                      <td style={{ padding: '12px 16px', fontSize: 13, color: '#85787A' }}>
-                        {record.alumno?.capacitacion ?? '---'}
-                      </td>
-                      <td style={{ padding: '12px 16px' }}>
+                      <td>
                         <span style={{
-                          display: 'inline-flex', alignItems: 'center', gap: 4,
+                          display: 'inline-flex', alignItems: 'center', gap: 6,
                           padding: '3px 10px', borderRadius: 12, fontSize: 12, fontWeight: 600,
                           background: cfg.bg, color: cfg.color,
                         }}>
-                          {cfg.icon} {cfg.label}
+                          <cfg.icon size={13} /> {cfg.label}
                         </span>
-                      </td>
-                      <td style={{ padding: '12px 16px', fontSize: 13, color: '#85787A' }}>
-                        {record.fecha}
                       </td>
                     </tr>
                   );
@@ -315,103 +363,171 @@ export default function DashboardPage() {
           </h2>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
             {attendanceByGroup.length === 0 ? (
-              <div style={{ padding: 32, textAlign: 'center', color: '#85787A', fontSize: 14 }}>
+              <div style={{ padding: 32, textAlign: 'center', color: 'var(--color-gris-carbon)', fontSize: 14 }}>
                 No hay grupos registrados
               </div>
             ) : attendanceByGroup.map(g => {
-              const maxPresentes = Math.max(1, ...attendanceByGroup.map(x => x.total));
               const pct = g.total > 0 ? Math.round((g.presentes / g.total) * 100) : 0;
+              let presW = g.total > 0 ? (g.presentes / g.total) * 100 : 0;
+              let retW = g.total > 0 ? (g.retardos / g.total) * 100 : 0;
+              const totalW = presW + retW;
+              const scale = totalW > 100 ? 100 / totalW : 1;
+              presW *= scale;
+              retW *= scale;
               return (
                 <div key={g.group} style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-                  <span style={{ width: 50, fontSize: 13, fontWeight: 600, color: '#1C1819', textAlign: 'right' }}>{g.group}</span>
-                  <div style={{ flex: 1, height: 20, background: '#F0EFEF', borderRadius: 4, overflow: 'hidden', display: 'flex' }}>
-                    <div style={{ width: `${(g.presentes / maxPresentes) * 100}%`, background: '#0F8122', height: '100%', transition: 'width 400ms' }} />
-                    <div style={{ width: `${(g.retardos / maxPresentes) * 100}%`, background: '#1792AB', height: '100%', transition: 'width 400ms' }} />
+                  <span style={{ width: 56, fontSize: 13, fontWeight: 600, color: '#1C1819', textAlign: 'right', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{g.group}</span>
+                  <div style={{ flex: 1, height: 20, background: 'var(--color-blanco-grisaceo)', borderRadius: 4, overflow: 'hidden', display: 'flex' }}>
+                    <div style={{ width: `${presW}%`, background: '#0F8122', height: '100%' }} />
+                    <div style={{ width: `${retW}%`, background: '#1792AB', height: '100%' }} />
                   </div>
-                  <span style={{ width: 32, fontSize: 12, fontWeight: 600, color: '#5F5657', textAlign: 'right' }}>{pct}%</span>
+                  <span style={{ width: 40, fontSize: 12, fontWeight: 600, color: 'var(--color-gris-carbon)', textAlign: 'right' }}>{pct}%</span>
                 </div>
               );
             })}
           </div>
-          <div style={{ display: 'flex', gap: 16, marginTop: 16, paddingTop: 12, borderTop: '1px solid #F0EFEF' }}>
-            <span style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: '#5F5657' }}>
+          <div style={{ display: 'flex', gap: 16, marginTop: 16, paddingTop: 12, borderTop: '1px solid var(--color-blanco-grisaceo)' }}>
+            <span style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: 'var(--color-gris-carbon)' }}>
               <span style={{ width: 10, height: 10, borderRadius: 2, background: '#0F8122' }} /> Presentes
             </span>
-            <span style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: '#5F5657' }}>
+            <span style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: 'var(--color-gris-carbon)' }}>
               <span style={{ width: 10, height: 10, borderRadius: 2, background: '#1792AB' }} /> Fuera de horario
             </span>
           </div>
         </div>
 
-        <div style={{ background: '#fff', borderRadius: 12, border: '1px solid #CAC6C7', padding: 20 }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
-            <h2 style={{ fontSize: 18, fontWeight: 700, color: '#1C1819', margin: 0, display: 'flex', alignItems: 'center', gap: 8 }}>
-              <Bell size={20} color="#EB2466" />
-              Alertas
-              {unresolvedIncidents.length > 0 && (
-                <span style={{
-                  display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-                  width: 22, height: 22, borderRadius: '50%', background: '#EB2466',
-                  color: '#fff', fontSize: 12, fontWeight: 700,
-                }}>
-                  {unresolvedIncidents.length}
-                </span>
+        {!esServiciosEscolares && (
+          <div style={{ background: '#fff', borderRadius: 12, border: '1px solid #CAC6C7', padding: 20 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+              <h2 style={{ fontSize: 18, fontWeight: 700, color: '#1C1819', margin: 0, display: 'flex', alignItems: 'center', gap: 8 }}>
+                <Bell size={20} color="#EB2466" />
+                Alertas
+                {reportesPendientes.length > 0 && (
+                  <span style={{
+                    display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+                    minWidth: 22, height: 22, padding: '0 6px', borderRadius: 11,
+                    background: '#EB2466', color: '#fff', fontSize: 12, fontWeight: 700,
+                  }}>
+                    {reportesPendientes.length}
+                  </span>
+                )}
+              </h2>
+              <button
+                onClick={() => navigate('/faltas')}
+                style={{
+                  display: 'flex', alignItems: 'center', gap: 4, background: 'none', border: 'none',
+                  color: '#EB2466', cursor: 'pointer', fontSize: 13, fontWeight: 600, fontFamily: 'var(--font-sans)',
+                }}
+              >
+                Ver todas <ChevronRight size={14} />
+              </button>
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+              {reportesPendientes.length === 0 ? (
+                <div style={{ padding: 32, textAlign: 'center', color: 'var(--color-gris-carbon)', fontSize: 14 }}>
+                  No hay alertas pendientes
+                </div>
+              ) : (
+                unresolvedIncidents.map(incident => {
+                  const isGrave = incident.gravedad === 'Grave';
+                  return (
+                    <button
+                      key={incident.id}
+                      className={`alert-item-btn ${isGrave ? 'alert-item-btn--grave' : ''}`}
+                      onClick={() => navigate('/faltas')}
+                    >
+                      <span style={{ width: 8, height: 8, borderRadius: '50%', flexShrink: 0, background: isGrave ? '#EB2466' : '#1792AB' }} />
+                      <span style={{ flex: 1, minWidth: 0 }}>
+                        <span style={{ display: 'block', fontSize: 13, fontWeight: 600, color: '#1C1819', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                          {incident.tipo}
+                        </span>
+                        <span style={{ display: 'block', fontSize: 12, color: 'var(--color-gris-carbon)' }}>
+                          {nombreCompleto(incident.alumno)} — {incident.fecha}
+                        </span>
+                      </span>
+                      <span style={{
+                        padding: '2px 8px', borderRadius: 8, fontSize: 11, fontWeight: 600,
+                        background: isGrave ? '#FEEBEE' : '#DCF5FF',
+                        color: isGrave ? '#EB2466' : '#1792AB', flexShrink: 0,
+                      }}>
+                        {incident.gravedad}
+                      </span>
+                    </button>
+                  );
+                })
               )}
-            </h2>
-            <button
-              onClick={() => navigate('/reportes')}
-              style={{
-                display: 'flex', alignItems: 'center', gap: 4, background: 'none', border: 'none',
-                color: '#EB2466', cursor: 'pointer', fontSize: 13, fontWeight: 600, fontFamily: 'var(--font-sans)',
-              }}
-            >
-              Ver todas <ChevronRight size={14} />
-            </button>
+            </div>
           </div>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-            {unresolvedIncidents.length === 0 ? (
-              <div style={{ padding: 32, textAlign: 'center', color: '#85787A', fontSize: 14 }}>
-                No hay alertas pendientes
-              </div>
-            ) : (
-              unresolvedIncidents.map(incident => {
-                const isGrave = incident.gravedad === 'Grave';
-                return (
-                  <div
-                    key={incident.id}
-                    style={{
-                      display: 'flex', alignItems: 'center', gap: 12, padding: '10px 12px',
-                      borderRadius: 8, border: '1px solid',
-                      borderColor: isGrave ? '#FEEBEE' : '#F0EFEF',
-                      background: isGrave ? '#FFF8F9' : '#fff',
-                    }}
-                  >
-                    <div style={{
-                      width: 8, height: 8, borderRadius: '50%', flexShrink: 0,
-                      background: isGrave ? '#EB2466' : '#1792AB',
-                    }} />
-                    <div style={{ flex: 1, minWidth: 0 }}>
-                      <div style={{ fontSize: 13, fontWeight: 600, color: '#1C1819', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                        {incident.tipo}
-                      </div>
-                      <div style={{ fontSize: 12, color: '#85787A' }}>
-                        {incident.alumno ? `${incident.alumno.nombre} ${incident.alumno.apellido_paterno} ${incident.alumno.apellido_materno}`.trim() : '---'} &mdash; {incident.fecha}
-                      </div>
-                    </div>
-                    <span style={{
-                      padding: '2px 8px', borderRadius: 8, fontSize: 11, fontWeight: 600,
-                      background: isGrave ? '#FEEBEE' : '#DCF5FF',
-                      color: isGrave ? '#EB2466' : '#1792AB',
-                    }}>
-                      {incident.gravedad}
-                    </span>
-                  </div>
-                );
-              })
-            )}
+        )}
+      </div>
+
+      {absentModalOpen && (
+        <div className="modal-backdrop" onClick={() => setAbsentModalOpen(false)}>
+          <div
+            className="modal"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="absent-modal-title"
+            onClick={e => e.stopPropagation()}
+          >
+            <div className="modal-header">
+              <h3 id="absent-modal-title">Alumnos ausentes de hoy</h3>
+              <button ref={absentCloseRef} className="modal-close" onClick={() => setAbsentModalOpen(false)} aria-label="Cerrar">
+                <X size={20} />
+              </button>
+            </div>
+            <div className="modal-body">
+              {absentStudents.length === 0 ? (
+                <p style={{ textAlign: 'center', color: 'var(--color-gris-carbon)', padding: '16px 0' }}>
+                  No hay alumnos ausentes de hoy.
+                </p>
+              ) : (
+                <>
+                  <p style={{ fontSize: 14, color: 'var(--color-gris-carbon)', marginBottom: 12 }}>
+                    {absentStudents.length} alumno{absentStudents.length === 1 ? '' : 's'} sin registro de entrada. Los que cuentan con permiso aprobado no se listan aquí.
+                  </p>
+                  <ul style={{ listStyle: 'none', display: 'flex', flexDirection: 'column', gap: 8, maxHeight: 320, overflowY: 'auto' }}>
+                    {absentStudents.map(a => (
+                      <li
+                        key={a.id}
+                        style={{
+                          display: 'flex', justifyContent: 'space-between', gap: 12,
+                          padding: '10px 12px', border: '1px solid var(--color-gris-plata)',
+                          borderRadius: 8, background: 'var(--color-white)',
+                        }}
+                      >
+                        <div style={{ minWidth: 0 }}>
+                          <div style={{ fontSize: 14, fontWeight: 600, color: '#1C1819' }}>{nombreCompleto(a)}</div>
+                          <div style={{ fontSize: 12, color: 'var(--color-gris-carbon)', marginTop: 2 }}>{a.matricula || 'Sin datos'}</div>
+                        </div>
+                        <div style={{ textAlign: 'right', flexShrink: 0 }}>
+                          <div style={{ fontSize: 13, fontWeight: 600, color: '#1C1819' }}>
+                            {a.id_grupo ? (grupoMap[a.id_grupo] || `Grupo ${a.id_grupo}`) : 'Sin grupo'}
+                          </div>
+                          {a.capacitacion && (
+                            <div style={{ fontSize: 12, color: 'var(--color-gris-carbon)', marginTop: 2 }}>{a.capacitacion}</div>
+                          )}
+                        </div>
+                      </li>
+                    ))}
+                  </ul>
+                </>
+              )}
+            </div>
+            <div className="modal-footer">
+              <button
+                className="btn btn--secondary btn--sm"
+                onClick={() => { setAbsentModalOpen(false); navigate('/alumnos'); }}
+              >
+                Gestionar alumnos
+              </button>
+              <button className="btn btn--primary btn--sm" onClick={() => setAbsentModalOpen(false)}>
+                Cerrar
+              </button>
+            </div>
           </div>
         </div>
-      </div>
+      )}
     </div>
   );
 }

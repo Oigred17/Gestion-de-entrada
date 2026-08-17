@@ -38,9 +38,9 @@ export default function ConfirmPasswordModal({
     } catch (err) {
       const status = (err as { response?: { status?: number } })?.response?.status;
       if (status === 401) {
-        setError('Contrasena incorrecta. Intente de nuevo.');
+        setError('Contraseña incorrecta. Intente de nuevo.');
       } else {
-        toastError('No se pudo verificar la contrasena');
+        toastError('No se pudo verificar la contraseña');
       }
     } finally {
       setVerifying(false);
@@ -60,11 +60,11 @@ export default function ConfirmPasswordModal({
         <div className="modal-body">
           <p style={{ fontSize: 14, color: '#5F5657', lineHeight: 1.6, marginBottom: 16 }}>{message}</p>
           <div>
-            <label className="field-label" style={{ marginBottom: 6, display: 'block' }}>Contrasena del usuario</label>
+            <label className="field-label" style={{ marginBottom: 6, display: 'block' }}>Contraseña del usuario</label>
             <input
               type="password"
               className={`input ${error ? 'input--error' : ''}`}
-              placeholder="Ingrese su contrasena..."
+              placeholder="Ingrese su contraseña..."
               value={password}
               onChange={(e) => { setPassword(e.target.value); setError(''); }}
               onKeyDown={(e) => { if (e.key === 'Enter') handleConfirm(); }}

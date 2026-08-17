@@ -22,10 +22,36 @@ export default function KioscoEntradasPage() {
   const reconnectTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const resultTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const pulseTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [estacionAbierta, setEstacionAbierta] = useState(false);
 
   useEffect(() => {
     const timer = setInterval(() => setNow(new Date()), 1000);
     return () => clearInterval(timer);
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    let heartbeat: ReturnType<typeof setInterval> | null = null;
+
+    const open = async () => {
+      try {
+        await nfcApi.abrirEstacion();
+        if (!cancelled) setEstacionAbierta(true);
+        heartbeat = setInterval(() => {
+          nfcApi.heartbeatEstacion().catch(() => setEstacionAbierta(false));
+        }, 30000);
+      } catch {
+        if (!cancelled) setEstacionAbierta(false);
+      }
+    };
+    open();
+
+    return () => {
+      cancelled = true;
+      if (heartbeat) clearInterval(heartbeat);
+      setEstacionAbierta(false);
+      nfcApi.cerrarEstacion().catch(() => {});
+    };
   }, []);
 
   const connectWS = useCallback(() => {
@@ -130,10 +156,12 @@ export default function KioscoEntradasPage() {
           <p className="kiosk-scan-sub">
             {errorMsg ? (
               errorMsg
+            ) : !estacionAbierta ? (
+              'Estación cerrada — inicia sesión con Entrada o Prefectura'
             ) : wsConnected ? (
-              'Lector conectado - Escaneo en tiempo real'
+              'Estación abierta — lector listo'
             ) : (
-              'Conectando lector NFC...'
+              'Estación abierta — conectando lector NFC...'
             )}
           </p>
           {errorMsg && (
@@ -142,7 +170,7 @@ export default function KioscoEntradasPage() {
               <span>{errorMsg}</span>
             </div>
           )}
-          <div className={`kiosk-status-dot ${wsConnected ? 'on' : 'off'}`} />
+          <div className={`kiosk-status-dot ${wsConnected && estacionAbierta ? 'on' : 'off'}`} />
         </div>
 
         {result && (

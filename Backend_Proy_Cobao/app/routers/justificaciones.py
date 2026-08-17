@@ -21,7 +21,7 @@ async def listar_justificaciones(
 async def obtener_justificacion(id_justificacion: int, db: AsyncSession = Depends(get_db)):
     justificacion = await crud_justificacion.get_justificacion(db, id_justificacion)
     if not justificacion:
-        raise HTTPException(status_code=404, detail="Justificacion no encontrada")
+        raise HTTPException(status_code=404, detail="Justificación no encontrada")
     return justificacion
 
 
@@ -34,7 +34,7 @@ async def crear_justificacion(data: JustificacionCreate, db: AsyncSession = Depe
 async def actualizar_justificacion(id_justificacion: int, data: JustificacionUpdate, db: AsyncSession = Depends(get_db)):
     justificacion = await crud_justificacion.update_justificacion(db, id_justificacion, data)
     if not justificacion:
-        raise HTTPException(status_code=404, detail="Justificacion no encontrada")
+        raise HTTPException(status_code=404, detail="Justificación no encontrada")
     return justificacion
 
 
@@ -42,4 +42,4 @@ async def actualizar_justificacion(id_justificacion: int, data: JustificacionUpd
 async def eliminar_justificacion(id_justificacion: int, db: AsyncSession = Depends(get_db)):
     ok = await crud_justificacion.delete_justificacion(db, id_justificacion)
     if not ok:
-        raise HTTPException(status_code=404, detail="Justificacion no encontrada")
+        raise HTTPException(status_code=404, detail="Justificación no encontrada")

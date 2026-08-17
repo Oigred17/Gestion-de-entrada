@@ -1,9 +1,9 @@
 """
 Script para leer tarjetas NFC con lector ACR122U y enviarlas al backend.
 
-Funciona en Windows y Linux.
-En Windows: se ejecuta externamente (auto-inicio con VBS).
-En Linux: se ejecuta dentro del contenedor Docker.
+El lector es una "estacion de entrada": no usa usuario/contraseña.
+Solo necesita la URL del servidor y la llave de estacion (nfc_key.txt),
+la misma que NFC_API_KEY en el .env del servidor.
 
 Instalacion:
     pip install pyscard requests
@@ -11,10 +11,12 @@ Instalacion:
 Uso:
     python nfc_reader.py
     python nfc_reader.py --url http://localhost:8000/api/v1/nfc/scan
-    python nfc_reader.py --url https://tunel.trycloudflare.com/api/v1/nfc/scan --key MI_LLAVE
+    python nfc_reader.py --url https://tunel.trycloudflare.com/api/v1/nfc/scan
 
-La llave de API (si el backend la exige) se lee de nfc_key.txt, de la variable
-de entorno NFC_API_KEY o del argumento --key.
+Llave de estacion (prioridad):
+    1. Argumento --key
+    2. Variable de entorno NFC_API_KEY
+    3. Archivo nfc_key.txt junto a este script o al exe
 """
 
 import os
@@ -42,17 +44,26 @@ POLL_INTERVAL = 0.5
 RETRY_READER_INTERVAL = 5
 
 
-def load_api_key(cli_key: str) -> str:
-    if cli_key:
-        return cli_key.strip()
-    env_key = os.environ.get("NFC_API_KEY", "").strip()
-    if env_key:
-        return env_key
-    key_file = Path(__file__).resolve().parent / "nfc_key.txt"
-    if key_file.exists():
-        value = key_file.read_text(encoding="utf-8").strip()
-        if value:
-            return value
+def _search_dirs():
+    dirs = []
+    if getattr(sys, "frozen", False):
+        dirs.append(Path(sys.executable).resolve().parent)
+    dirs.append(Path(__file__).resolve().parent)
+    return dirs
+
+
+def load_value(cli_value: str, env_name: str, file_name: str) -> str:
+    if cli_value:
+        return cli_value.strip()
+    env_value = os.environ.get(env_name, "").strip()
+    if env_value:
+        return env_value
+    for search_dir in _search_dirs():
+        value_file = search_dir / file_name
+        if value_file.exists():
+            value = value_file.read_text(encoding="utf-8").strip()
+            if value:
+                return value
     return ""
 
 
@@ -71,17 +82,16 @@ def read_card(reader):
         data, sw1, sw2 = connection.transmit([0xFF, 0xCA, 0x00, 0x00, 0x00])
 
         if sw1 == 0x90 and sw2 == 0x00:
-            uid = toHexString(data).replace(' ', ':')
+            uid = toHexString(data).replace(" ", ":")
             connection.disconnect()
             return uid
-        else:
-            connection.disconnect()
-            return None
+        connection.disconnect()
+        return None
     except Exception:
         return None
 
 
-def send_to_backend(url, uid_nfc, api_key):
+def send_to_backend(url: str, uid_nfc: str, api_key: str):
     try:
         headers = {}
         if api_key:
@@ -93,12 +103,24 @@ def send_to_backend(url, uid_nfc, api_key):
             timeout=5,
         )
         if response.status_code == 200:
-            print(f"  -> Enviado al backend: {uid_nfc}")
-        elif response.status_code == 401 or response.status_code == 403:
+            try:
+                payload = response.json()
+            except Exception:
+                payload = {}
+            status = payload.get("status", "processed")
+            if status == "ignored":
+                print(f"  -> Estacion cerrada (no se registro): {payload.get('message', '')}")
+            elif status in ("denied", "error"):
+                print(f"  -> Rechazado: {payload.get('message', response.text)}")
+            else:
+                print(f"  -> Enviado al backend: {uid_nfc}")
+        elif response.status_code == 401:
             print(
-                f"  -> Error ({response.status_code}): no autorizado. "
-                "Revisa la llave de API (nfc_key.txt) o el token del backend."
+                "  -> Error (401): llave de estacion incorrecta o ausente. "
+                "Revisa nfc_key.txt (debe coincidir con NFC_API_KEY del servidor)."
             )
+        elif response.status_code == 403:
+            print(f"  -> Error (403): sin permiso para registrar. {response.text}")
         else:
             print(f"  -> Error del backend ({response.status_code}): {response.text}")
     except requests.exceptions.ConnectionError:
@@ -117,20 +139,21 @@ def main():
     parser.add_argument(
         "--key",
         default="",
-        help="Llave de API del backend (o crea nfc_key.txt junto a este script)",
+        help="Llave de estacion NFC (o crea nfc_key.txt junto a este programa)",
     )
     args = parser.parse_args()
 
-    api_key = load_api_key(args.key)
+    api_key = load_value(args.key, "NFC_API_KEY", "nfc_key.txt")
 
     print("=" * 50)
-    print("  Lector NFC ACR122U - COBAO")
+    print("  Lector NFC ACR122U - COBAO (estacion de entrada)")
     print("=" * 50)
     print(f"Backend: {args.url}")
     if api_key:
-        print("Llave de API: configurada")
+        print(f"Llave:   configurada ({len(api_key)} caracteres)")
     else:
-        print("Llave de API: NO configurada (el backend puede rechazar las lecturas)")
+        print("Llave:   NO configurada (el backend rechazara las lecturas)")
+        print("         -> Copia NFC_API_KEY del servidor a nfc_key.txt")
     print("Retire la tarjeta del lector antes de la siguiente lectura.")
     print()
 
@@ -153,7 +176,6 @@ def main():
             uid = read_card(reader)
 
             if uid:
-                # Una lectura por acercamiento: exige retirar la tarjeta para reenviar.
                 if not card_present or uid != last_uid:
                     timestamp = time.strftime("%H:%M:%S")
                     print(f"[{timestamp}] Tarjeta detectada: {uid}")

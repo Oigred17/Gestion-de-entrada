@@ -5,6 +5,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.crud import registro_acceso as crud_registro
 from app.database import get_db
+from app.dependencies import require_registrar_acceso
 from app.schemas.registro_acceso import RegistroAccesoCreate, RegistroAccesoResponse
 
 router = APIRouter(prefix="/registros-acceso", tags=["Registros de Acceso"])
@@ -31,7 +32,12 @@ async def obtener_registro(id_registro: int, db: AsyncSession = Depends(get_db))
     return registro
 
 
-@router.post("/", response_model=RegistroAccesoResponse, status_code=201)
+@router.post(
+    "/",
+    response_model=RegistroAccesoResponse,
+    status_code=201,
+    dependencies=[Depends(require_registrar_acceso)],
+)
 async def registrar_acceso(
     data: RegistroAccesoCreate, db: AsyncSession = Depends(get_db)
 ):

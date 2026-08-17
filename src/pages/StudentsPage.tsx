@@ -267,7 +267,7 @@ export default function StudentsPage() {
     setConfirmAction({
       type: "save_edit",
       title: "Guardar cambios del alumno",
-      message: "Esta accion guardara los cambios realizados en los datos del alumno. Ingrese su contrasena para confirmar.",
+      message: "Esta acción guardará los cambios realizados en los datos del alumno. Ingrese su contraseña para confirmar.",
       confirmLabel: "Guardar cambios",
     });
   };
@@ -333,14 +333,14 @@ export default function StudentsPage() {
     const grupoManual = newGrupoManual.trim();
     const grupoSeleccionado = newGrupo.trim();
     if (!newName.trim() || !newControl.trim() || (!grupoManual && !grupoSeleccionado)) {
-      showToast("Nombre, numero de control y grupo son obligatorios", "error");
+      showToast("Nombre, número de control y grupo son obligatorios", "error");
       return;
     }
     let id_grupo: number | undefined;
     if (grupoManual) {
       const clave = Number(grupoManual);
       if (isNaN(clave)) {
-        showToast("El grupo debe ser un numero (ej. 201)", "error");
+        showToast("El grupo debe ser un número (ej. 201)", "error");
         return;
       }
       try {
@@ -393,7 +393,7 @@ export default function StudentsPage() {
       type: "toggle_status",
       student,
       title: accion === "reactivar" ? "Reactivar alumno" : "Dar de baja alumno",
-      message: `¿Desea ${accion} al alumno ${`${student.nombre} ${student.apellido_paterno} ${student.apellido_materno}`.trim()} (${student.matricula})? Ingrese su contrasena para confirmar.`,
+      message: `¿Desea ${accion} al alumno ${`${student.nombre} ${student.apellido_paterno} ${student.apellido_materno}`.trim()} (${student.matricula})? Ingrese su contraseña para confirmar.`,
       confirmLabel: accion === "reactivar" ? "Reactivar" : "Dar de baja",
     });
   };
@@ -411,7 +411,7 @@ export default function StudentsPage() {
 
   const handleDownloadTemplate = () => {
     const headers = [
-      "NOMBRE DEL ESTUDIANTE", "MATRICULA", "GRUPO",
+      "NOMBRE DEL ESTUDIANTE", "MATRÍCULA", "GRUPO",
     ];
     const ws = XLSX.utils.aoa_to_sheet([headers]);
     const wb = XLSX.utils.book_new();
@@ -421,13 +421,13 @@ export default function StudentsPage() {
 
   const HEADER_KEYS: { key: string; label: string }[] = [
     { key: "nombre", label: "NOMBRE" },
-    { key: "matricula", label: "MATRICULA" },
+      { key: "matricula", label: "MATRÍCULA" },
     { key: "grupo", label: "GRUPO" },
     { key: "turno", label: "TURNO" },
     { key: "capacitacion", label: "CAPACITACION" },
     { key: "curp", label: "CURP" },
     { key: "tutor", label: "TUTOR" },
-    { key: "telefono", label: "TELEFONO" },
+      { key: "telefono", label: "TELÉFONO" },
     { key: "nss", label: "NSS" },
     { key: "tipo_sangre", label: "TIPO SANGRE" },
     { key: "fecha_nacimiento", label: "FECHA NACIMIENTO" },
@@ -512,7 +512,7 @@ export default function StudentsPage() {
           }
         }
         if (sheetsData.length === 0) {
-          setUploadError("No se encontraron datos validos en ninguna hoja. Busque al menos columnas: NOMBRE y MATRICULA.");
+          setUploadError("No se encontraron datos válidos en ninguna hoja. Busque al menos columnas: NOMBRE y MATRÍCULA.");
           setUploadFile(null);
           return;
         }
@@ -549,7 +549,7 @@ export default function StudentsPage() {
     setConfirmAction({
       type: "import",
       title: "Importar alumnos",
-      message: `Esta accion importara ${totalRows} alumno(s) desde el archivo seleccionado. Ingrese su contrasena para confirmar.`,
+      message: `Esta acción importará ${totalRows} alumno(s) desde el archivo seleccionado. Ingrese su contraseña para confirmar.`,
       confirmLabel: "Importar alumnos",
     });
   };
@@ -685,7 +685,7 @@ export default function StudentsPage() {
             />
             <input
               type="text"
-              placeholder="Buscar por nombre, matricula o grupo"
+              placeholder="Buscar por nombre, matrícula o grupo"
               value={search}
               onChange={(e) => {
                 setSearch(e.target.value);
@@ -908,9 +908,9 @@ export default function StudentsPage() {
                 "Nombre",
                 "No. Control",
                 "Grupo",
-                "Capacitacion",
+                "Capacitación",
                 "Tutor",
-                "Telefono",
+                "Teléfono",
                 "Estado",
                 "Acciones",
               ].map((col) => (
@@ -1245,7 +1245,7 @@ export default function StudentsPage() {
             {panelMode === "view" && (
               <>
                 <div style={{ padding: "0 32px", marginBottom: 24 }}>
-                  <h3 style={{ fontSize: 14, fontWeight: 600, color: "#EB2466", textTransform: "uppercase", marginBottom: 12, letterSpacing: 0.5 }}>Informacion general</h3>
+                  <h3 style={{ fontSize: 14, fontWeight: 600, color: "#EB2466", textTransform: "uppercase", marginBottom: 12, letterSpacing: 0.5 }}>Información general</h3>
                   <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "8px 24px", fontSize: 14 }}>
                     <div><span style={{ color: "#5F5657", fontSize: 12 }}>Grupo</span><div style={{ fontWeight: 500 }}>{getGrupoName(selectedStudent.id_grupo)}</div></div>
                     <div><span style={{ color: "#5F5657", fontSize: 12 }}>Capacitacion</span><div style={{ fontWeight: 500 }}>{selectedStudent.capacitacion || '---'}</div></div>
@@ -1266,9 +1266,9 @@ export default function StudentsPage() {
                 <div style={{ padding: "0 32px", marginBottom: 24 }}>
                   <h3 style={{ fontSize: 14, fontWeight: 600, color: "#EB2466", textTransform: "uppercase", marginBottom: 12, letterSpacing: 0.5 }}>Contacto</h3>
                   <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "8px 24px", fontSize: 14 }}>
-                    <div style={{ gridColumn: "span 2" }}><span style={{ color: "#5F5657", fontSize: 12 }}>Direccion</span><div style={{ fontWeight: 500 }}>{selectedStudent.direccion || '---'}</div></div>
+                    <div style={{ gridColumn: "span 2" }}><span style={{ color: "#5F5657", fontSize: 12 }}>Dirección</span><div style={{ fontWeight: 500 }}>{selectedStudent.direccion || '---'}</div></div>
                     <div><span style={{ color: "#5F5657", fontSize: 12 }}>Tutor</span><div style={{ fontWeight: 500 }}>{selectedStudent.tutor_nombre || '---'}</div></div>
-                    <div><span style={{ color: "#5F5657", fontSize: 12 }}>Telefono tutor</span><div style={{ fontWeight: 500 }}>{selectedStudent.tutor_telefono || '---'}</div></div>
+                    <div><span style={{ color: "#5F5657", fontSize: 12 }}>Teléfono tutor</span><div style={{ fontWeight: 500 }}>{selectedStudent.tutor_telefono || '---'}</div></div>
                   </div>
                 </div>
               </>
@@ -1278,7 +1278,7 @@ export default function StudentsPage() {
             {panelMode === "edit" && (
               <>
                 <div style={{ padding: "0 32px", marginBottom: 24 }}>
-                  <h3 style={{ fontSize: 14, fontWeight: 600, color: "#EB2466", textTransform: "uppercase", marginBottom: 12, letterSpacing: 0.5 }}>Informacion general</h3>
+                  <h3 style={{ fontSize: 14, fontWeight: 600, color: "#EB2466", textTransform: "uppercase", marginBottom: 12, letterSpacing: 0.5 }}>Información general</h3>
                   <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px 24px", fontSize: 14 }}>
                     <div style={{ gridColumn: "span 2" }}>
                       <span style={{ color: "#5F5657", fontSize: 12 }}>Nombre</span>
@@ -1308,7 +1308,7 @@ export default function StudentsPage() {
                   </div>
                 </div>
                 <div style={{ padding: "0 32px", marginBottom: 24 }}>
-                  <h3 style={{ fontSize: 14, fontWeight: 600, color: "#EB2466", textTransform: "uppercase", marginBottom: 12, letterSpacing: 0.5 }}>Informacion personal</h3>
+                  <h3 style={{ fontSize: 14, fontWeight: 600, color: "#EB2466", textTransform: "uppercase", marginBottom: 12, letterSpacing: 0.5 }}>Información personal</h3>
                   <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px 24px", fontSize: 14 }}>
                     <div style={{ gridColumn: "span 2" }}>
                       <span style={{ color: "#5F5657", fontSize: 12 }}>CURP</span>
@@ -1336,7 +1336,7 @@ export default function StudentsPage() {
                       <input type="text" value={editTutorNombre} onChange={(e) => setEditTutorNombre(e.target.value)} style={{ width: "100%", padding: "6px 10px", border: "1px solid #CAC6C7", borderRadius: 6, fontSize: 14, fontWeight: 500, marginTop: 4, fontFamily: "var(--font-sans)" }} />
                     </div>
                     <div>
-                      <span style={{ color: "#5F5657", fontSize: 12 }}>Telefono tutor</span>
+                      <span style={{ color: "#5F5657", fontSize: 12 }}>Teléfono tutor</span>
                       <input type="text" value={editTelefonoTutor} onChange={(e) => setEditTelefonoTutor(e.target.value)} style={{ width: "100%", padding: "6px 10px", border: "1px solid #CAC6C7", borderRadius: 6, fontSize: 14, fontWeight: 500, marginTop: 4, fontFamily: "var(--font-sans)" }} />
                     </div>
                     <div>
@@ -1720,7 +1720,7 @@ export default function StudentsPage() {
             {newStudentMode === "manual" && (
               <>
                 <div style={{ marginBottom: 20 }}>
-                  <h3 style={{ fontSize: 14, fontWeight: 600, color: "#EB2466", textTransform: "uppercase", marginBottom: 12, letterSpacing: 0.5 }}>Informacion general</h3>
+                  <h3 style={{ fontSize: 14, fontWeight: 600, color: "#EB2466", textTransform: "uppercase", marginBottom: 12, letterSpacing: 0.5 }}>Información general</h3>
                   <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px 16px", fontSize: 14 }}>
                     <div style={{ gridColumn: "span 2" }}>
                       <span style={{ color: "#5F5657", fontSize: 12 }}>Nombre *</span>
@@ -1766,7 +1766,7 @@ export default function StudentsPage() {
                   </div>
                 </div>
                 <div style={{ marginBottom: 20 }}>
-                  <h3 style={{ fontSize: 14, fontWeight: 600, color: "#EB2466", textTransform: "uppercase", marginBottom: 12, letterSpacing: 0.5 }}>Informacion personal</h3>
+                  <h3 style={{ fontSize: 14, fontWeight: 600, color: "#EB2466", textTransform: "uppercase", marginBottom: 12, letterSpacing: 0.5 }}>Información personal</h3>
                   <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px 16px", fontSize: 14 }}>
                     <div style={{ gridColumn: "span 2" }}>
                       <span style={{ color: "#5F5657", fontSize: 12 }}>CURP</span>
@@ -1791,15 +1791,15 @@ export default function StudentsPage() {
                   <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px 16px", fontSize: 14 }}>
                     <div style={{ gridColumn: "span 2" }}>
                       <span style={{ color: "#5F5657", fontSize: 12 }}>Domicilio</span>
-                      <input type="text" value={newDomicilio} onChange={(e) => setNewDomicilio(e.target.value)} placeholder="Direccion completa" style={{ width: "100%", padding: "8px 10px", border: "1px solid #CAC6C7", borderRadius: 6, fontSize: 14, marginTop: 4, fontFamily: "var(--font-sans)", boxSizing: "border-box" }} />
+                      <input type="text" value={newDomicilio} onChange={(e) => setNewDomicilio(e.target.value)}           placeholder="Dirección completa" style={{ width: "100%", padding: "8px 10px", border: "1px solid #CAC6C7", borderRadius: 6, fontSize: 14, marginTop: 4, fontFamily: "var(--font-sans)", boxSizing: "border-box" }} />
                     </div>
                     <div>
                       <span style={{ color: "#5F5657", fontSize: 12 }}>Nombre tutor</span>
                       <input type="text" value={newTutor} onChange={(e) => setNewTutor(e.target.value)} placeholder="Nombre del tutor" style={{ width: "100%", padding: "8px 10px", border: "1px solid #CAC6C7", borderRadius: 6, fontSize: 14, marginTop: 4, fontFamily: "var(--font-sans)", boxSizing: "border-box" }} />
                     </div>
                     <div>
-                      <span style={{ color: "#5F5657", fontSize: 12 }}>Telefono tutor</span>
-                      <input type="text" value={newTelefonoTutor} onChange={(e) => setNewTelefonoTutor(e.target.value)} placeholder="10 digitos" style={{ width: "100%", padding: "8px 10px", border: "1px solid #CAC6C7", borderRadius: 6, fontSize: 14, marginTop: 4, fontFamily: "var(--font-sans)", boxSizing: "border-box" }} />
+                      <span style={{ color: "#5F5657", fontSize: 12 }}>Teléfono tutor</span>
+                      <input type="text" value={newTelefonoTutor} onChange={(e) => setNewTelefonoTutor(e.target.value)} placeholder="10 dígitos" style={{ width: "100%", padding: "8px 10px", border: "1px solid #CAC6C7", borderRadius: 6, fontSize: 14, marginTop: 4, fontFamily: "var(--font-sans)", boxSizing: "border-box" }} />
                     </div>
                   </div>
                 </div>
@@ -1846,7 +1846,7 @@ export default function StudentsPage() {
             {newStudentMode === "upload" && (
               <>
                 <div style={{ padding: "12px 16px", borderRadius: 8, background: "#F0EFEF", marginBottom: 20, fontSize: 13, color: "#5F5657", lineHeight: 1.6 }}>
-                  <strong>Formato requerido:</strong> El archivo debe contener al menos las columnas <strong>NOMBRE</strong> y <strong>MATRICULA</strong>. Opcionalmente se detectan: <strong>GRUPO</strong>, <strong>TURNO</strong>, <strong>CAPACITACION</strong>, <strong>CURP</strong>, <strong>TUTOR</strong>, <strong>TELEFONO</strong>, <strong>NSS</strong>, <strong>TIPO SANGRE</strong>, <strong>FECHA NACIMIENTO</strong>, <strong>COHORTE</strong> y <strong>DOMICILIO</strong>. Soporta archivos con multiples hojas (cada hoja = un grupo).
+                  <strong>Formato requerido:</strong> El archivo debe contener al menos las columnas <strong>NOMBRE</strong> y <strong>MATRÍCULA</strong>. Opcionalmente se detectan: <strong>GRUPO</strong>, <strong>TURNO</strong>, <strong>CAPACITACIÓN</strong>, <strong>CURP</strong>, <strong>TUTOR</strong>, <strong>TELÉFONO</strong>, <strong>NSS</strong>, <strong>TIPO SANGRE</strong>, <strong>FECHA NACIMIENTO</strong>, <strong>COHORTE</strong> y <strong>DOMICILIO</strong>. Soporta archivos con múltiples hojas (cada hoja = un grupo).
                 </div>
 
                 <div style={{ display: "flex", gap: 12, marginBottom: 20 }}>

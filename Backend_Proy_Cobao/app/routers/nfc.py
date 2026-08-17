@@ -2,7 +2,7 @@ import json
 import logging
 from datetime import datetime
 
-from fastapi import APIRouter, WebSocket, WebSocketDisconnect, Depends
+from fastapi import APIRouter, WebSocket, WebSocketDisconnect, Depends, HTTPException
 from pydantic import BaseModel
 from sqlalchemy import select, func, and_
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -10,6 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.crud import credencial as crud_credencial
 from app.crud import registro_acceso as crud_registro
 from app.database import async_session
+from app.dependencies import require_registrar_acceso
 from app.models.registro_acceso import RegistroAcceso
 from app.nfc_manager import nfc_manager
 from app.schemas.registro_acceso import RegistroAccesoCreate
@@ -30,7 +31,7 @@ class NFCWriteRequest(BaseModel):
     credencial_id: int
 
 
-async def _process_card_read(uid_nfc: str, db=None):
+async def _process_card_read(uid_nfc: str, db=None, *, via_estacion_key: bool = False):
     close_db = False
     if db is None:
         db = async_session()
@@ -47,7 +48,22 @@ async def _process_card_read(uid_nfc: str, db=None):
                 "uid_nfc": uid_nfc,
                 "timestamp": datetime.now().isoformat(),
             })
-            return
+            return {"status": "captured", "uid_nfc": uid_nfc}
+
+        # Lector físico: solo registra si Entrada/Prefectura tiene Escaneo abierto.
+        if via_estacion_key and not nfc_manager.registro_permitido():
+            msg = (
+                "Estación cerrada. Un usuario de Entrada o Prefectura debe "
+                "abrir la pantalla de Escaneo o Kiosco."
+            )
+            await nfc_manager.broadcast({
+                "type": "scan_result",
+                "status": "denied",
+                "uid_nfc": uid_nfc,
+                "message": msg,
+                "timestamp": datetime.now().isoformat(),
+            })
+            return {"status": "ignored", "uid_nfc": uid_nfc, "message": msg}
 
         credencial = await crud_credencial.get_credencial_by_uid(db, uid_nfc)
         if not credencial:
@@ -58,7 +74,7 @@ async def _process_card_read(uid_nfc: str, db=None):
                 "message": "Credencial no reconocida",
                 "timestamp": datetime.now().isoformat(),
             })
-            return
+            return {"status": "denied", "uid_nfc": uid_nfc, "message": "Credencial no reconocida"}
 
         if not credencial.activa:
             await nfc_manager.broadcast({
@@ -69,7 +85,11 @@ async def _process_card_read(uid_nfc: str, db=None):
                 "credencial_id": credencial.id_credencial,
                 "timestamp": datetime.now().isoformat(),
             })
-            return
+            return {
+                "status": "denied",
+                "uid_nfc": uid_nfc,
+                "message": "Credencial desactivada",
+            }
 
         now = datetime.now()
         tipo_evento = "ENTRADA"
@@ -100,7 +120,6 @@ async def _process_card_read(uid_nfc: str, db=None):
             from app.crud import alumno as crud_alumno
             alumno = await crud_alumno.get_alumno(db, credencial.id_alumno)
             if alumno:
-                parts = (alumno.nombre_completo or "").split()
                 alumno_data = {
                     "id": alumno.id_alumno,
                     "nombre": alumno.nombre_completo,
@@ -117,6 +136,12 @@ async def _process_card_read(uid_nfc: str, db=None):
             "alumno": alumno_data,
             "timestamp": now.isoformat(),
         })
+        return {
+            "status": "processed",
+            "uid_nfc": uid_nfc,
+            "tipo_evento": tipo_evento,
+            "registro_id": registro.id_registro,
+        }
 
     except Exception as e:
         logger.error(f"Error procesando tarjeta NFC: {e}")
@@ -127,6 +152,7 @@ async def _process_card_read(uid_nfc: str, db=None):
             "message": str(e),
             "timestamp": datetime.now().isoformat(),
         })
+        return {"status": "error", "uid_nfc": uid_nfc, "message": str(e)}
     finally:
         if close_db:
             await db.close()
@@ -151,10 +177,49 @@ async def websocket_nfc(websocket: WebSocket):
 
 
 @router.post("/scan")
-async def receive_scan(data: NFCScanRequest):
+async def receive_scan(
+    data: NFCScanRequest,
+    current_user=Depends(require_registrar_acceso),
+):
+    via_estacion_key = current_user is None
     async with async_session() as db:
-        await _process_card_read(data.uid_nfc, db)
-    return {"status": "processed", "uid_nfc": data.uid_nfc}
+        result = await _process_card_read(
+            data.uid_nfc, db, via_estacion_key=via_estacion_key
+        )
+    return result or {"status": "processed", "uid_nfc": data.uid_nfc}
+
+
+@router.get("/estacion")
+async def estado_estacion(current_user=Depends(require_registrar_acceso)):
+    return nfc_manager.estado_estacion()
+
+
+@router.post("/estacion/abrir")
+async def abrir_estacion(current_user=Depends(require_registrar_acceso)):
+    if current_user is None:
+        raise HTTPException(
+            status_code=403,
+            detail="La llave de estación no puede abrir el registro; inicia sesión en la web.",
+        )
+    nfc_manager.abrir_estacion(current_user.username)
+    return {"status": "ok", **nfc_manager.estado_estacion()}
+
+
+@router.post("/estacion/heartbeat")
+async def heartbeat_estacion(current_user=Depends(require_registrar_acceso)):
+    if current_user is None:
+        raise HTTPException(status_code=403, detail="Se requiere sesión de usuario")
+    if not nfc_manager.heartbeat_estacion():
+        nfc_manager.abrir_estacion(current_user.username)
+    return {"status": "ok", **nfc_manager.estado_estacion()}
+
+
+@router.post("/estacion/cerrar")
+async def cerrar_estacion(current_user=Depends(require_registrar_acceso)):
+    if current_user is None:
+        raise HTTPException(status_code=403, detail="Se requiere sesión de usuario")
+    nfc_manager.cerrar_estacion()
+    return {"status": "ok", **nfc_manager.estado_estacion()}
 
 
 @router.post("/write")

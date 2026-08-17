@@ -1,6 +1,9 @@
 # Secrets
 .env
 nfc_key.txt
+nfc_pass.txt
+**/nfc_pass.txt
+**/nfc_user.txt
 
 # Node
 node_modules/

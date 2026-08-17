@@ -12,7 +12,7 @@ export default function LoginPage() {
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
 
-  // Estado del flujo de recuperacion de contrasena
+  // Estado del flujo de recuperación de contraseña
   const [recoverOpen, setRecoverOpen] = useState(false);
   const [recoverStep, setRecoverStep] = useState<'ask' | 'username' | 'code' | 'done'>('ask');
   const [recoverUsername, setRecoverUsername] = useState('');
@@ -61,7 +61,7 @@ export default function LoginPage() {
       const res = await authApi.requestRecoveryCode(uname);
       if (res.status === 'ok') {
         setRecoverEmail(res.email || '');
-        setRecoverMsg({ type: 'ok', text: res.message || 'Se envio el codigo a tu correo.' });
+        setRecoverMsg({ type: 'ok', text: res.message || 'Se envió el código a tu correo.' });
         setRecoverStep('code');
       } else {
         setRecoverMsg({ type: 'error', text: res.message || 'No se pudo enviar el correo.' });
@@ -90,15 +90,15 @@ export default function LoginPage() {
     }
     if (recoverStep === 'code') {
       if (!/^\d{6}$/.test(recoverCode.trim())) {
-        setRecoverMsg({ type: 'error', text: 'Ingresa el codigo de 6 digitos recibido por correo.' });
+        setRecoverMsg({ type: 'error', text: 'Ingresa el código de 6 dígitos recibido por correo.' });
         return;
       }
       if (newPassword.length < 4) {
-        setRecoverMsg({ type: 'error', text: 'La nueva contrasena debe tener al menos 4 caracteres.' });
+        setRecoverMsg({ type: 'error', text: 'La nueva contraseña debe tener al menos 4 caracteres.' });
         return;
       }
       if (newPassword !== confirmPassword) {
-        setRecoverMsg({ type: 'error', text: 'Las contrasenas no coinciden.' });
+        setRecoverMsg({ type: 'error', text: 'Las contraseñas no coinciden.' });
         return;
       }
       setRecoverLoading(true);
@@ -112,7 +112,7 @@ export default function LoginPage() {
         setRecoverStep('done');
       } catch (err: any) {
         const detail = err?.response?.data?.detail;
-        const text = typeof detail === 'string' ? detail : 'No se pudo restablecer la contrasena.';
+        const text = typeof detail === 'string' ? detail : 'No se pudo restablecer la contraseña.';
         setRecoverMsg({ type: 'error', text });
       } finally {
         setRecoverLoading(false);
@@ -248,7 +248,7 @@ export default function LoginPage() {
             Plantel 27 Miahuatlan
           </p>
 
-          {/* Descripcion */}
+          {/* Descripción */}
           <p
             style={{
               fontSize: 14,
@@ -420,13 +420,13 @@ export default function LoginPage() {
                   marginBottom: 6,
                 }}
               >
-                Contrasena
+                Contraseña
               </label>
               <div style={{ position: 'relative' }}>
                 <input
                   id="password"
                   type={showPassword ? 'text' : 'password'}
-                  placeholder="Ingresa tu contrasena"
+                  placeholder="Ingresa tu contraseña"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   style={{
@@ -461,7 +461,7 @@ export default function LoginPage() {
                     display: 'flex',
                     alignItems: 'center',
                   }}
-                  aria-label={showPassword ? 'Ocultar contrasena' : 'Mostrar contrasena'}
+                  aria-label={showPassword ? 'Ocultar contraseña' : 'Mostrar contraseña'}
                 >
                   {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
                 </button>
@@ -524,7 +524,7 @@ export default function LoginPage() {
                   fontFamily: 'var(--font-sans)',
                 }}
               >
-                Olvidaste tu contrasena
+                Olvidaste tu contraseña
               </button>
             </div>
 
@@ -586,7 +586,7 @@ export default function LoginPage() {
         Colegio de Bachilleres del Estado de Oaxaca. Todos los derechos reservados.
       </div>
 
-      {/* Modal de recuperacion de contrasena */}
+      {/* Modal de recuperación de contraseña */}
       {recoverOpen && (
         <>
           <div
@@ -635,7 +635,7 @@ export default function LoginPage() {
                 )}
               </div>
               <h2 style={{ margin: 0, fontSize: 20, fontWeight: 700, color: '#1C1819' }}>
-                Recuperar contrasena
+                Recuperar contraseña
               </h2>
             </div>
 
@@ -651,9 +651,9 @@ export default function LoginPage() {
                   }}
                 >
                   {recoverUsername.trim() ? (
-                    <>Se enviara un codigo de verificacion al correo electronico registrado del usuario <b>{recoverUsername.trim()}</b>. Continuar?</>
+                    <>Se enviará un código de verificación al correo electrónico registrado del usuario <b>{recoverUsername.trim()}</b>. Continuar?</>
                   ) : (
-                    <>Se enviara un codigo de verificacion al correo electronico registrado de tu cuenta.</>
+                    <>Se enviará un código de verificación al correo electrónico registrado de tu cuenta.</>
                   )}
                 </p>
                 {recoverMsg && (
@@ -718,7 +718,7 @@ export default function LoginPage() {
             {recoverStep === 'username' && (
               <>
                 <p style={{ fontSize: 14, color: '#5F5657', lineHeight: 1.6, textAlign: 'center', margin: '0 0 16px' }}>
-                  Ingresa tu usuario para enviar el codigo al correo registrado.
+                  Ingresa tu usuario para enviar el código al correo registrado.
                 </p>
                 <input
                   type="text"
@@ -770,7 +770,7 @@ export default function LoginPage() {
                     fontFamily: 'var(--font-sans)',
                   }}
                 >
-                  {recoverLoading ? 'Enviando...' : 'Enviar codigo'}
+                  {recoverLoading ? 'Enviando...' : 'Enviar código'}
                 </button>
               </>
             )}
@@ -779,16 +779,16 @@ export default function LoginPage() {
               <>
                 <p style={{ fontSize: 14, color: '#5F5657', lineHeight: 1.6, textAlign: 'center', margin: '0 0 16px' }}>
                   {recoverEmail && (
-                    <>Se envio un codigo de verificacion a <b>{recoverEmail}</b>.</>
+                    <>Se envió un código de verificación a <b>{recoverEmail}</b>.</>
                   )}
                   <br />
-                  Ingresa el codigo y define tu nueva contrasena.
+                  Ingresa el código y define tu nueva contraseña.
                 </p>
                 <input
                   type="text"
                   inputMode="numeric"
                   maxLength={6}
-                  placeholder="Codigo de verificacion"
+                  placeholder="Código de verificación"
                   value={recoverCode}
                   onChange={(e) => setRecoverCode(e.target.value.replace(/\D/g, ''))}
                   style={{
@@ -810,7 +810,7 @@ export default function LoginPage() {
                 />
                 <input
                   type="password"
-                  placeholder="Nueva contrasena"
+                  placeholder="Nueva contraseña"
                   value={newPassword}
                   onChange={(e) => setNewPassword(e.target.value)}
                   style={{
@@ -829,7 +829,7 @@ export default function LoginPage() {
                 />
                 <input
                   type="password"
-                  placeholder="Confirmar nueva contrasena"
+                  placeholder="Confirmar nueva contraseña"
                   value={confirmPassword}
                   onChange={(e) => setConfirmPassword(e.target.value)}
                   onKeyDown={(e) => {
@@ -878,7 +878,7 @@ export default function LoginPage() {
                     fontFamily: 'var(--font-sans)',
                   }}
                 >
-                  {recoverLoading ? 'Restableciendo...' : 'Restablecer contrasena'}
+                  {recoverLoading ? 'Restableciendo...' : 'Restablecer contraseña'}
                 </button>
               </>
             )}
@@ -886,7 +886,7 @@ export default function LoginPage() {
             {recoverStep === 'done' && (
               <>
                 <p style={{ fontSize: 14, color: '#0F8122', lineHeight: 1.6, textAlign: 'center', margin: '0 0 20px', fontWeight: 500 }}>
-                  Tu contrasena se actualizo correctamente. Ya puedes iniciar sesion con la nueva contrasena.
+                  Tu contraseña se actualizó correctamente. Ya puedes iniciar sesión con la nueva contraseña.
                 </p>
                 <button
                   onClick={closeRecover}

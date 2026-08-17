@@ -7,7 +7,7 @@ import { useAuth } from '../context/AuthContext';
 import { toastSuccess, toastError } from '@/lib/toast';
 import Loader from '../components/Loader';
 
-const tipoOptions = ['Acceso sin credencial', 'Credencial danada', 'Acceso fuera de horario', 'Alumno no registrado', 'Intento no autorizado', 'Salida sin credencial', 'Otro'];
+const tipoOptions = ['Acceso sin credencial', 'Credencial dañada', 'Acceso fuera de horario', 'Alumno no registrado', 'Intento no autorizado', 'Salida sin credencial', 'Otro'];
 
 interface IncidentsPageProps {
   role: UserRole;
@@ -98,7 +98,7 @@ export default function IncidentsPage({ role }: IncidentsPageProps) {
     const errors: Record<string, string> = {};
     if (!formTipo) errors.tipo = 'Selecciona un tipo de incidencia';
     if (!formAlumnoSelected) errors.alumno = 'Selecciona un alumno del sistema';
-    if (!formDescripcion.trim()) errors.descripcion = 'Escribe una descripcion';
+    if (!formDescripcion.trim()) errors.descripcion = 'Escribe una descripción';
     setFormErrors(errors);
     return Object.keys(errors).length === 0;
   };
@@ -133,7 +133,7 @@ export default function IncidentsPage({ role }: IncidentsPageProps) {
       toastSuccess('Incidencia registrada', `${formTipo} para ${nombreAlumno(nueva)}`);
     } catch (e: unknown) {
       const err = e as { response?: { data?: { detail?: string } } };
-      toastError('No se pudo registrar', err.response?.data?.detail || 'Ocurrio un error');
+      toastError('No se pudo registrar', err.response?.data?.detail || 'Ocurrió un error');
     } finally {
       setSaving(false);
     }
@@ -181,7 +181,7 @@ export default function IncidentsPage({ role }: IncidentsPageProps) {
         <div className="table-container">
           <table className="table">
             <thead>
-              <tr><th>#</th><th>Fecha y Hora</th><th>Tipo</th><th>Alumno</th><th>Descripcion</th><th>Registrado por</th><th>Acciones</th></tr>
+              <tr><th>#</th><th>Fecha y Hora</th><th>Tipo</th><th>Alumno</th><th>Descripción</th><th>Registrado por</th><th>Acciones</th></tr>
             </thead>
             <tbody>
               {paginated.length === 0 && (
@@ -243,7 +243,7 @@ export default function IncidentsPage({ role }: IncidentsPageProps) {
                   <input
                     type="text"
                     className={`input input--search ${formErrors.alumno ? 'input--error' : ''}`}
-                    placeholder="Buscar por nombre o matricula..."
+                    placeholder="Buscar por nombre o matrícula..."
                     value={formAlumnoQuery}
                     onChange={(e) => {
                       setFormAlumnoQuery(e.target.value);
@@ -308,7 +308,7 @@ export default function IncidentsPage({ role }: IncidentsPageProps) {
               </div>
 
               <div className="input-group" style={{ marginBottom: 16 }}>
-                <label className="field-label">Descripcion *</label>
+                <label className="field-label">Descripción *</label>
                 <textarea className={`textarea ${formErrors.descripcion ? 'input--error' : ''}`} rows={4} placeholder="Describe la incidencia..." value={formDescripcion} onChange={(e) => { setFormDescripcion(e.target.value); setFormErrors(prev => ({ ...prev, descripcion: '' })); }} />
                 {formErrors.descripcion && <span style={{ fontSize: 12, color: '#AB1748', marginTop: 4, display: 'block' }}>{formErrors.descripcion}</span>}
               </div>
@@ -374,7 +374,7 @@ export default function IncidentsPage({ role }: IncidentsPageProps) {
                 </div>
               </div>
               <div>
-                <span className="field-label">Descripcion</span>
+                <span className="field-label">Descripción</span>
                 <div>{detail.descripcion}</div>
               </div>
               {detail.evidencia_base64 && (

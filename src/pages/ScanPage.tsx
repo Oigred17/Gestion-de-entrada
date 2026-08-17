@@ -42,6 +42,7 @@ export default function ScanPage() {
   const wsRef = useRef<WebSocket | null>(null);
   const reconnectTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const scanTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [estacionAbierta, setEstacionAbierta] = useState(false);
 
   useEffect(() => {
     const loadData = async () => {
@@ -144,6 +145,32 @@ export default function ScanPage() {
     };
   }, [connectWS]);
 
+  // Abre la estación solo mientras esta pantalla está abierta (con sesión).
+  useEffect(() => {
+    let cancelled = false;
+    let heartbeat: ReturnType<typeof setInterval> | null = null;
+
+    const open = async () => {
+      try {
+        await nfcApi.abrirEstacion();
+        if (!cancelled) setEstacionAbierta(true);
+        heartbeat = setInterval(() => {
+          nfcApi.heartbeatEstacion().catch(() => setEstacionAbierta(false));
+        }, 30000);
+      } catch {
+        if (!cancelled) setEstacionAbierta(false);
+      }
+    };
+    open();
+
+    return () => {
+      cancelled = true;
+      if (heartbeat) clearInterval(heartbeat);
+      setEstacionAbierta(false);
+      nfcApi.cerrarEstacion().catch(() => {});
+    };
+  }, []);
+
   const handleManualSave = async () => {
     if (!manualSelected) return;
     setManualSaving(true);
@@ -207,9 +234,13 @@ export default function ScanPage() {
   return (
     <div className="scan-page">
       {/* Status de conexion */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 16, padding: '8px 16px', borderRadius: 8, background: wsConnected ? '#E8F5E9' : '#FEEBEE', fontSize: 13, fontWeight: 600, color: wsConnected ? '#0F8122' : '#AB1748' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 16, padding: '8px 16px', borderRadius: 8, background: wsConnected && estacionAbierta ? '#E8F5E9' : '#FEEBEE', fontSize: 13, fontWeight: 600, color: wsConnected && estacionAbierta ? '#0F8122' : '#AB1748' }}>
         {wsConnected ? <Wifi size={16} /> : <WifiOff size={16} />}
-        {wsConnected ? 'Lector NFC conectado - Esperando tarjeta...' : 'Lector NFC desconectado - Reconectando...'}
+        {!estacionAbierta
+          ? 'Estación cerrada — no se registrarán lecturas del lector físico'
+          : wsConnected
+            ? 'Estación abierta — lector NFC listo, esperando tarjeta...'
+            : 'Estación abierta — reconectando WebSocket...'}
       </div>
 
       {/* PESTANAS */}
@@ -251,7 +282,7 @@ export default function ScanPage() {
           <div style={{ position: 'relative', marginBottom: 16 }}>
             <div className="input-wrapper">
               <Search size={16} className="input-icon" />
-              <input type="text" className="input input--search" placeholder="Buscar alumno por nombre o matricula..." value={manualQuery} onChange={(e) => { setManualQuery(e.target.value); setManualSelected(null); setShowManualDropdown(true); }} onFocus={() => { if (!manualSelected && manualQuery) setShowManualDropdown(true); }} onBlur={() => setTimeout(() => setShowManualDropdown(false), 200)} />
+              <input type="text" className="input input--search" placeholder="Buscar alumno por nombre o matrícula..." value={manualQuery} onChange={(e) => { setManualQuery(e.target.value); setManualSelected(null); setShowManualDropdown(true); }} onFocus={() => { if (!manualSelected && manualQuery) setShowManualDropdown(true); }} onBlur={() => setTimeout(() => setShowManualDropdown(false), 200)} />
               {manualSelected && (
                 <button onClick={() => { setManualSelected(null); setManualQuery(''); }} style={{ position: 'absolute', right: 8, top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', cursor: 'pointer', color: '#85787A', padding: 2 }}>
                   <XIcon size={16} />
@@ -280,7 +311,7 @@ export default function ScanPage() {
             )}
           </div>
           <div style={{ marginBottom: 16 }}>
-            <div style={{ fontSize: 13, fontWeight: 600, color: '#5F5657', marginBottom: 6 }}>Codigo de autorizacion (opcional)</div>
+            <div style={{ fontSize: 13, fontWeight: 600, color: '#5F5657', marginBottom: 6 }}>Código de autorización (opcional)</div>
             <div style={{ position: 'relative' }}>
               <KeyRound size={16} style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', color: '#85787A' }} />
               <input

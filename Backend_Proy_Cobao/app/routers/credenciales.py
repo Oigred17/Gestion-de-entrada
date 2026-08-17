@@ -14,7 +14,7 @@ from app.schemas.credencial import (
 router = APIRouter(prefix="/credenciales", tags=["Credenciales"])
 
 MSG_CHIP_YA_ASIGNADO = (
-    "Este chip NFC ya esta asignado a otra credencial. Usa un chip diferente."
+    "Este chip NFC ya está asignado a otra credencial. Usa un chip diferente."
 )
 
 MSG_ALUMNO_YA_TIENE_CREDENCIAL = (

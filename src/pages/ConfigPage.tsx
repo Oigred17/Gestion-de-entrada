@@ -209,42 +209,42 @@ export default function ConfigPage({ role }: ConfigPageProps) {
       id: 1,
       nombre: 'Entrada registrada',
       asunto: 'Entrada registrada - {nombre_alumno}',
-      cuerpo: 'El alumno {nombre_alumno} del grupo {grupo} registro su entrada a las {hora}.',
+      cuerpo: 'El alumno {nombre_alumno} del grupo {grupo} registró su entrada a las {hora}.',
       variables: ['{nombre_alumno}', '{grupo}', '{hora}'],
     },
     {
       id: 2,
       nombre: 'Salida registrada',
       asunto: 'Salida registrada - {nombre_alumno}',
-      cuerpo: 'El alumno {nombre_alumno} del grupo {grupo} registro su salida a las {hora}.',
+      cuerpo: 'El alumno {nombre_alumno} del grupo {grupo} registró su salida a las {hora}.',
       variables: ['{nombre_alumno}', '{grupo}', '{hora}'],
     },
     {
       id: 3,
       nombre: 'Entrada fuera de horario',
       asunto: 'Entrada fuera de horario registrada - {nombre_alumno}',
-      cuerpo: 'El alumno {nombre_alumno} del grupo {grupo} llego fuera del horario de clase a las {hora}.',
+      cuerpo: 'El alumno {nombre_alumno} del grupo {grupo} llegó fuera del horario de clase a las {hora}.',
       variables: ['{nombre_alumno}', '{grupo}', '{hora}'],
     },
     {
       id: 4,
       nombre: 'Falta',
       asunto: 'Falta registrada - {nombre_alumno}',
-      cuerpo: 'El alumno {nombre_alumno} del grupo {grupo} registro falta el dia de hoy.',
+      cuerpo: 'El alumno {nombre_alumno} del grupo {grupo} registró falta el día de hoy.',
       variables: ['{nombre_alumno}', '{grupo}'],
     },
     {
       id: 5,
       nombre: 'Salida anticipada',
       asunto: 'Salida anticipada - {nombre_alumno}',
-      cuerpo: 'El alumno {nombre_alumno} del grupo {grupo} salio anticipadamente a las {hora} por motivo de: {motivo}.',
+      cuerpo: 'El alumno {nombre_alumno} del grupo {grupo} salió anticipadamente a las {hora} por motivo de: {motivo}.',
       variables: ['{nombre_alumno}', '{grupo}', '{hora}', '{motivo}'],
     },
     {
       id: 6,
       nombre: 'Incidencia de seguridad',
       asunto: 'Incidencia de seguridad - {nombre_alumno}',
-      cuerpo: 'Se reporto una incidencia de seguridad con el alumno {nombre_alumno} del grupo {grupo}. Motivo: {motivo}.',
+      cuerpo: 'Se reportó una incidencia de seguridad con el alumno {nombre_alumno} del grupo {grupo}. Motivo: {motivo}.',
       variables: ['{nombre_alumno}', '{grupo}', '{motivo}'],
     },
     {
@@ -307,14 +307,14 @@ export default function ConfigPage({ role }: ConfigPageProps) {
       setHorariosEspeciales(mapHorarios(cfg.horarios));
       toastSuccess('Horario agregado');
     } catch (err) {
-      toastError('No se pudo agregar el horario', errMsg(err, 'Ocurrio un error'));
+      toastError('No se pudo agregar el horario', errMsg(err, 'Ocurrió un error'));
     }
   };
 
   const removeHorarioEspecial = (id: number) => {
     setConfirm({
       title: 'Eliminar horario',
-      message: '¿Seguro que deseas eliminar este horario especial? Esta accion no se puede deshacer. Ingrese su contrasena para confirmar.',
+      message: '¿Seguro que deseas eliminar este horario especial? Esta acción no se puede deshacer. Ingrese su contraseña para confirmar.',
       confirmLabel: 'Eliminar',
       run: async () => {
         try {
@@ -322,7 +322,7 @@ export default function ConfigPage({ role }: ConfigPageProps) {
           setHorariosEspeciales(prev => prev.filter(h => h.id !== id));
           toastSuccess('Horario eliminado');
         } catch (err) {
-          toastError('No se pudo eliminar el horario', errMsg(err, 'Ocurrio un error'));
+          toastError('No se pudo eliminar el horario', errMsg(err, 'Ocurrió un error'));
         }
       },
     });
@@ -364,7 +364,7 @@ export default function ConfigPage({ role }: ConfigPageProps) {
           email: nuevoUsuario.email || undefined,
           rol_id: nuevoUsuario.rol_id,
         });
-        toastSuccess('Usuario actualizado', `Se actualizo a ${nuevoUsuario.username}.`);
+        toastSuccess('Usuario actualizado', `Se actualizó a ${nuevoUsuario.username}.`);
       } else {
         const password = autoGenerate || !nuevoUsuario.contrasena ? generarContrasena() : nuevoUsuario.contrasena;
         await usuariosApi.create({
@@ -378,7 +378,7 @@ export default function ConfigPage({ role }: ConfigPageProps) {
         toastSuccess(
           'Usuario creado',
           autoGenerate
-            ? `Contrasena generada: ${password}`
+            ? `Contraseña generada: ${password}`
             : `Usuario ${nuevoUsuario.username} creado correctamente.`
         );
       }
@@ -386,7 +386,7 @@ export default function ConfigPage({ role }: ConfigPageProps) {
       setUsuarios(updated);
       closeUsuarioModal();
     } catch (err) {
-      toastError(usuarioEnEdicion ? 'No se pudo actualizar el usuario' : 'No se pudo crear el usuario', errMsg(err, 'Ocurrio un error'));
+      toastError(usuarioEnEdicion ? 'No se pudo actualizar el usuario' : 'No se pudo crear el usuario', errMsg(err, 'Ocurrió un error'));
     } finally {
       setGuardandoUsuario(false);
     }
@@ -395,7 +395,7 @@ export default function ConfigPage({ role }: ConfigPageProps) {
   const removeUsuario = (id: number) => {
     setConfirm({
       title: 'Eliminar usuario',
-      message: '¿Seguro que deseas eliminar este usuario? Esta accion no se puede deshacer. Ingrese su contrasena para confirmar.',
+      message: '¿Seguro que deseas eliminar este usuario? Esta acción no se puede deshacer. Ingrese su contraseña para confirmar.',
       confirmLabel: 'Eliminar',
       run: async () => {
         try {
@@ -403,7 +403,7 @@ export default function ConfigPage({ role }: ConfigPageProps) {
           setUsuarios(prev => prev.filter(u => u.id !== id));
           toastSuccess('Usuario eliminado');
         } catch (err) {
-          toastError('No se pudo eliminar el usuario', errMsg(err, 'Ocurrio un error'));
+          toastError('No se pudo eliminar el usuario', errMsg(err, 'Ocurrió un error'));
         }
       },
     });
@@ -419,9 +419,9 @@ export default function ConfigPage({ role }: ConfigPageProps) {
         correo: correoInstitucional,
         logo_base64: logo ?? undefined,
       });
-      toastSuccess('Configuracion guardada', 'La informacion del plantel se actualizo correctamente.');
+      toastSuccess('Configuración guardada', 'La información del plantel se actualizó correctamente.');
     } catch (err) {
-      toastError('No se pudo guardar', errMsg(err, 'Ocurrio un error'));
+      toastError('No se pudo guardar', errMsg(err, 'Ocurrió un error'));
     } finally {
       setGuardando(false);
     }
@@ -448,7 +448,7 @@ export default function ConfigPage({ role }: ConfigPageProps) {
       }
       toastSuccess('Horarios guardados', 'El horario oficial y los horarios especiales se actualizaron.');
     } catch (err) {
-      toastError('No se pudo guardar', errMsg(err, 'Ocurrio un error'));
+      toastError('No se pudo guardar', errMsg(err, 'Ocurrió un error'));
     } finally {
       setGuardando(false);
     }
@@ -466,9 +466,9 @@ export default function ConfigPage({ role }: ConfigPageProps) {
         smtp_from: smtp.remitente,
       });
       localStorage.setItem('plantillas_notif', JSON.stringify(plantillas));
-      toastSuccess('Notificaciones guardadas', 'La configuracion de canales y las plantillas se actualizaron.');
+      toastSuccess('Notificaciones guardadas', 'La configuración de canales y las plantillas se actualizaron.');
     } catch (err) {
-      toastError('No se pudo guardar', errMsg(err, 'Ocurrio un error'));
+      toastError('No se pudo guardar', errMsg(err, 'Ocurrió un error'));
     } finally {
       setGuardando(false);
     }
@@ -566,20 +566,20 @@ export default function ConfigPage({ role }: ConfigPageProps) {
   const renderGeneralTab = () => (
     <div style={s.tabContent}>
       <div style={s.section}>
-        <h3 style={s.sectionTitle}>Informacion del Plantel</h3>
+        <h3 style={s.sectionTitle}>Información del Plantel</h3>
         <div style={s.grid2}>
           <div style={s.field}>
             <label style={s.label}>Nombre del Plantel</label>
             <input type="text" style={s.input} value={plantelNombre} onChange={e => setPlantelNombre(e.target.value)} onFocus={handleInputFocus} onBlur={handleInputBlur} />
           </div>
           <div style={s.field}>
-            <label style={s.label}>Telefono</label>
+            <label style={s.label}>Teléfono</label>
             <input type="tel" style={s.input} value={telefono} onChange={e => setTelefono(e.target.value)} placeholder="(273) 123-4567" onFocus={handleInputFocus} onBlur={handleInputBlur} />
           </div>
         </div>
         <div style={s.field}>
-          <label style={s.label}>Direccion</label>
-          <textarea style={s.textarea} rows={3} value={direccion} onChange={e => setDireccion(e.target.value)} placeholder="Direccion completa del plantel" onFocus={handleInputFocus} onBlur={handleInputBlur} />
+          <label style={s.label}>Dirección</label>
+          <textarea style={s.textarea} rows={3} value={direccion} onChange={e => setDireccion(e.target.value)} placeholder="Dirección completa del plantel" onFocus={handleInputFocus} onBlur={handleInputBlur} />
         </div>
         <div style={s.grid2}>
           <div style={s.field}>
@@ -766,7 +766,7 @@ export default function ConfigPage({ role }: ConfigPageProps) {
             {!usuarioEnEdicion && (
               <>
                 <div style={s.field}>
-                  <label style={s.label}>Contrasena</label>
+                  <label style={s.label}>Contraseña</label>
                   <div style={s.passwordRow}>
                     <input
                       type={showPassword ? 'text' : 'password'}
@@ -793,7 +793,7 @@ export default function ConfigPage({ role }: ConfigPageProps) {
                   </div>
                   <label style={s.checkboxLabel}>
                     <input type="checkbox" checked={autoGenerate} onChange={e => setAutoGenerate(e.target.checked)} />
-                    Contrasena auto-generada
+                    Contraseña auto-generada
                   </label>
                 </div>
                 <label style={s.checkboxLabel}>
@@ -821,7 +821,7 @@ export default function ConfigPage({ role }: ConfigPageProps) {
 
       {notifEmail && (
         <div style={s.section}>
-          <h3 style={s.sectionTitle}>Configuracion SMTP</h3>
+          <h3 style={s.sectionTitle}>Configuración SMTP</h3>
           <div style={s.grid2}>
             <div style={s.field}>
               <label style={s.label}>Servidor SMTP</label>
@@ -836,12 +836,12 @@ export default function ConfigPage({ role }: ConfigPageProps) {
               <input style={s.input} value={smtp.usuario} onChange={e => setSmtp({ ...smtp, usuario: e.target.value })} placeholder="usuario@gmail.com" onFocus={handleInputFocus} onBlur={handleInputBlur} />
             </div>
             <div style={s.field}>
-              <label style={s.label}>Contrasena</label>
-              <input type="password" style={s.input} value={smtp.contrasena} onChange={e => setSmtp({ ...smtp, contrasena: e.target.value })} onFocus={handleInputFocus} onBlur={handleInputBlur} />
+          <label style={s.label}>Contraseña</label>
+          <input type="password" style={s.input} value={smtp.contrasena} onChange={e => setSmtp({ ...smtp, contrasena: e.target.value })} onFocus={handleInputFocus} onBlur={handleInputBlur} />
             </div>
           </div>
           <div style={s.field}>
-            <label style={s.label}>Direccion remitente</label>
+            <label style={s.label}>Dirección remitente</label>
             <input style={s.input} value={smtp.remitente} onChange={e => setSmtp({ ...smtp, remitente: e.target.value })} placeholder="Plantel 27 <notificaciones@plantel27.edu.mx>" onFocus={handleInputFocus} onBlur={handleInputBlur} />
           </div>
         </div>
@@ -951,7 +951,7 @@ export default function ConfigPage({ role }: ConfigPageProps) {
       const map: Record<string, string> = {
         nombre: 'Nombre', plantel: 'Plantel', no_control: 'No. Control',
         domicilio1: 'Domicilio 1', domicilio2: 'Domicilio 2', domicilio3: 'Domicilio 3',
-        curp: 'CURP', tipo_sangre: 'Tipo Sangre', afiliacion: 'Afiliacion',
+        curp: 'CURP', tipo_sangre: 'Tipo Sangre', afiliacion: 'Afiliación',
         tutor: 'Tutor', tel_tutor: 'Tel. Tutor', firma: 'Firma',
       };
       return map[key] ?? key;
@@ -966,9 +966,9 @@ export default function ConfigPage({ role }: ConfigPageProps) {
       domicilio3: 'C.P. 75920',
       curp: 'CURP: MAJP050310HTCPPR09',
       tipo_sangre: 'TIPO DE SANGRE: O+',
-      afiliacion: 'NUMERO DE AFILIACION: 987654',
+      afiliacion: 'NÚMERO DE AFILIACIÓN: 987654',
       tutor: 'TUTOR: MARIA LOPEZ GARCIA',
-      tel_tutor: 'TELEFONO TUTOR: 2731234567',
+      tel_tutor: 'TELÉFONO TUTOR: 2731234567',
       firma: 'LIC. FABIAN OCAMPO GODINEZ',
     };
 
@@ -1327,7 +1327,7 @@ export default function ConfigPage({ role }: ConfigPageProps) {
                 setRespaldos(prev => [nuevo, ...prev]);
                 toastSuccess('Respaldo generado', `El respaldo quedo listo (${nuevo.tamano}).`);
               } catch (err) {
-                toastError('No se pudo generar el respaldo', errMsg(err, 'Ocurrio un error'));
+                toastError('No se pudo generar el respaldo', errMsg(err, 'Ocurrió un error'));
               } finally {
                 setGenerandoRespaldo(false);
               }
@@ -1386,7 +1386,7 @@ export default function ConfigPage({ role }: ConfigPageProps) {
                             a.remove();
                             URL.revokeObjectURL(url);
                           } catch (err) {
-                            toastError('No se pudo descargar', errMsg(err, 'Ocurrio un error'));
+                            toastError('No se pudo descargar', errMsg(err, 'Ocurrió un error'));
                           }
                         }}
                       >
@@ -1397,7 +1397,7 @@ export default function ConfigPage({ role }: ConfigPageProps) {
                         title="Eliminar"
                         onClick={() => setConfirm({
                           title: 'Eliminar respaldo',
-                          message: '¿Seguro que deseas eliminar este respaldo? Esta accion no se puede deshacer. Ingrese su contrasena para confirmar.',
+                          message: '¿Seguro que deseas eliminar este respaldo? Esta acción no se puede deshacer. Ingrese su contraseña para confirmar.',
                           confirmLabel: 'Eliminar',
                           run: async () => {
                             try {
@@ -1405,7 +1405,7 @@ export default function ConfigPage({ role }: ConfigPageProps) {
                               setRespaldos(prev => prev.filter(x => x.id !== r.id));
                               toastSuccess('Respaldo eliminado');
                             } catch (err) {
-                              toastError('No se pudo eliminar el respaldo', errMsg(err, 'Ocurrio un error'));
+                              toastError('No se pudo eliminar el respaldo', errMsg(err, 'Ocurrió un error'));
                             }
                           },
                         })}

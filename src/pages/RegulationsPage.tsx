@@ -71,7 +71,7 @@ export default function RegulationsPage({ role }: { role: UserRole }) {
 
   const handleCreate = async () => {
     if (!formAlumnoSelected || !formMotivo || !formSancion) {
-      toastError('Faltan datos', 'Selecciona un alumno y completa motivo y sancion');
+      toastError('Faltan datos', 'Selecciona un alumno y completa motivo y sanción');
       return;
     }
     setSaving(true);
@@ -89,7 +89,7 @@ export default function RegulationsPage({ role }: { role: UserRole }) {
       toastSuccess('Falta registrada', `Falta registrada para ${nombreAlumno(nuevo)}`);
     } catch (e: unknown) {
       const err = e as { response?: { data?: { detail?: string } } };
-      toastError('No se pudo registrar', err.response?.data?.detail || 'Ocurrio un error al guardar');
+      toastError('No se pudo registrar', err.response?.data?.detail || 'Ocurrió un error al guardar');
     } finally {
       setSaving(false);
     }
@@ -110,7 +110,7 @@ export default function RegulationsPage({ role }: { role: UserRole }) {
 
   const handleSaveEdit = async () => {
     if (!editing || !formMotivo || !formSancion) {
-      toastError('Faltan datos', 'Completa motivo y sancion');
+      toastError('Faltan datos', 'Completa motivo y sanción');
       return;
     }
     setSaving(true);
@@ -126,7 +126,7 @@ export default function RegulationsPage({ role }: { role: UserRole }) {
       toastSuccess('Falta actualizada');
     } catch (e: unknown) {
       const err = e as { response?: { data?: { detail?: string } } };
-      toastError('No se pudo actualizar', err.response?.data?.detail || 'Ocurrio un error');
+      toastError('No se pudo actualizar', err.response?.data?.detail || 'Ocurrió un error');
     } finally {
       setSaving(false);
     }
@@ -137,11 +137,11 @@ export default function RegulationsPage({ role }: { role: UserRole }) {
       const updated = await reportesApi.update(r.id, { sancion_cumplida: !r.sancion_cumplida });
       setReportes(prev => prev.map(x => (x.id === r.id ? updated : x)));
       toastSuccess(
-        updated.sancion_cumplida ? 'Sancion marcada como cumplida' : 'Sancion marcada como pendiente'
+        updated.sancion_cumplida ? 'Sanción marcada como cumplida' : 'Sanción marcada como pendiente'
       );
     } catch (e: unknown) {
       const err = e as { response?: { data?: { detail?: string } } };
-      toastError('No se pudo actualizar', err.response?.data?.detail || 'Ocurrio un error');
+      toastError('No se pudo actualizar', err.response?.data?.detail || 'Ocurrió un error');
     }
   };
 
@@ -178,7 +178,7 @@ export default function RegulationsPage({ role }: { role: UserRole }) {
   const handleDelete = (r: Reporte) => {
     setConfirm({
       title: 'Eliminar falta',
-      message: `¿Seguro que deseas eliminar la falta de ${nombreAlumno(r)}? Esta accion no se puede deshacer. Ingrese su contrasena para confirmar.`,
+      message: `¿Seguro que deseas eliminar la falta de ${nombreAlumno(r)}? Esta acción no se puede deshacer. Ingrese su contraseña para confirmar.`,
       run: async () => {
         try {
           await reportesApi.delete(r.id);
@@ -186,7 +186,7 @@ export default function RegulationsPage({ role }: { role: UserRole }) {
           toastSuccess('Falta eliminada');
         } catch (e: unknown) {
           const err = e as { response?: { data?: { detail?: string } } };
-          toastError('No se pudo eliminar', err.response?.data?.detail || 'Ocurrio un error');
+          toastError('No se pudo eliminar', err.response?.data?.detail || 'Ocurrió un error');
         }
       },
     });
@@ -213,7 +213,7 @@ export default function RegulationsPage({ role }: { role: UserRole }) {
         <div className="toolbar-center">
           <div className="input-wrapper">
             <Search size={18} className="input-icon" />
-            <input type="text" className="input input--search" placeholder="Buscar por motivo, sancion o alumno..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} />
+            <input type="text" className="input input--search" placeholder="Buscar por motivo, sanción o alumno..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} />
           </div>
         </div>
         <div className="toolbar-right">
@@ -230,7 +230,7 @@ export default function RegulationsPage({ role }: { role: UserRole }) {
           <table className="table">
             <thead>
               <tr>
-                <th>#</th><th>Alumno</th><th>Matricula</th><th>Motivo</th><th>Sancion</th><th>Cumplida</th><th>Fecha</th><th>Acciones</th>
+                <th>#</th><th>Alumno</th><th>Matrícula</th><th>Motivo</th><th>Sanción</th><th>Cumplida</th><th>Fecha</th><th>Acciones</th>
               </tr>
             </thead>
             <tbody>
@@ -280,7 +280,7 @@ export default function RegulationsPage({ role }: { role: UserRole }) {
                 <label className="field-label">Alumno</label>
                 <input
                   className="input"
-                  placeholder="Buscar alumno por nombre o matricula..."
+                  placeholder="Buscar alumno por nombre o matrícula..."
                   value={formAlumnoSelected ? `${formAlumnoSelected.nombre} ${formAlumnoSelected.apellido_paterno} - ${formAlumnoSelected.matricula}` : formAlumnoQuery}
                   onChange={(e) => { setFormAlumnoQuery(e.target.value); setFormAlumnoSelected(null); }}
                   disabled={!!editing}
@@ -306,8 +306,8 @@ export default function RegulationsPage({ role }: { role: UserRole }) {
                 <textarea className="input" rows={3} value={formMotivo} onChange={(e) => setFormMotivo(e.target.value)} placeholder="Describe la falta..." />
               </div>
               <div>
-                <label className="field-label">Sancion</label>
-                <textarea className="input" rows={3} value={formSancion} onChange={(e) => setFormSancion(e.target.value)} placeholder="Describe la sancion..." />
+                <label className="field-label">Sanción</label>
+                <textarea className="input" rows={3} value={formSancion} onChange={(e) => setFormSancion(e.target.value)} placeholder="Describe la sanción..." />
               </div>
             </div>
             <div className="modal-footer">
@@ -335,7 +335,7 @@ export default function RegulationsPage({ role }: { role: UserRole }) {
               <div><span style={{ color: '#5F5657', fontSize: 12 }}>Alumno</span>
                 <div style={{ fontWeight: 500 }}>{nombreAlumno(detailModal)}</div>
               </div>
-              <div><span style={{ color: '#5F5657', fontSize: 12 }}>Matricula</span>
+              <div><span style={{ color: '#5F5657', fontSize: 12 }}>Matrícula</span>
                 <div style={{ fontFamily: 'var(--font-mono)' }}>{detailModal.alumno?.matricula ?? '---'}</div>
               </div>
               <div><span style={{ color: '#5F5657', fontSize: 12 }}>Fecha</span>
@@ -344,10 +344,10 @@ export default function RegulationsPage({ role }: { role: UserRole }) {
               <div><span style={{ color: '#5F5657', fontSize: 12 }}>Motivo</span>
                 <div>{detailModal.motivo}</div>
               </div>
-              <div><span style={{ color: '#5F5657', fontSize: 12 }}>Sancion</span>
+              <div><span style={{ color: '#5F5657', fontSize: 12 }}>Sanción</span>
                 <div>{detailModal.sancion}</div>
               </div>
-              <div><span style={{ color: '#5F5657', fontSize: 12 }}>Sancion cumplida</span>
+              <div><span style={{ color: '#5F5657', fontSize: 12 }}>Sanción cumplida</span>
                 <div style={{ fontWeight: 500, color: detailModal.sancion_cumplida ? '#0F8122' : '#5F5657' }}>
                   {detailModal.sancion_cumplida ? 'Si' : 'No'}
                 </div>

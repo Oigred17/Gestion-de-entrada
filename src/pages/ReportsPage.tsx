@@ -16,8 +16,8 @@ import {
   Plus,
   X,
 } from 'lucide-react';
-import { alumnosApi, registrosApi, retardosApi, gruposApi, reportesProgramadosApi } from '../api';
-import type { Alumno, RegistroAcceso, Retardo, Grupo, ReporteProgramado } from '../types';
+import { alumnosApi, registrosApi, retardosApi, gruposApi, reportesProgramadosApi, incidenciasApi, reportesApi } from '../api';
+import type { Alumno, RegistroAcceso, Retardo, Grupo, ReporteProgramado, Incidencia, Reporte } from '../types';
 import Loader from '../components/Loader';
 import ConfirmPasswordModal from '../components/ConfirmPasswordModal';
 import DateRangePicker from '../components/DateRangePicker';
@@ -40,10 +40,9 @@ const COLORS = {
 } as const;
 
 const reportTypes = [
-  { id: 'asistencia', label: 'Asistencia' },
-  { id: 'puntualidad', label: 'Puntualidad' },
+  { id: 'gestion', label: 'Gestión de entrada' },
   { id: 'incidencias', label: 'Incidencias' },
-  { id: 'credenciales', label: 'Credenciales' },
+  { id: 'faltas', label: 'Faltas al reglamento' },
 ];
 
 const getNombreCompleto = (a: Alumno): string =>
@@ -54,9 +53,11 @@ export default function ReportsPage() {
   const [registrosData, setRegistrosData] = useState<RegistroAcceso[]>([]);
   const [retardosData, setRetardosData] = useState<Retardo[]>([]);
   const [gruposData, setGruposData] = useState<Grupo[]>([]);
+  const [incidenciasData, setIncidenciasData] = useState<Incidencia[]>([]);
+  const [reportesData, setReportesData] = useState<Reporte[]>([]);
   const [loading, setLoading] = useState(true);
 
-  const [reportType, setReportType] = useState('asistencia');
+  const [reportType, setReportType] = useState('gestion');
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
   const [searchStudent, setSearchStudent] = useState('');
@@ -86,18 +87,22 @@ export default function ReportsPage() {
   useEffect(() => {
     const fetchData = async () => {
       try {
-        const [alumnosRes, registrosRes, retardosRes, gruposRes, reportesProgRes] = await Promise.all([
+        const [alumnosRes, registrosRes, retardosRes, gruposRes, reportesProgRes, incidenciasRes, reportesRes] = await Promise.all([
           alumnosApi.getAll(),
           registrosApi.getAll(),
           retardosApi.getAll(),
           gruposApi.getAll(),
           reportesProgramadosApi.getAll(),
+          incidenciasApi.getAll(),
+          reportesApi.getAll(),
         ]);
         setAlumnosData(alumnosRes);
         setRegistrosData(registrosRes);
         setRetardosData(retardosRes);
         setGruposData(gruposRes);
         setScheduledReports(reportesProgRes);
+        setIncidenciasData(incidenciasRes);
+        setReportesData(reportesRes);
       } catch (err) {
         console.error('Error fetching report data:', err);
       } finally {
@@ -133,7 +138,7 @@ export default function ReportsPage() {
   };
 
   const filterByDate = (fechaHora: string): boolean => {
-    const datePart = fechaHora.split('T')[0];
+    const datePart = fechaHora.slice(0, 10);
     if (startDate && datePart < startDate) return false;
     if (endDate && datePart > endDate) return false;
     return true;
@@ -153,16 +158,79 @@ export default function ReportsPage() {
       .map(r => ({ id: r.id, fechaHora: r.fecha, tipo: 'retardo' })),
   ];
 
-  const studentStats = reportMode === 'individual' && selectedStudent ? {
-    nombre: getNombreCompleto(selectedStudent),
-    grupo: getGrupoNombre(selectedStudent.id_grupo),
-    totalRegistros: filteredRecords.length,
-    entradas: filteredRecords.filter(r => r.tipo === 'ENTRADA').length,
-    retardos: filteredRecords.filter(r => r.tipo === 'retardo').length,
-    salidas: filteredRecords.filter(r => r.tipo === 'SALIDA').length,
-  } : null;
+  const filteredIncidencias = incidenciasData.filter(i =>
+    filterByStudent(i.id_alumno) && filterByDate(i.fecha_registro ?? '')
+  );
 
-  const groupStats = allGroups.filter(g => g !== 'Todos' && (selectedGroup === 'Todos' || g === selectedGroup)).map(group => {
+  const filteredReportes = reportesData.filter(r =>
+    filterByStudent(r.id_alumno) && filterByDate(r.fecha ?? '')
+  );
+
+  const studentStats = reportMode === 'individual' && selectedStudent ? (() => {
+    const base = {
+      nombre: getNombreCompleto(selectedStudent),
+      grupo: getGrupoNombre(selectedStudent.id_grupo),
+    };
+    if (reportType === 'gestion') {
+      return {
+        ...base,
+        stats: [
+          { label: 'Total', value: filteredRecords.length, bg: COLORS.bg, color: COLORS.text },
+          { label: 'Entradas', value: filteredRecords.filter(r => r.tipo === 'ENTRADA').length, bg: COLORS.lightGreen, color: COLORS.success },
+          { label: 'Fuera de horario', value: filteredRecords.filter(r => r.tipo === 'retardo').length, bg: COLORS.lightPink, color: COLORS.primary },
+          { label: 'Salidas', value: filteredRecords.filter(r => r.tipo === 'SALIDA').length, bg: COLORS.bg, color: COLORS.textSec },
+        ],
+      };
+    }
+    if (reportType === 'incidencias') {
+      return {
+        ...base,
+        stats: [
+          { label: 'Total', value: filteredIncidencias.length, bg: COLORS.bg, color: COLORS.text },
+          { label: 'Abiertas', value: filteredIncidencias.filter(i => i.estado === 'Abierto').length, bg: COLORS.lightPink, color: COLORS.primary },
+          { label: 'En revisión', value: filteredIncidencias.filter(i => i.estado === 'En revision').length, bg: COLORS.lightPink, color: COLORS.primaryDark },
+          { label: 'Resueltas', value: filteredIncidencias.filter(i => i.estado === 'Resuelto').length, bg: COLORS.lightGreen, color: COLORS.success },
+        ],
+      };
+    }
+    return {
+      ...base,
+      stats: [
+        { label: 'Total', value: filteredReportes.length, bg: COLORS.bg, color: COLORS.text },
+        { label: 'Pendientes', value: filteredReportes.filter(r => !r.sancion_cumplida).length, bg: COLORS.lightPink, color: COLORS.primary },
+        { label: 'Cumplidas', value: filteredReportes.filter(r => r.sancion_cumplida).length, bg: COLORS.lightGreen, color: COLORS.success },
+      ],
+    };
+  })() : null;
+
+  type GroupStat = {
+    group: string;
+    entradas?: number;
+    retardos?: number;
+    salidas?: number;
+    incidencias?: number;
+    faltas?: number;
+    pendientes?: number;
+    cumplidas?: number;
+  };
+
+  const groupStats: GroupStat[] = allGroups.filter(g => g !== 'Todos' && (selectedGroup === 'Todos' || g === selectedGroup)).map(group => {
+    const enGrupo = (alumnoId: number): boolean => {
+      const alumno = alumnosData.find(a => a.id === alumnoId);
+      return !!alumno && getGrupoNombre(alumno.id_grupo) === group;
+    };
+    if (reportType === 'incidencias') {
+      return { group, incidencias: filteredIncidencias.filter(i => enGrupo(i.id_alumno)).length };
+    }
+    if (reportType === 'faltas') {
+      const faltas = filteredReportes.filter(r => enGrupo(r.id_alumno));
+      return {
+        group,
+        faltas: faltas.length,
+        pendientes: faltas.filter(r => !r.sancion_cumplida).length,
+        cumplidas: faltas.filter(r => r.sancion_cumplida).length,
+      };
+    }
     const asistencias = registrosData.filter(r => {
       const alumno = r.alumno || alumnoMap[r.alumno_id];
       return alumno && getGrupoNombre(alumno.id_grupo) === group && r.tipo_acceso === 'ENTRADA' && filterByDate(r.fecha_hora);
@@ -174,10 +242,10 @@ export default function ReportsPage() {
       const alumno = r.alumno || alumnoMap[r.alumno_id];
       return alumno && getGrupoNombre(alumno.id_grupo) === group && r.tipo_acceso === 'SALIDA' && filterByDate(r.fecha_hora);
     }).length;
-    return { group, asistencias, retardos: retardosCount, salidas };
+    return { group, entradas: asistencias, retardos: retardosCount, salidas };
   });
 
-  const maxBarValue = Math.max(1, ...groupStats.map(d => Math.max(d.asistencias, d.retardos, d.salidas)));
+  const maxBarValue = Math.max(1, ...groupStats.map(d => Math.max(d.entradas ?? 0, d.retardos ?? 0, d.salidas ?? 0)));
 
   const itemsPerPage = 5;
   const totalPages = Math.ceil(scheduledReports.length / itemsPerPage);
@@ -209,7 +277,7 @@ export default function ReportsPage() {
     const report = scheduledReports.find(r => r.id === id);
     setConfirmDelete({
       title: 'Eliminar reporte programado',
-      message: `¿Seguro que deseas eliminar el reporte programado "${report?.nombre ?? id}"? Esta accion no se puede deshacer. Ingrese su contrasena para confirmar.`,
+      message: `¿Seguro que deseas eliminar el reporte programado "${report?.nombre ?? id}"? Esta acción no se puede deshacer. Ingrese su contraseña para confirmar.`,
       run: () => reportesProgramadosApi.delete(id)
         .then(() => {
           setScheduledReports(prev => prev.filter(r => r.id !== id));
@@ -293,6 +361,26 @@ export default function ReportsPage() {
     : `Reporte del grupo ${selectedGroup}`;
 
   const buildCSV = () => {
+    if (reportType === 'incidencias') {
+      const header = reportMode === 'individual'
+        ? 'Fecha,Tipo,Descripción,Estado\n'
+        : 'Grupo,Incidencias\n';
+      const rows = reportMode === 'individual'
+        ? filteredIncidencias.map(i =>
+            `${(i.fecha_registro ?? '').slice(0, 10)},${i.tipo},${i.descripcion.replace(/,/g, ';')},${i.estado}`).join('\n')
+        : groupStats.map(g => `${g.group},${g.incidencias ?? 0}`).join('\n');
+      return header + rows;
+    }
+    if (reportType === 'faltas') {
+      const header = reportMode === 'individual'
+        ? 'Fecha,Motivo,Sanción,Estado\n'
+        : 'Grupo,Faltas,Pendientes,Cumplidas\n';
+      const rows = reportMode === 'individual'
+        ? filteredReportes.map(r =>
+            `${(r.fecha ?? '').slice(0, 10)},${r.motivo.replace(/,/g, ';')},${r.sancion.replace(/,/g, ';')},${r.sancion_cumplida ? 'Cumplida' : 'Pendiente'}`).join('\n')
+        : groupStats.map(g => `${g.group},${g.faltas ?? 0},${g.pendientes ?? 0},${g.cumplidas ?? 0}`).join('\n');
+      return header + rows;
+    }
     const header = reportMode === 'individual'
       ? 'Fecha,Hora,Tipo\n'
       : 'Grupo,Entradas,Retardos,Salidas,Total\n';
@@ -301,7 +389,7 @@ export default function ReportsPage() {
           const [fecha, hora] = r.fechaHora.split('T');
           return `${fecha},${hora?.slice(0, 5) ?? ''},${r.tipo}`;
         }).join('\n')
-      : groupStats.map(g => `${g.group},${g.asistencias},${g.retardos},${g.salidas},${g.asistencias + g.retardos + g.salidas}`).join('\n');
+      : groupStats.map(g => `${g.group},${g.entradas ?? 0},${g.retardos ?? 0},${g.salidas ?? 0},${(g.entradas ?? 0) + (g.retardos ?? 0) + (g.salidas ?? 0)}`).join('\n');
     return header + rows;
   };
 
@@ -323,24 +411,79 @@ export default function ReportsPage() {
     toastSuccess('Reporte CSV descargado.');
   };
 
+  const buildExcelHtml = () => {
+    const cells = (vals: (string | number)[]) => `<tr>${vals.map(v => `<td>${String(v)}</td>`).join('')}</tr>`;
+    const head = (cols: string[]) => `<tr>${cols.map(c => `<th>${c}</th>`).join('')}</tr>`;
+    if (reportType === 'incidencias') {
+      const body = reportMode === 'individual'
+        ? filteredIncidencias.map(i => cells([(i.fecha_registro ?? '').slice(0, 10), i.tipo, i.descripcion, i.estado])).join('')
+        : groupStats.map(g => cells([g.group, g.incidencias ?? 0])).join('');
+      const cols = reportMode === 'individual' ? ['Fecha', 'Tipo', 'Descripción', 'Estado'] : ['Grupo', 'Incidencias'];
+      return head(cols) + body;
+    }
+    if (reportType === 'faltas') {
+      const body = reportMode === 'individual'
+        ? filteredReportes.map(r => cells([(r.fecha ?? '').slice(0, 10), r.motivo, r.sancion, r.sancion_cumplida ? 'Cumplida' : 'Pendiente'])).join('')
+        : groupStats.map(g => cells([g.group, g.faltas ?? 0, g.pendientes ?? 0, g.cumplidas ?? 0])).join('');
+      const cols = reportMode === 'individual' ? ['Fecha', 'Motivo', 'Sanción', 'Estado'] : ['Grupo', 'Faltas', 'Pendientes', 'Cumplidas'];
+      return head(cols) + body;
+    }
+    const body = reportMode === 'individual'
+      ? filteredRecords.map(r => {
+          const [fecha, hora] = r.fechaHora.split('T');
+          return cells([fecha, hora?.slice(0, 5) ?? '', r.tipo]);
+        }).join('')
+      : groupStats.map(g => cells([g.group, g.entradas ?? 0, g.retardos ?? 0, g.salidas ?? 0, (g.entradas ?? 0) + (g.retardos ?? 0) + (g.salidas ?? 0)])).join('');
+    const cols = reportMode === 'individual' ? ['Fecha', 'Hora', 'Tipo'] : ['Grupo', 'Entradas', 'Retardos', 'Salidas', 'Total'];
+    return head(cols) + body;
+  };
+
   const handleExportExcel = () => {
-    const rows = reportMode === 'individual'
-      ? filteredRecords
-      : groupStats.map(g => ({
-          id: g.group,
-          fechaHora: `${g.asistencias}|${g.retardos}|${g.salidas}`,
-          tipo: 'grupo',
-        }));
-    const body = rows.map(r => {
-      const [fecha, hora] = r.fechaHora.split('T');
-      const tipo = r.tipo === 'grupo'
-        ? `Entradas ${fecha.split('|')[0]} | Retardos ${fecha.split('|')[1]} | Salidas ${fecha.split('|')[2]}`
-        : r.tipo;
-      return `<tr><td>${fecha}</td><td>${hora?.slice(0, 5) ?? ''}</td><td>${tipo}</td></tr>`;
-    }).join('');
-    const html = `<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel"><head><meta charset="UTF-8"></head><body><table border="1"><tr><th>Fecha</th><th>Hora</th><th>Tipo</th></tr>${body}</table></body></html>`;
+    const html = `<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel"><head><meta charset="UTF-8"></head><body><table border="1">${buildExcelHtml()}</table></body></html>`;
     downloadBlob(html, `reporte_${reportType}.xls`, 'application/vnd.ms-excel');
     toastSuccess('Reporte Excel descargado.');
+  };
+
+  const buildPrintTable = (): { headers: string; rows: string } => {
+    const row = (vals: (string | number)[]) => `<tr>${vals.map(v => `<td>${String(v)}</td>`).join('')}</tr>`;
+    const head = (cols: string[]) => `<tr>${cols.map(c => `<th>${c}</th>`).join('')}</tr>`;
+    if (reportType === 'incidencias') {
+      if (reportMode === 'individual') {
+        return {
+          headers: head(['Fecha', 'Tipo', 'Descripción', 'Estado']),
+          rows: filteredIncidencias.map(i => row([(i.fecha_registro ?? '').slice(0, 10), i.tipo, i.descripcion, i.estado])).join(''),
+        };
+      }
+      return {
+        headers: head(['Grupo', 'Incidencias']),
+        rows: groupStats.map(g => row([g.group, g.incidencias ?? 0])).join(''),
+      };
+    }
+    if (reportType === 'faltas') {
+      if (reportMode === 'individual') {
+        return {
+          headers: head(['Fecha', 'Motivo', 'Sanción', 'Estado']),
+          rows: filteredReportes.map(r => row([(r.fecha ?? '').slice(0, 10), r.motivo, r.sancion, r.sancion_cumplida ? 'Cumplida' : 'Pendiente'])).join(''),
+        };
+      }
+      return {
+        headers: head(['Grupo', 'Faltas', 'Pendientes', 'Cumplidas']),
+        rows: groupStats.map(g => row([g.group, g.faltas ?? 0, g.pendientes ?? 0, g.cumplidas ?? 0])).join(''),
+      };
+    }
+    if (reportMode === 'individual') {
+      return {
+        headers: head(['Fecha', 'Hora', 'Tipo']),
+        rows: filteredRecords.map(r => {
+          const [fecha, hora] = r.fechaHora.split('T');
+          return row([fecha, hora?.slice(0, 5) ?? '', r.tipo]);
+        }).join(''),
+      };
+    }
+    return {
+      headers: head(['Grupo', 'Entradas', 'Retardos', 'Salidas', 'Total']),
+      rows: groupStats.map(g => row([g.group, g.entradas ?? 0, g.retardos ?? 0, g.salidas ?? 0, (g.entradas ?? 0) + (g.retardos ?? 0) + (g.salidas ?? 0)])).join(''),
+    };
   };
 
   const handlePrint = () => {
@@ -349,15 +492,7 @@ export default function ReportsPage() {
       toastError('El navegador bloqueo la ventana de impresion.');
       return;
     }
-    const rows = reportMode === 'individual'
-      ? filteredRecords.map(r => {
-          const [fecha, hora] = r.fechaHora.split('T');
-          return `<tr><td>${fecha}</td><td>${hora?.slice(0, 5) ?? ''}</td><td>${r.tipo}</td></tr>`;
-        }).join('')
-      : groupStats.map(g => `<tr><td>${g.group}</td><td>${g.asistencias}</td><td>${g.retardos}</td><td>${g.salidas}</td><td>${g.asistencias + g.retardos + g.salidas}</td></tr>`).join('');
-    const headers = reportMode === 'individual'
-      ? '<tr><th>Fecha</th><th>Hora</th><th>Tipo</th></tr>'
-      : '<tr><th>Grupo</th><th>Entradas</th><th>Retardos</th><th>Salidas</th><th>Total</th></tr>';
+    const { headers, rows } = buildPrintTable();
     printWindow.document.write(`<!DOCTYPE html><html><head><title>${reporteTitulo}</title><style>body{font-family:'IBM Plex Sans',Arial,sans-serif;padding:24px}h1{color:#1C1819;font-size:18px}table{width:100%;border-collapse:collapse;margin-top:16px}th,td{border:1px solid #CAC6C7;padding:8px;text-align:left;font-size:13px}th{background:#F0EFEF}</style></head><body><h1>COBAO Plantel 27 - ${reporteTitulo}</h1><p style="color:#5F5657">Tipo: ${reportTypes.find(r => r.id === reportType)?.label ?? reportType} | Periodo: ${startDate || 'inicio'} - ${endDate || 'hoy'}</p><table>${headers}${rows}</table></body></html>`);
     printWindow.document.close();
     printWindow.focus();
@@ -380,28 +515,58 @@ export default function ReportsPage() {
     doc.text(`Tipo: ${reportTypes.find(r => r.id === reportType)?.label ?? reportType} | Periodo: ${startDate || 'inicio'} - ${endDate || 'hoy'}`, marginX, y);
     y += 30;
 
+    doc.setFontSize(10);
+    doc.setTextColor(28, 24, 25);
+
     if (reportMode === 'individual') {
-      doc.setFontSize(10);
-      doc.setTextColor(28, 24, 25);
-      filteredRecords.forEach((r) => {
+      const lines = reportType === 'incidencias'
+        ? filteredIncidencias.map(i => `${(i.fecha_registro ?? '').slice(0, 10)}   ${i.tipo}   ${i.descripcion}`)
+        : reportType === 'faltas'
+          ? filteredReportes.map(r => `${(r.fecha ?? '').slice(0, 10)}   ${r.motivo}   ${r.sancion}   ${r.sancion_cumplida ? 'Cumplida' : 'Pendiente'}`)
+          : filteredRecords.map(r => {
+              const [fecha, hora] = r.fechaHora.split('T');
+              return `${fecha}   ${hora?.slice(0, 5) ?? ''}   ${r.tipo}`;
+            });
+      lines.forEach((line) => {
         if (y > 720) { doc.addPage('letter', 'portrait'); y = 60; }
-        const [fecha, hora] = r.fechaHora.split('T');
-        doc.text(`${fecha}   ${hora?.slice(0, 5) ?? ''}   ${r.tipo}`, marginX, y);
+        doc.text(line, marginX, y);
         y += 16;
       });
     } else {
-      const cols = ['Grupo', 'Entradas', 'Retardos', 'Salidas', 'Total'];
-      cols.forEach((c, i) => doc.text(c, marginX + i * 90, y));
-      y += 18;
-      groupStats.forEach((g) => {
-        if (y > 720) { doc.addPage('letter', 'portrait'); y = 60; }
-        doc.text(g.group, marginX, y);
-        doc.text(String(g.asistencias), marginX + 90, y);
-        doc.text(String(g.retardos), marginX + 180, y);
-        doc.text(String(g.salidas), marginX + 270, y);
-        doc.text(String(g.asistencias + g.retardos + g.salidas), marginX + 360, y);
+      const colW = 90;
+      if (reportType === 'incidencias') {
+        ['Grupo', 'Incidencias'].forEach((c, i) => doc.text(c, marginX + i * colW, y));
         y += 18;
-      });
+        groupStats.forEach((g) => {
+          if (y > 720) { doc.addPage('letter', 'portrait'); y = 60; }
+          doc.text(g.group, marginX, y);
+          doc.text(String(g.incidencias ?? 0), marginX + colW, y);
+          y += 18;
+        });
+      } else if (reportType === 'faltas') {
+        ['Grupo', 'Faltas', 'Pendientes', 'Cumplidas'].forEach((c, i) => doc.text(c, marginX + i * colW, y));
+        y += 18;
+        groupStats.forEach((g) => {
+          if (y > 720) { doc.addPage('letter', 'portrait'); y = 60; }
+          doc.text(g.group, marginX, y);
+          doc.text(String(g.faltas ?? 0), marginX + colW, y);
+          doc.text(String(g.pendientes ?? 0), marginX + colW * 2, y);
+          doc.text(String(g.cumplidas ?? 0), marginX + colW * 3, y);
+          y += 18;
+        });
+      } else {
+        ['Grupo', 'Entradas', 'Retardos', 'Salidas', 'Total'].forEach((c, i) => doc.text(c, marginX + i * colW, y));
+        y += 18;
+        groupStats.forEach((g) => {
+          if (y > 720) { doc.addPage('letter', 'portrait'); y = 60; }
+          doc.text(g.group, marginX, y);
+          doc.text(String(g.entradas ?? 0), marginX + colW, y);
+          doc.text(String(g.retardos ?? 0), marginX + colW * 2, y);
+          doc.text(String(g.salidas ?? 0), marginX + colW * 3, y);
+          doc.text(String((g.entradas ?? 0) + (g.retardos ?? 0) + (g.salidas ?? 0)), marginX + colW * 4, y);
+          y += 18;
+        });
+      }
     }
 
     doc.save(`reporte_${reportType}_${startDate || 'inicio'}.pdf`);
@@ -786,12 +951,7 @@ export default function ReportsPage() {
                 gap: 12,
                 marginBottom: 24,
               }}>
-                {[
-                  { label: 'Total', value: studentStats.totalRegistros, bg: COLORS.bg, color: COLORS.text },
-                  { label: 'Entradas', value: studentStats.entradas, bg: COLORS.lightGreen, color: COLORS.success },
-                  { label: 'Fuera de horario', value: studentStats.retardos, bg: COLORS.lightPink, color: COLORS.primary },
-                  { label: 'Salidas', value: studentStats.salidas, bg: COLORS.bg, color: COLORS.textSec },
-                ].map(stat => (
+                {studentStats.stats.map(stat => (
                   <div key={stat.label} style={{
                     padding: 16,
                     borderRadius: 10,
@@ -806,32 +966,96 @@ export default function ReportsPage() {
               </div>
 
               <div style={{ overflowX: 'auto', marginBottom: 20 }}>
-                <table style={tableStyle}>
-                  <thead>
-                    <tr>
-                      <th style={thStyle}>Fecha</th>
-                      <th style={thStyle}>Hora</th>
-                      <th style={thStyle}>Tipo</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {filteredRecords.length === 0 ? (
+                {reportType === 'gestion' && (
+                  <table style={tableStyle}>
+                    <thead>
                       <tr>
-                        <td colSpan={3} style={{ ...tdStyle, textAlign: 'center', padding: 32, color: COLORS.textMuted }}>
-                          No hay registros para este alumno en el periodo seleccionado
-                        </td>
+                        <th style={thStyle}>Fecha</th>
+                        <th style={thStyle}>Hora</th>
+                        <th style={thStyle}>Tipo</th>
                       </tr>
-                    ) : (
-                      filteredRecords.map(record => (
-                        <tr key={record.id}>
-                          <td style={tdStyle}>{record.fechaHora.split('T')[0]}</td>
-                          <td style={{ ...tdStyle, fontFamily: 'monospace', fontWeight: 500 }}>{record.fechaHora.split('T')[1]?.slice(0, 5)}</td>
-                          <td style={tdStyle}>{tipoBadge(record.tipo)}</td>
+                    </thead>
+                    <tbody>
+                      {filteredRecords.length === 0 ? (
+                        <tr>
+                          <td colSpan={3} style={{ ...tdStyle, textAlign: 'center', padding: 32, color: COLORS.textMuted }}>
+                            No hay registros para este alumno en el periodo seleccionado
+                          </td>
                         </tr>
-                      ))
-                    )}
-                  </tbody>
-                </table>
+                      ) : (
+                        filteredRecords.map(record => (
+                          <tr key={record.id}>
+                            <td style={tdStyle}>{record.fechaHora.split('T')[0]}</td>
+                            <td style={{ ...tdStyle, fontFamily: 'monospace', fontWeight: 500 }}>{record.fechaHora.split('T')[1]?.slice(0, 5)}</td>
+                            <td style={tdStyle}>{tipoBadge(record.tipo)}</td>
+                          </tr>
+                        ))
+                      )}
+                    </tbody>
+                  </table>
+                )}
+
+                {reportType === 'incidencias' && (
+                  <table style={tableStyle}>
+                    <thead>
+                      <tr>
+                        <th style={thStyle}>Fecha</th>
+                        <th style={thStyle}>Tipo</th>
+                        <th style={thStyle}>Descripción</th>
+                        <th style={thStyle}>Estado</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {filteredIncidencias.length === 0 ? (
+                        <tr>
+                          <td colSpan={4} style={{ ...tdStyle, textAlign: 'center', padding: 32, color: COLORS.textMuted }}>
+                            No hay incidencias para este alumno en el periodo seleccionado
+                          </td>
+                        </tr>
+                      ) : (
+                        filteredIncidencias.map(i => (
+                          <tr key={i.id}>
+                            <td style={tdStyle}>{i.fecha_registro?.slice(0, 10)}</td>
+                            <td style={tdStyle}>{i.tipo}</td>
+                            <td style={tdStyle}>{i.descripcion}</td>
+                            <td style={tdStyle}>{i.estado}</td>
+                          </tr>
+                        ))
+                      )}
+                    </tbody>
+                  </table>
+                )}
+
+                {reportType === 'faltas' && (
+                  <table style={tableStyle}>
+                    <thead>
+                      <tr>
+                        <th style={thStyle}>Fecha</th>
+                        <th style={thStyle}>Motivo</th>
+                        <th style={thStyle}>Sanción</th>
+                        <th style={thStyle}>Estado</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {filteredReportes.length === 0 ? (
+                        <tr>
+                          <td colSpan={4} style={{ ...tdStyle, textAlign: 'center', padding: 32, color: COLORS.textMuted }}>
+                            No hay faltas al reglamento para este alumno en el periodo seleccionado
+                          </td>
+                        </tr>
+                      ) : (
+                        filteredReportes.map(r => (
+                          <tr key={r.id}>
+                            <td style={tdStyle}>{r.fecha?.slice(0, 10)}</td>
+                            <td style={tdStyle}>{r.motivo}</td>
+                            <td style={tdStyle}>{r.sancion}</td>
+                            <td style={tdStyle}>{r.sancion_cumplida ? 'Cumplida' : 'Pendiente'}</td>
+                          </tr>
+                        ))
+                      )}
+                    </tbody>
+                  </table>
+                )}
               </div>
             </>
           )}
@@ -839,30 +1063,75 @@ export default function ReportsPage() {
           {reportMode === 'grupo' && (
             <>
               <div style={{ overflowX: 'auto', marginBottom: 20 }}>
-                <table style={tableStyle}>
-                  <thead>
-                    <tr>
-                      <th style={thStyle}>Grupo</th>
-                      <th style={thStyle}>Entradas</th>
-                      <th style={thStyle}>Fuera de horario</th>
-                      <th style={thStyle}>Salidas</th>
-                      <th style={thStyle}>Total</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {groupStats.map(row => (
-                      <tr key={row.group}>
-                        <td style={{ ...tdStyle, fontWeight: 600 }}>{row.group}</td>
-                        <td style={tdStyle}>{row.asistencias}</td>
-                        <td style={tdStyle}>{row.retardos}</td>
-                        <td style={tdStyle}>{row.salidas}</td>
-                        <td style={tdStyle}>{row.asistencias + row.retardos + row.salidas}</td>
+                {reportType === 'gestion' && (
+                  <table style={tableStyle}>
+                    <thead>
+                      <tr>
+                        <th style={thStyle}>Grupo</th>
+                        <th style={thStyle}>Entradas</th>
+                        <th style={thStyle}>Fuera de horario</th>
+                        <th style={thStyle}>Salidas</th>
+                        <th style={thStyle}>Total</th>
                       </tr>
-                    ))}
-                  </tbody>
-                </table>
+                    </thead>
+                    <tbody>
+                      {groupStats.map(row => (
+                        <tr key={row.group}>
+                          <td style={{ ...tdStyle, fontWeight: 600 }}>{row.group}</td>
+                          <td style={tdStyle}>{row.entradas ?? 0}</td>
+                          <td style={tdStyle}>{row.retardos ?? 0}</td>
+                          <td style={tdStyle}>{row.salidas ?? 0}</td>
+                          <td style={tdStyle}>{(row.entradas ?? 0) + (row.retardos ?? 0) + (row.salidas ?? 0)}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                )}
+
+                {reportType === 'incidencias' && (
+                  <table style={tableStyle}>
+                    <thead>
+                      <tr>
+                        <th style={thStyle}>Grupo</th>
+                        <th style={thStyle}>Incidencias</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {groupStats.map(row => (
+                        <tr key={row.group}>
+                          <td style={{ ...tdStyle, fontWeight: 600 }}>{row.group}</td>
+                          <td style={tdStyle}>{row.incidencias ?? 0}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                )}
+
+                {reportType === 'faltas' && (
+                  <table style={tableStyle}>
+                    <thead>
+                      <tr>
+                        <th style={thStyle}>Grupo</th>
+                        <th style={thStyle}>Faltas</th>
+                        <th style={thStyle}>Pendientes</th>
+                        <th style={thStyle}>Cumplidas</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {groupStats.map(row => (
+                        <tr key={row.group}>
+                          <td style={{ ...tdStyle, fontWeight: 600 }}>{row.group}</td>
+                          <td style={tdStyle}>{row.faltas ?? 0}</td>
+                          <td style={tdStyle}>{row.pendientes ?? 0}</td>
+                          <td style={tdStyle}>{row.cumplidas ?? 0}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                )}
               </div>
 
+              {reportType === 'gestion' && (
               <div style={{
                 background: COLORS.white,
                 borderRadius: 12,
@@ -894,27 +1163,27 @@ export default function ReportsPage() {
                             width: 20,
                             borderRadius: '4px 4px 0 0',
                             background: COLORS.success,
-                            height: `${(data.asistencias / maxBarValue) * 160}px`,
+                            height: `${((data.entradas ?? 0) / maxBarValue) * 160}px`,
                           }}
-                          title={`Entradas: ${data.asistencias}`}
+                          title={`Entradas: ${data.entradas ?? 0}`}
                         />
                         <div
                           style={{
                             width: 20,
                             borderRadius: '4px 4px 0 0',
                             background: COLORS.primary,
-                            height: `${(data.retardos / maxBarValue) * 160}px`,
+                            height: `${((data.retardos ?? 0) / maxBarValue) * 160}px`,
                           }}
-                           title={`Fuera de horario: ${data.retardos}`}
+                           title={`Fuera de horario: ${data.retardos ?? 0}`}
                         />
                         <div
                           style={{
                             width: 20,
                             borderRadius: '4px 4px 0 0',
                             background: COLORS.info,
-                            height: `${(data.salidas / maxBarValue) * 160}px`,
+                            height: `${((data.salidas ?? 0) / maxBarValue) * 160}px`,
                           }}
-                          title={`Salidas: ${data.salidas}`}
+                          title={`Salidas: ${data.salidas ?? 0}`}
                         />
                       </div>
                       <span style={{ fontSize: 12, fontWeight: 600, color: COLORS.textSec }}>{data.group}</span>
@@ -934,6 +1203,7 @@ export default function ReportsPage() {
                   ))}
                 </div>
               </div>
+              )}
             </>
           )}
 

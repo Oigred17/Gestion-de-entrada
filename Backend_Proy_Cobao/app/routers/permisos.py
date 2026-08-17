@@ -83,22 +83,22 @@ async def eliminar_permiso(id_permiso: int, db: AsyncSession = Depends(get_db)):
 
 @router.post("/validar-codigo", response_model=PermisoResponse)
 async def validar_codigo_permiso(data: CodigoValidacion, db: AsyncSession = Depends(get_db)):
-    """Valida un codigo de autorizacion para registrar la salida de un alumno."""
+    """Valida un código de autorización para registrar la salida de un alumno."""
     codigo_limpio = (data.codigo or "").strip().upper()
     if not codigo_limpio:
-        raise HTTPException(status_code=400, detail="Codigo de autorizacion requerido")
+        raise HTTPException(status_code=400, detail="Código de autorización requerido")
     permiso = await crud_permiso.get_permiso_by_codigo(db, codigo_limpio)
     if not permiso:
-        raise HTTPException(status_code=404, detail="Codigo de autorizacion invalido")
+        raise HTTPException(status_code=404, detail="Código de autorización inválido")
     if permiso.estado not in ("Aprobado", "Utilizado"):
         raise HTTPException(
             status_code=400,
-            detail=f"El permiso no esta aprobado (estado: {permiso.estado})",
+            detail=f"El permiso no está aprobado (estado: {permiso.estado})",
         )
     if await crud_permiso.expirar_si_vencido(db, permiso):
         raise HTTPException(
             status_code=400,
-            detail="El permiso ya vencio: paso la hora de salida autorizada",
+            detail="El permiso ya venció: pasó la hora de salida autorizada",
         )
     await _adjuntar_alumno(db, permiso)
     return permiso

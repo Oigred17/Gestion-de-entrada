@@ -2905,3 +2905,54 @@ a:hover { text-decoration: underline; }
   padding-top: 10px;
   border-top: 1px solid #F0EFEF;
 }
+
+/* ============================================
+   DASHBOARD: TARJETAS DE ESTADISTICA
+   ============================================ */
+.stat-card {
+  background: var(--color-white);
+  border: 1px solid var(--color-gris-plata);
+  border-radius: 12px;
+  padding: 16px;
+  min-height: 128px;
+}
+.stat-card--clickable {
+  width: 100%;
+  text-align: left;
+  font-family: var(--font-sans);
+  cursor: pointer;
+  transition: border-color 150ms ease-in-out, box-shadow 150ms ease-in-out;
+}
+.stat-card--clickable:hover {
+  border-color: var(--color-magenta);
+  box-shadow: 0 4px 16px rgba(235, 36, 102, 0.14);
+}
+.stat-card--clickable:focus-visible {
+  outline: 2px solid var(--color-magenta);
+  outline-offset: 2px;
+}
+.stat-card--clickable:active { transform: scale(0.99); }
+
+/* ============================================
+   DASHBOARD: ITEMS DE ALERTA
+   ============================================ */
+.alert-item-btn {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  text-align: left;
+  padding: 10px 12px;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 10px;
+  font-family: var(--font-sans);
+  cursor: pointer;
+  transition: background 150ms ease-in-out, border-color 150ms ease-in-out;
+}
+.alert-item-btn:hover { background: var(--color-rosa-palido); }
+.alert-item-btn--grave:hover { background: #FDE2E8; }
+.alert-item-btn:focus-visible {
+  outline: 2px solid var(--color-magenta);
+  outline-offset: 2px;
+}

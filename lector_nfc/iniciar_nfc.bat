@@ -3,19 +3,13 @@ title COBAO NFC Reader
 cd /d "%~dp0"
 
 rem ============================================================
-rem URL del backend donde se envian los UIDs leidos.
-rem Prioridad: 1) argumento  2) nfc_url.txt  3) localhost
+rem Estacion de entrada (lector fisico).
+rem En esta carpeta solo necesitas:
+rem   - nfc_reader.exe
+rem   - nfc_url.txt   (URL del backend .../api/v1/nfc/scan)
+rem   - nfc_key.txt   (misma llave que NFC_API_KEY del servidor)
 rem
-rem Ejemplos:
-rem   iniciar_nfc.bat
-rem   iniciar_nfc.bat http://192.168.1.50:8000/api/v1/nfc/scan
-rem   iniciar_nfc.bat https://algo.trycloudflare.com/api/v1/nfc/scan
-rem
-rem O crea nfc_url.txt en esta carpeta con una sola linea:
-rem   http://192.168.1.50:8000/api/v1/nfc/scan
-rem
-rem Llave de API (si el backend la exige): crea nfc_key.txt con la llave,
-rem o usa la variable de entorno NFC_API_KEY, o el arg --key.
+rem NO uses usuario ni contraseña aqui.
 rem ============================================================
 
 set "NFC_URL="
@@ -28,20 +22,22 @@ if not "%~1"=="" (
 
 if "%NFC_URL%"=="" set "NFC_URL=http://localhost:8000/api/v1/nfc/scan"
 
-rem Quitar espacios al inicio/final
 for /f "tokens=* delims= " %%a in ("%NFC_URL%") do set "NFC_URL=%%a"
 
 echo.
-echo  COBAO NFC Reader
+echo  COBAO NFC Reader - Estacion de entrada
 echo  Backend: %NFC_URL%
-echo  (Para cambiar la URL: edita nfc_url.txt o pasa la URL como argumento)
-if exist "%~dp0nfc_key.txt" echo  Llave de API: nfc_key.txt
+if exist "%~dp0nfc_key.txt" (
+    echo  Llave:   nfc_key.txt
+) else (
+    echo  AVISO: falta nfc_key.txt — copia NFC_API_KEY del servidor
+)
 echo.
 
 if exist "%~dp0nfc_reader.exe" (
     "%~dp0nfc_reader.exe" --url "%NFC_URL%"
 ) else (
-    python -u nfc_reader.py --url "%NFC_URL%"
+    python -u "%~dp0..\nfc_reader.py" --url "%NFC_URL%"
 )
 
 echo.

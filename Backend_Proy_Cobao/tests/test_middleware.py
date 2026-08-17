@@ -22,7 +22,6 @@ def build_app():
 
 @pytest.fixture(autouse=True)
 def _clean_settings():
-    """Restaura NFC_API_KEY despues de cada prueba."""
     original = settings.NFC_API_KEY
     yield
     settings.NFC_API_KEY = original
@@ -67,17 +66,16 @@ async def test_cors_preflight_no_requiere_token(client):
             "Access-Control-Request-Method": "GET",
         },
     )
-    assert resp.status_code in (200, 400)  # el middleware no debe pedir token
+    assert resp.status_code in (200, 400)
 
 
-async def test_nfc_sin_llave_configurada_requiere_jwt(client):
-    settings.NFC_API_KEY = ""
-    # Sin llave de API ni token -> 401 (fail-closed)
+async def test_nfc_sin_credencial_401(client):
+    settings.NFC_API_KEY = "llave-secreta"
     resp = await client.post("/api/v1/nfc/scan", json={"uid_nfc": "AA:BB:CC:DD"})
     assert resp.status_code == 401
 
 
-async def test_nfc_con_llave_correcta_pasa(client):
+async def test_nfc_con_llave_estacion_correcta_pasa(client):
     settings.NFC_API_KEY = "llave-secreta"
     resp = await client.post(
         "/api/v1/nfc/scan",
@@ -97,9 +95,23 @@ async def test_nfc_con_llave_incorrecta_401(client):
     assert resp.status_code == 401
 
 
-async def test_nfc_sin_llave_con_seguridad_activa_401(client):
+async def test_nfc_sin_llave_configurada_en_servidor_401(client):
+    settings.NFC_API_KEY = ""
+    resp = await client.post(
+        "/api/v1/nfc/scan",
+        json={"uid_nfc": "AA:BB:CC:DD"},
+        headers={"X-API-Key": "cualquier-cosa"},
+    )
+    assert resp.status_code == 401
+
+
+async def test_api_key_no_abre_otros_endpoints(client):
+    """La llave de estacion solo vale para /nfc/*, no para el resto de la API."""
     settings.NFC_API_KEY = "llave-secreta"
-    resp = await client.post("/api/v1/nfc/scan", json={"uid_nfc": "AA:BB:CC:DD"})
+    resp = await client.get(
+        "/api/v1/credenciales",
+        headers={"X-API-Key": "llave-secreta"},
+    )
     assert resp.status_code == 401
 
 

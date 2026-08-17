@@ -80,8 +80,6 @@ function AppRoutes() {
               <Route path="/grupos" element={<GruposPage />} />
               <Route path="/credenciales" element={<CredentialsPage />} />
               <Route path="/credenciales/:id" element={<CredentialDetailPage />} />
-              <Route path="/permisos" element={<PermissionsPage role={userRole as UserRole} />} />
-              <Route path="/faltas" element={<RegulationsPage role={userRole as UserRole} />} />
               <Route path="/profesores" element={<ProfesoresPage />} />
               <Route path="/configuracion" element={<ConfigPage role={userRole as UserRole} />} />
               <Route path="*" element={<Navigate to="/dashboard" replace />} />
@@ -93,7 +91,6 @@ function AppRoutes() {
               <Route path="/permisos" element={<PermissionsPage role={userRole as UserRole} />} />
               <Route path="/incidencias" element={<IncidentsPage role={userRole as UserRole} />} />
               <Route path="/faltas" element={<RegulationsPage role={userRole as UserRole} />} />
-              <Route path="/profesores" element={<ProfesoresPage />} />
               <Route path="/reportes" element={<ReportsPage />} />
               <Route path="*" element={<Navigate to="/escaneo" replace />} />
             </>

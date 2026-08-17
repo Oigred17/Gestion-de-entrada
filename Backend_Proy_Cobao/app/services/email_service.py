@@ -1,10 +1,10 @@
 """
-Servicio de envio de correo electronico via SMTP.
+Servicio de envío de correo electrónico via SMTP.
 
-La configuracion se lee primero de la tabla `configuracion_general` (lo que se
-guarda en la pestana Notificaciones) y, si no esta configurada, cae en las
+La configuración se lee primero de la tabla `configuracion_general` (lo que se
+guarda en la pestaña Notificaciones) y, si no está configurada, cae en las
 variables de entorno (SMTP_HOST, SMTP_USER, SMTP_PASSWORD, etc.). Para Gmail
-se debe usar una contrasena de aplicacion.
+se debe usar una contraseña de aplicación.
 """
 
 import logging
@@ -32,7 +32,7 @@ class SMTPConfig:
 
 
 async def get_smtp_config(db: AsyncSession | None = None) -> SMTPConfig | None:
-    """Lee la configuracion SMTP de la BD (si existe) o de variables de entorno."""
+    """Lee la configuración SMTP de la BD (si existe) o de variables de entorno."""
     host = settings.SMTP_HOST
     port = settings.SMTP_PORT
     user = settings.SMTP_USER
@@ -51,8 +51,8 @@ async def get_smtp_config(db: AsyncSession | None = None) -> SMTPConfig | None:
                 user = general.smtp_user
                 password = general.smtp_password
                 from_addr = general.smtp_from or general.smtp_user
-        except Exception as e:  # noqa: BLE001 - no debe romper el envio por falla de lectura
-            logger.warning("No se pudo leer la configuracion SMTP de la BD: %s", e)
+        except Exception as e:  # noqa: BLE001 - no debe romper el envío por falla de lectura
+            logger.warning("No se pudo leer la configuración SMTP de la BD: %s", e)
 
     if not host or not user or not password:
         return None
@@ -77,11 +77,11 @@ async def send_email(
     body_plain: str,
     body_html: str | None = None,
 ) -> bool:
-    """Envia un correo. Devuelve True si se envio correctamente."""
+    """Envía un correo. Devuelve True si se envió correctamente."""
     config = await get_smtp_config(db)
     if config is None:
         logger.warning(
-            "SMTP no configurado (falta SMTP_USER/SMTP_PASSWORD). No se envio correo a %s",
+            "SMTP no configurado (falta SMTP_USER/SMTP_PASSWORD). No se envió correo a %s",
             to_email,
         )
         return False

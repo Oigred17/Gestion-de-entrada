@@ -1,7 +1,7 @@
 import { useState, useCallback, useEffect, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { Edit, Check, X, RefreshCw, Nfc, Loader2, AlertTriangle, User } from 'lucide-react';
-import { credencialesApi, alumnosApi } from '../api';
+import { credencialesApi, alumnosApi, reposicionesApi } from '../api';
 import { nfcApi } from '../api/nfc';
 import type { Credencial, Alumno } from '../types';
 import { toastSuccess, toastError, toastInfo } from '@/lib/toast';
@@ -193,11 +193,16 @@ export default function CredentialDetailPage() {
   };
 
   const performReassign = () => {
-    if (!credentialData) return;
+    if (!credentialData || !studentData) return;
     credencialesApi.update(credentialData.id, { numero: newChipId, estatus: 'Activa' })
       .then((updated) => {
         setCredentialData(updated);
         setShowReassignModal(false);
+        reposicionesApi.create({
+          id_alumno: studentData.id,
+          id_credencial: credentialData.id,
+          motivo: 'Reasignación de chip NFC',
+        }).catch(() => {});
         showToast(`Chip reasignado correctamente. Nuevo ID: ${newChipId}`);
       })
       .catch((err: unknown) => {
@@ -265,7 +270,7 @@ export default function CredentialDetailPage() {
 
         {/* Seccion: Informacion General */}
         <div style={{ padding: '0 32px', marginBottom: 24 }}>
-          <SectionTitle>Informacion general</SectionTitle>
+          <SectionTitle>Información general</SectionTitle>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px 24px', fontSize: 14 }}>
             <div>
               <FieldLabel>Nombre</FieldLabel>
@@ -319,7 +324,7 @@ export default function CredentialDetailPage() {
                 <FieldValue mono color="#0F8122">{credentialData.numero ?? '-'}</FieldValue>
               </div>
               <div>
-                <FieldLabel>Fecha asignacion</FieldLabel>
+                <FieldLabel>Fecha asignación</FieldLabel>
                 <FieldValue>{credentialData.fecha_emision ?? '-'}</FieldValue>
               </div>
               <div>
@@ -352,7 +357,7 @@ export default function CredentialDetailPage() {
               <FieldValue>{studentData.direccion ?? '-'}</FieldValue>
             </div>
             <div>
-              <FieldLabel>Telefono</FieldLabel>
+                <FieldLabel>Teléfono</FieldLabel>
               <FieldValue mono>{studentData.telefono ?? '-'}</FieldValue>
             </div>
           </div>
@@ -376,11 +381,11 @@ export default function CredentialDetailPage() {
                   <div style={{ padding: 16, background: '#FEF2F2', borderRadius: 8, border: '1px solid #AB1748', marginBottom: 16 }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
                       <AlertTriangle size={16} color="#AB1748" />
-                      <span style={{ fontWeight: 600, fontSize: 14, color: '#AB1748' }}>Atencion</span>
+                      <span style={{ fontWeight: 600, fontSize: 14, color: '#AB1748' }}>Atención</span>
                     </div>
                     <p style={{ fontSize: 13, color: '#5F5657', lineHeight: 1.6, margin: 0 }}>
-                      Al reasignar el chip NFC, el chip actual sera <strong>dado de baja</strong> y el alumno no podra usarlo para acceder al plantel.
-                      Se asignara un <strong>nuevo chip NFC</strong> que debera ser escrito y verificado.
+                      Al reasignar el chip NFC, el chip actual será <strong>dado de baja</strong> y el alumno no podrá usarlo para acceder al plantel.
+                      Se asignará un <strong>nuevo chip NFC</strong> que deberá ser escrito y verificado.
                     </p>
                   </div>
                   <div style={{ padding: 16, background: '#F0EFEF', borderRadius: 8, fontSize: 14 }}>
@@ -393,7 +398,7 @@ export default function CredentialDetailPage() {
                       <span style={{ fontFamily: 'monospace', fontWeight: 600, color: '#AB1748' }}>{credentialData?.numero ?? '---'}</span>
                     </div>
                     <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                      <span style={{ color: '#5F5657' }}>Accion:</span>
+                      <span style={{ color: '#5F5657' }}>Acción:</span>
                       <span style={{ fontWeight: 600, color: '#AB1748' }}>Dado de baja + Nuevo chip</span>
                     </div>
                   </div>
@@ -443,7 +448,7 @@ export default function CredentialDetailPage() {
               )}
               {reassignStep === 'write' && written && (
                 <button className="btn btn--primary" onClick={handleConfirmReassign}>
-                  <Check size={16} /> Confirmar reasignacion
+                  <Check size={16} /> Confirmar reasignación
                 </button>
               )}
             </div>
@@ -454,7 +459,7 @@ export default function CredentialDetailPage() {
       <ConfirmPasswordModal
         open={reassignConfirmOpen}
         title="Reasignar chip NFC"
-        message={`El chip actual quedara dado de baja y ${nombreCompleto(studentData)} usara el nuevo chip. Ingrese su contrasena para confirmar.`}
+        message={`El chip actual quedará dado de baja y ${nombreCompleto(studentData)} usará el nuevo chip. Ingrese su contraseña para confirmar.`}
         confirmLabel="Reasignar"
         onClose={() => setReassignConfirmOpen(false)}
         onConfirm={performReassign}

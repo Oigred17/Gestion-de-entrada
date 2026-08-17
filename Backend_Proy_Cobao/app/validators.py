@@ -56,12 +56,12 @@ def _email(value):
     if value is None:
         return None
     if not isinstance(value, str):
-        raise ValueError("Correo electronico no valido.")
+        raise ValueError("Correo electrónico no válido.")
     value = value.strip().lower()
     if not value:
         return value
     if not _RE_EMAIL.fullmatch(value):
-        raise ValueError("Correo electronico no valido.")
+        raise ValueError("Correo electrónico no válido.")
     return value
 
 
@@ -70,7 +70,7 @@ NombreStr = Annotated[
     BeforeValidator(
         _validator(
             _RE_NOMBRE,
-            "Solo se permiten letras (incluyendo Ñ/ñ), espacios, guiones y apostrofes.",
+            "Solo se permiten letras (incluyendo Ñ/ñ), espacios, guiones y apóstrofes.",
         )
     ),
 ]
@@ -80,7 +80,7 @@ MatriculaStr = Annotated[
     BeforeValidator(
         _validator(
             _RE_MATRICULA,
-            "Solo se permiten letras y numeros (incluyendo Ñ/ñ) y guiones.",
+            "Solo se permiten letras y números (incluyendo Ñ/ñ) y guiones.",
         )
     ),
 ]
@@ -90,7 +90,7 @@ CurpStr = Annotated[
     BeforeValidator(
         _validator(
             _RE_CURP,
-            "CURP invalida: deben ser 18 caracteres alfanumericos.",
+            "CURP inválida: deben ser 18 caracteres alfanuméricos.",
             upper=True,
         )
     ),
@@ -101,7 +101,7 @@ NssStr = Annotated[
     BeforeValidator(
         _validator(
             _RE_NSS,
-            "NSS invalido: solo numeros, guiones o espacios (maximo 11 caracteres).",
+            "NSS inválido: solo números, guiones o espacios (máximo 11 caracteres).",
         )
     ),
 ]
@@ -111,7 +111,7 @@ TelefonoStr = Annotated[
     BeforeValidator(
         _validator(
             _RE_TELEFONO,
-            "Telefono invalido: solo numeros y simbolos + ( ) - .",
+            "Teléfono inválido: solo números y símbolos + ( ) - .",
         )
     ),
 ]
@@ -121,7 +121,7 @@ DireccionStr = Annotated[
     BeforeValidator(
         _validator(
             _RE_DIRECCION,
-            "Solo se permiten letras, numeros y los simbolos .,#°'()/- en la direccion.",
+            "Solo se permiten letras, números y los símbolos .,#°'()/- en la dirección.",
         )
     ),
 ]
@@ -131,7 +131,7 @@ TipoSangreStr = Annotated[
     BeforeValidator(
         _validator(
             _RE_TIPO_SANGRE,
-            "Tipo de sangre invalido. Use A, B, AB u O con + o - (ej. O+, AB-).",
+            "Tipo de sangre inválido. Use A, B, AB u O con + o - (ej. O+, AB-).",
             upper=True,
         )
     ),
@@ -142,7 +142,7 @@ UidNfcStr = Annotated[
     BeforeValidator(
         _validator(
             _RE_UID_NFC,
-            "UID NFC invalido: solo caracteres hexadecimales (0-9, A-F) y dos puntos.",
+            "UID NFC inválido: solo caracteres hexadecimales (0-9, A-F) y dos puntos.",
         )
     ),
 ]
@@ -152,7 +152,7 @@ HoraStr = Annotated[
     BeforeValidator(
         _validator(
             _RE_HORA,
-            "Hora invalida. Use el formato HH:MM (ej. 07:30).",
+            "Hora inválida. Use el formato HH:MM (ej. 07:30).",
         )
     ),
 ]
@@ -162,7 +162,7 @@ UsernameStr = Annotated[
     BeforeValidator(
         _validator(
             _RE_USERNAME,
-            "Usuario invalido: solo letras, numeros y los simbolos _ . -",
+            "Usuario inválido: solo letras, números y los símbolos _ . -",
         )
     ),
 ]
@@ -174,7 +174,7 @@ EstatusStr = Annotated[
     BeforeValidator(
         _validator(
             _RE_ESTATUS,
-            "Estatus invalido: solo letras y espacios.",
+            "Estatus inválido: solo letras y espacios.",
         )
     ),
 ]
@@ -184,7 +184,7 @@ CicloNombreStr = Annotated[
     BeforeValidator(
         _validator(
             _RE_CICLO_NOMBRE,
-            "Solo se permiten letras, numeros y los simbolos / - en el nombre del ciclo.",
+            "Solo se permiten letras, números y los símbolos / - en el nombre del ciclo.",
         )
     ),
 ]
@@ -194,7 +194,7 @@ FechaStr = Annotated[
     BeforeValidator(
         _validator(
             _RE_FECHA,
-            "Fecha invalida: solo numeros y los simbolos / -",
+            "Fecha inválida: solo números y los símbolos / -",
         )
     ),
 ]
@@ -204,7 +204,7 @@ DestinatariosStr = Annotated[
     BeforeValidator(
         _validator(
             _RE_DESTINATARIOS,
-            "Destinatarios invalidos: correos separados por coma.",
+            "Destinatarios inválidos: correos separados por coma.",
         )
     ),
 ]
@@ -214,7 +214,7 @@ TextoLibreStr = Annotated[
     BeforeValidator(
         _validator(
             _RE_TEXTO_LIBRE,
-            "Se permiten solo letras, numeros y puntuacion basica (.,;:!?()'\"-/_%&@#+*).",
+            "Se permiten solo letras, números y puntuación básica (.,;:!?()'\"-/_%&@#+*).",
         )
     ),
 ]

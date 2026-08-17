@@ -106,7 +106,7 @@ export default function ProfesoresPage() {
     const p = profesores.find(x => x.id === id);
     setConfirm({
       title: 'Eliminar profesor',
-      message: `¿Seguro que deseas eliminar a ${p?.nombre_completo ?? 'este profesor'}? Esta accion no se puede deshacer. Ingrese su contrasena para confirmar.`,
+      message: `¿Seguro que deseas eliminar a ${p?.nombre_completo ?? 'este profesor'}? Esta acción no se puede deshacer. Ingrese su contraseña para confirmar.`,
       confirmLabel: 'Eliminar',
       run: async () => {
         try {
@@ -125,7 +125,7 @@ export default function ProfesoresPage() {
     const accion = p.activo ? 'dar de baja' : 'reactivar';
     setConfirm({
       title: p.activo ? 'Dar de baja profesor' : 'Reactivar profesor',
-      message: `¿Seguro que deseas ${accion} a ${p.nombre_completo}? Ingrese su contrasena para confirmar.`,
+      message: `¿Seguro que deseas ${accion} a ${p.nombre_completo}? Ingrese su contraseña para confirmar.`,
       confirmLabel: p.activo ? 'Dar de baja' : 'Reactivar',
       run: async () => {
         try {
@@ -146,7 +146,7 @@ export default function ProfesoresPage() {
         <div className="toolbar-center">
           <div className="input-wrapper">
             <Search size={18} className="input-icon" />
-            <input type="text" className="input input--search" placeholder="Buscar por nombre, nomina o telefono..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} />
+            <input type="text" className="input input--search" placeholder="Buscar por nombre, nómina o teléfono..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} />
           </div>
         </div>
         <div className="toolbar-right">
@@ -168,7 +168,7 @@ export default function ProfesoresPage() {
         <table className="table">
           <thead>
             <tr>
-              <th>#</th><th>No. Nomina</th><th>Nombre completo</th><th>Telefono</th><th>Domicilio</th><th>Estado</th><th>Acciones</th>
+              <th>#</th><th>No. Nómina</th><th>Nombre completo</th><th>Teléfono</th><th>Domicilio</th><th>Estado</th><th>Acciones</th>
             </tr>
           </thead>
           <tbody>
@@ -207,7 +207,7 @@ export default function ProfesoresPage() {
             </div>
             <div className="modal-body" style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
               <div>
-                <label className="field-label">No. de nomina</label>
+                <label className="field-label">No. de nómina</label>
                 <input type="number" className="input" value={formNumNomina} onChange={(e) => setFormNumNomina(e.target.value)} />
               </div>
               <div>
@@ -215,7 +215,7 @@ export default function ProfesoresPage() {
                 <input className="input" value={formNombre} onChange={(e) => setFormNombre(e.target.value)} />
               </div>
               <div>
-                <label className="field-label">Telefono</label>
+                <label className="field-label">Teléfono</label>
                 <input className="input" value={formTelefono} onChange={(e) => setFormTelefono(e.target.value)} />
               </div>
               <div>
@@ -241,13 +241,13 @@ export default function ProfesoresPage() {
               <button className="modal-close" onClick={() => setDetailModal(null)}><X size={20} /></button>
             </div>
             <div className="modal-body" style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-              <div><span style={{ color: '#5F5657', fontSize: 12 }}>No. Nomina</span>
+              <div><span style={{ color: '#5F5657', fontSize: 12 }}>No. Nómina</span>
                 <div style={{ fontFamily: 'var(--font-mono)' }}>{detailModal.num_nomina}</div>
               </div>
               <div><span style={{ color: '#5F5657', fontSize: 12 }}>Nombre completo</span>
                 <div style={{ fontWeight: 500 }}>{detailModal.nombre_completo}</div>
               </div>
-              <div><span style={{ color: '#5F5657', fontSize: 12 }}>Telefono</span>
+              <div><span style={{ color: '#5F5657', fontSize: 12 }}>Teléfono</span>
                 <div>{detailModal.telefono || '---'}</div>
               </div>
               <div><span style={{ color: '#5F5657', fontSize: 12 }}>Domicilio</span>

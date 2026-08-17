@@ -26,7 +26,7 @@ const directivoMenu = [
   { icon: CalendarCheck, label: 'Permisos', path: '/permisos' },
   { icon: AlertTriangle, label: 'Incidencias', path: '/incidencias' },
   { icon: Shield, label: 'Faltas al Reglamento', path: '/faltas' },
-  { icon: Settings, label: 'Configuracion', path: '/configuracion' },
+  { icon: Settings, label: 'Configuración', path: '/configuracion' },
 ];
 
 const serviciosEscolaresMenu = [
@@ -35,9 +35,7 @@ const serviciosEscolaresMenu = [
   { icon: Building2, label: 'Grupos', path: '/grupos' },
   { icon: UserCheck, label: 'Profesores', path: '/profesores' },
   { icon: CreditCard, label: 'Credenciales', path: '/credenciales' },
-  { icon: CalendarCheck, label: 'Permisos', path: '/permisos' },
-  { icon: Shield, label: 'Faltas al Reglamento', path: '/faltas' },
-  { icon: Settings, label: 'Configuracion', path: '/configuracion' },
+  { icon: Settings, label: 'Configuración', path: '/configuracion' },
 ];
 
 const prefectoMenu = [
@@ -45,7 +43,6 @@ const prefectoMenu = [
   { icon: CalendarCheck, label: 'Permisos', path: '/permisos' },
   { icon: AlertTriangle, label: 'Incidencias', path: '/incidencias' },
   { icon: Shield, label: 'Faltas al Reglamento', path: '/faltas' },
-  { icon: UserCheck, label: 'Profesores', path: '/profesores' },
   { icon: FileText, label: 'Reportes', path: '/reportes' },
 ];
 
@@ -60,8 +57,18 @@ export default function Layout({ children, role, onLogout }: LayoutProps) {
   const navigate = useNavigate();
   const { user } = useAuth();
   const menu = role === 'Directivo' ? directivoMenu : role === 'Servicios Escolares' ? serviciosEscolaresMenu : prefectoMenu;
+  const menuPaths = menu.map(m => m.path);
 
   const readKey = `notif_read_${user?.username ?? 'anon'}`;
+
+  const notifPath = (id: string): string => {
+    const target = id.startsWith('inc:') ? '/incidencias'
+      : id.startsWith('perm:') ? '/permisos'
+      : id.startsWith('ret:') ? '/reportes'
+      : id.startsWith('cred:') ? '/credenciales'
+      : '';
+    return menuPaths.includes(target) ? target : '';
+  };
 
   const loadReadIds = () => {
     try {
@@ -102,7 +109,8 @@ export default function Layout({ children, role, onLogout }: LayoutProps) {
   const userInitials = (user ? `${user.nombre?.[0] ?? ''}${user.apellido_paterno?.[0] ?? ''}` : '').trim().toUpperCase() || (user?.username?.[0]?.toUpperCase() ?? 'U');
   const userRoleLabel = user?.rol ?? role;
 
-  const unreadCount = notifications.filter(n => n.unread).length;
+  const visibleNotifications = notifications.filter(n => notifPath(n.id) !== '');
+  const unreadCount = visibleNotifications.filter(n => n.unread).length;
   const pageTitle = location.pathname === '/'
     ? menu[0]?.label ?? 'Sistema NFC'
     : menu.find(m => location.pathname.startsWith(m.path))?.label ?? 'Sistema NFC';
@@ -136,15 +144,6 @@ export default function Layout({ children, role, onLogout }: LayoutProps) {
     const dias = Math.floor(horas / 24);
     if (dias < 7) return `hace ${dias} d`;
     return fecha.toLocaleDateString('es-MX', { day: 'numeric', month: 'short' });
-  };
-
-  const notifPath = (id: string, menuPaths: string[]): string => {
-    const target = id.startsWith('inc:') ? '/incidencias'
-      : id.startsWith('perm:') ? '/permisos'
-      : id.startsWith('ret:') ? '/reportes'
-      : id.startsWith('cred:') ? '/credenciales'
-      : '';
-    return target && menuPaths.includes(target) ? target : menuPaths[0] ?? '/dashboard';
   };
 
   const handleToggleNotifications = () => {
@@ -207,10 +206,10 @@ export default function Layout({ children, role, onLogout }: LayoutProps) {
           <button
             className="sidebar-item"
             onClick={onLogout}
-            title={collapsed ? 'Cerrar sesion' : undefined}
+            title={collapsed ? 'Cerrar sesión' : undefined}
           >
             <LogOut size={20} />
-            <span className="item-label">Cerrar sesion</span>
+            <span className="item-label">Cerrar sesión</span>
           </button>
         </div>
       </aside>
@@ -221,11 +220,11 @@ export default function Layout({ children, role, onLogout }: LayoutProps) {
             <button className="menu-toggle" onClick={() => setSidebarOpen(!sidebarOpen)}>
               {sidebarOpen ? <X size={24} /> : <Menu size={24} />}
             </button>
-            <h2 className="topbar-title">{pageTitle}</h2>
+            <h1 className="topbar-title">{pageTitle}</h1>
           </div>
           <div className="topbar-right">
             <span style={{ fontSize: 14, color: '#5F5657', fontWeight: 500 }}>
-              Plantel 27 Miahuatlan
+              Plantel 27 Miahuatlán
             </span>
             <div className="relative">
               <button
@@ -244,20 +243,20 @@ export default function Layout({ children, role, onLogout }: LayoutProps) {
                         style={{ background: 'none', border: 'none', color: '#EB2466', cursor: 'pointer', fontSize: 13, fontFamily: 'var(--font-sans)' }}
                         onClick={markAllAsRead}
                       >
-                        Marcar todas como leidas
+                        Marcar todas como leídas
                       </button>
                     )}
                   </div>
                   {notifLoading ? (
                     <Loader message="Cargando notificaciones..." height={240} />
-                  ) : notifications.length === 0 ? (
+                  ) : visibleNotifications.length === 0 ? (
                     <div style={{ padding: '32px 16px', textAlign: 'center', color: '#A79F9F', fontSize: 14 }}>
                       No tienes notificaciones
                     </div>
                   ) : (
                     <div className="notification-list">
-                      {notifications.map(n => {
-                        const target = notifPath(n.id, menu.map(m => m.path));
+                      {visibleNotifications.map(n => {
+                        const target = notifPath(n.id) || menuPaths[0] || '/dashboard';
                         return (
                           <div
                             key={n.id}

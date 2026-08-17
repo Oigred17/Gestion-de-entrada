@@ -102,7 +102,7 @@ async def _add_check(conn, constraint: str, table: str, definition: str) -> None
 
 async def migrate_database():
     """Migraciones idempotentes: convergen cualquier BD existente al esquema
-    completo de la aplicacion (esquema oficial bd_COBAO.sql + tablas propias)."""
+    completo de la aplicación (esquema oficial bd_COBAO.sql + tablas propias)."""
     async with engine.begin() as conn:
         # ------------------------------------------------------------------
         # Columnas propias que la app necesita (esquema oficial no las trae)
@@ -119,7 +119,7 @@ async def migrate_database():
         await _exec(conn, "CREATE INDEX IF NOT EXISTS idx_alumnos_grupo ON alumnos(id_grupo)")
 
         # ------------------------------------------------------------------
-        # Tablas de la aplicacion
+        # Tablas de la aplicación
         # ------------------------------------------------------------------
         await _exec(
             conn,
@@ -290,7 +290,7 @@ async def migrate_database():
                 conn,
                 """
                 INSERT INTO incidencias (id_alumno, tipo, descripcion, estado, notificar, id_usuario_registro, fecha_registro)
-                SELECT fa.id_alumno, 'Falta por inasistencia', 'No registro entrada (faltante)', 'Abierto', FALSE,
+                SELECT fa.id_alumno, 'Falta por inasistencia', 'No registró entrada (faltante)', 'Abierto', FALSE,
                        1, fa.fecha
                 FROM faltas_asistencia fa
                 WHERE fa.tipo = 'FALTANTE'
@@ -313,7 +313,7 @@ async def migrate_database():
                             WHERE LOWER(r.nombre) IN ('prefecto', 'prefectura')
                             ORDER BY u.id_usuario LIMIT 1),
                            1),
-                       'Registro de entrada sin salida', 'Pendiente de sancion', FALSE, fa.fecha
+                       'Registro de entrada sin salida', 'Pendiente de sanción', FALSE, fa.fecha
                 FROM faltas_asistencia fa
                 WHERE fa.tipo = 'SIN_SALIDA'
                   AND NOT EXISTS (
@@ -801,9 +801,9 @@ async def lifespan(app: FastAPI):
         )
     if not settings.nfc_api_key_set:
         logger.warning(
-            "NFC_API_KEY vacio: los lectores NFC externos no podran enviar "
-            "lecturas. Configura NFC_API_KEY y pon la misma en nfc_key.txt "
-            "de cada PC con lector."
+            "NFC_API_KEY vacio: la estacion NFC (lector fisico) no podra "
+            "registrar lecturas. Configura NFC_API_KEY en el .env del servidor "
+            "y copia la misma llave a nfc_key.txt en la PC del lector."
         )
     await migrate_database()
     await seed_database()

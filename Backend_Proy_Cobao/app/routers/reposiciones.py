@@ -5,6 +5,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.crud import reposicion as crud_reposicion
 from app.database import get_db
+from app.dependencies import get_current_user_from_request
+from app.models.usuario import Usuario
 from app.schemas.reposicion import ReposicionCreate, ReposicionResponse, ReposicionUpdate
 
 router = APIRouter(prefix="/reposiciones", tags=["Reposiciones"])
@@ -29,12 +31,18 @@ async def listar_reposiciones(
 async def obtener_reposicion(id_reposicion: int, db: AsyncSession = Depends(get_db)):
     reposicion = await crud_reposicion.get_reposicion(db, id_reposicion)
     if not reposicion:
-        raise HTTPException(status_code=404, detail="Reposicion no encontrada")
+        raise HTTPException(status_code=404, detail="Reposición no encontrada")
     return reposicion
 
 
 @router.post("/", response_model=ReposicionResponse, status_code=201)
-async def crear_reposicion(data: ReposicionCreate, db: AsyncSession = Depends(get_db)):
+async def crear_reposicion(
+    data: ReposicionCreate,
+    db: AsyncSession = Depends(get_db),
+    current_user: Usuario = Depends(get_current_user_from_request),
+):
+    if data.id_usuario_registro is None:
+        data.id_usuario_registro = current_user.id_usuario
     return await crud_reposicion.create_reposicion(db, data)
 
 
@@ -44,7 +52,7 @@ async def actualizar_reposicion(
 ):
     reposicion = await crud_reposicion.update_reposicion(db, id_reposicion, data)
     if not reposicion:
-        raise HTTPException(status_code=404, detail="Reposicion no encontrada")
+        raise HTTPException(status_code=404, detail="Reposición no encontrada")
     return reposicion
 
 
@@ -52,4 +60,4 @@ async def actualizar_reposicion(
 async def eliminar_reposicion(id_reposicion: int, db: AsyncSession = Depends(get_db)):
     ok = await crud_reposicion.delete_reposicion(db, id_reposicion)
     if not ok:
-        raise HTTPException(status_code=404, detail="Reposicion no encontrada")
+        raise HTTPException(status_code=404, detail="Reposición no encontrada")

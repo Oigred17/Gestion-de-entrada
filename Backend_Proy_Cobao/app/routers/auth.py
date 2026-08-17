@@ -52,8 +52,8 @@ def create_access_token(data: dict) -> str:
 
 
 async def decode_token(token: str, db: AsyncSession) -> Usuario | None:
-    """Decodifica un JWT y carga el usuario. Devuelve None si es invalido o el
-    usuario no existe / esta desactivado."""
+    """Decodifica un JWT y carga el usuario. Devuelve None si es inválido o el
+    usuario no existe / está desactivado."""
     try:
         payload = jwt.decode(
             token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM]
@@ -78,7 +78,7 @@ async def get_current_user(
 ) -> Usuario:
     credentials_exception = HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
-        detail="Credenciales invalidas",
+        detail="Credenciales inválidas",
         headers={"WWW-Authenticate": "Bearer"},
     )
     usuario = await decode_token(token, db)
@@ -111,7 +111,7 @@ async def login(data: LoginRequest, request: Request, db: AsyncSession = Depends
     if not usuario or not verify_password(data.password, usuario.password_user):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Usuario o contrasena incorrectos",
+            detail="Usuario o contraseña incorrectos",
         )
 
     if not usuario.activo:
@@ -130,11 +130,11 @@ async def verify_password_endpoint(
     data: VerifyPasswordRequest,
     current_user: Usuario = Depends(get_current_user),
 ):
-    """Verifica que la contrasena pertenece al usuario autenticado."""
+    """Verifica que la contraseña pertenece al usuario autenticado."""
     if not verify_password(data.password, current_user.password_user):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Contrasena incorrecta",
+            detail="Contraseña incorrecta",
         )
     return VerifyPasswordResponse(valid=True)
 
@@ -166,7 +166,7 @@ async def request_recovery(
     request: Request,
     db: AsyncSession = Depends(get_db),
 ):
-    """Solicita el envio de un codigo de verificacion al correo del usuario."""
+    """Solicita el envío de un código de verificación al correo del usuario."""
     ip = _client_ip(request)
     if not recovery_limiter.allow(f"recover:{ip}"):
         raise HTTPException(
@@ -179,7 +179,7 @@ async def request_recovery(
         "status": "ok",
         "message": (
             "Si el usuario existe y tiene un correo registrado, "
-            "se envio un codigo de verificacion."
+            "se envió un código de verificación."
         ),
     }
 
@@ -196,19 +196,19 @@ async def request_recovery(
             "status": "error",
             "email": recovery.mask_email(usuario.email),
             "message": (
-                "El envio de correo no esta configurado en el servidor. "
+                "El envío de correo no está configurado en el servidor. "
                 "Contacta al administrador para configurar SMTP."
             ),
         }
 
     code = recovery.create_code(usuario.username)
-    subject = "COBAO - Codigo de recuperacion de contrasena"
+    subject = "COBAO - Código de recuperación de contraseña"
     body = (
         f"Hola {usuario.nombre_completo},\n\n"
-        f"Recibimos una solicitud para restablecer la contrasena de tu cuenta "
+        f"Recibimos una solicitud para restablecer la contraseña de tu cuenta "
         f"'{usuario.username}'.\n\n"
-        f"Tu codigo de verificacion es: {code}\n\n"
-        f"Este codigo es valido por {settings.RECOVERY_CODE_EXPIRE_MINUTES} minutos. "
+        f"Tu código de verificación es: {code}\n\n"
+        f"Este código es válido por {settings.RECOVERY_CODE_EXPIRE_MINUTES} minutos. "
         f"Si no solicitaste este cambio, ignora este correo.\n\n"
         f"COBAO Plantel 27 Miahuatlan"
     )
@@ -218,13 +218,13 @@ async def request_recovery(
         return {
             "status": "error",
             "email": recovery.mask_email(usuario.email),
-            "message": "No se pudo enviar el correo. Verifica la configuracion SMTP e intenta de nuevo.",
+            "message": "No se pudo enviar el correo. Verifica la configuración SMTP e intenta de nuevo.",
         }
 
     return {
         "status": "ok",
         "email": recovery.mask_email(usuario.email),
-        "message": "Se envio un codigo de verificacion a tu correo.",
+        "message": "Se envió un código de verificación a tu correo.",
     }
 
 
@@ -234,7 +234,7 @@ async def reset_password(
     request: Request,
     db: AsyncSession = Depends(get_db),
 ):
-    """Valida el codigo y establece la nueva contrasena."""
+    """Valida el código y establece la nueva contraseña."""
     ip = _client_ip(request)
     if not recovery_limiter.allow(f"reset:{ip}"):
         raise HTTPException(
@@ -249,7 +249,7 @@ async def reset_password(
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=(
-                "La contrasena debe tener al menos "
+                "La contraseña debe tener al menos "
                 f"{settings.MIN_PASSWORD_LENGTH} caracteres."
             ),
         )
@@ -257,7 +257,7 @@ async def reset_password(
     if not code.isdigit() or len(code) != 6:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="El codigo debe ser de 6 digitos.",
+            detail="El código debe ser de 6 dígitos.",
         )
 
     result = await db.execute(
@@ -268,7 +268,7 @@ async def reset_password(
     if not usuario or not recovery.consume_code(usuario.username, code):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Codigo invalido o expirado.",
+            detail="Código inválido o expirado.",
         )
 
     usuario.password_user = hash_password(data.new_password)
@@ -276,5 +276,5 @@ async def reset_password(
 
     return {
         "status": "ok",
-        "message": "Contrasena actualizada correctamente. Ya puedes iniciar sesion.",
+        "message": "Contraseña actualizada correctamente. Ya puedes iniciar sesión.",
     }

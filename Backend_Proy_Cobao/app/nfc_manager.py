@@ -8,6 +8,9 @@ from fastapi import WebSocket
 
 logger = logging.getLogger(__name__)
 
+# Sin heartbeat de Escaneo/Kiosco, la estación se cierra sola.
+ESTACION_TIMEOUT_SECONDS = 90
+
 
 class NFCConnectionManager:
     def __init__(self):
@@ -18,6 +21,11 @@ class NFCConnectionManager:
         self.captured_uid: str | None = None
         self.last_seen_uid: str | None = None
         self.last_seen_at: float = 0.0
+
+        # Estación de registro: solo con personal Entrada/Prefectura en pantalla.
+        self.estacion_abierta = False
+        self.estacion_usuario: str | None = None
+        self.estacion_heartbeat_at: float = 0.0
 
     async def connect(self, websocket: WebSocket):
         await websocket.accept()
@@ -58,6 +66,45 @@ class NFCConnectionManager:
         self.capture_event.clear()
         self.captured_uid = None
         logger.info("Modo captura NFC desactivado")
+
+    def abrir_estacion(self, username: str) -> None:
+        self.estacion_abierta = True
+        self.estacion_usuario = username
+        self.estacion_heartbeat_at = time.time()
+        logger.info("Estación de entrada ABIERTA por %s", username)
+
+    def heartbeat_estacion(self) -> bool:
+        if not self.estacion_abierta:
+            return False
+        self.estacion_heartbeat_at = time.time()
+        return True
+
+    def cerrar_estacion(self) -> None:
+        if self.estacion_abierta:
+            logger.info(
+                "Estación de entrada CERRADA (era %s)",
+                self.estacion_usuario or "desconocido",
+            )
+        self.estacion_abierta = False
+        self.estacion_usuario = None
+        self.estacion_heartbeat_at = 0.0
+
+    def registro_permitido(self) -> bool:
+        """True solo si hay personal en Escaneo/Kiosco con heartbeat vigente."""
+        if not self.estacion_abierta:
+            return False
+        if (time.time() - self.estacion_heartbeat_at) > ESTACION_TIMEOUT_SECONDS:
+            self.cerrar_estacion()
+            return False
+        return True
+
+    def estado_estacion(self) -> dict[str, Any]:
+        abierta = self.registro_permitido()
+        return {
+            "abierta": abierta,
+            "usuario": self.estacion_usuario if abierta else None,
+            "timeout_seconds": ESTACION_TIMEOUT_SECONDS,
+        }
 
 
 nfc_manager = NFCConnectionManager()

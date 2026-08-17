@@ -1,17 +1,21 @@
 """
-Seguridad global: middleware ASGI de autenticacion + helpers de autorizacion.
+Seguridad global: middleware ASGI de autenticación + helpers de autorización.
 
 AuthMiddleware protege TODA la API (/api/v1) por igual, tanto peticiones HTTP
 como WebSockets, salvo rutas explicitamente publicas:
 
   - /api/v1/                       (raiz informativa)
   - /api/v1/auth/login             (login)
-  - /api/v1/auth/recover/*         (recuperacion de contrasena)
+  - /api/v1/auth/recover/*         (recuperación de contraseña)
 
-Los endpoints del lector NFC (/api/v1/nfc/scan, /api/v1/nfc/capture/*,
-/api/v1/nfc/ws) aceptan, ademas del Bearer token del frontend, la llave de API
-del lector (header X-API-Key / query ?token=). Si NFC_API_KEY no esta
-configurado, los lectores no podran escribir (solo el frontend con su JWT).
+Estación NFC (lector físico en otra PC):
+  - Solo los paths /api/v1/nfc/* aceptan la llave de estación (X-API-Key),
+    además del Bearer JWT del personal.
+  - Esa llave NO es un usuario ni una contraseña: es un secreto de dispositivo
+    generado en el servidor (.env NFC_API_KEY) y copiado a nfc_key.txt del lector.
+  - Registrar entradas/salidas: llave de estación O sesión con rol Entrada/Prefectura.
+  - Servicios Escolares usa JWT + modo captura (nunca registra con la llave
+    salvo que el lector físico esté en captura iniciada desde la web).
 """
 
 import hmac
@@ -50,17 +54,11 @@ def is_nfc_path(path: str) -> bool:
     return path.startswith(NFC_PATHS)
 
 
-def _valid_api_key(api_key: str) -> bool:
+def _valid_station_key(api_key: str) -> bool:
+    """Valida la llave de estación NFC (dispositivo), no una cuenta de usuario."""
     if not settings.nfc_api_key_set or not api_key:
         return False
     return hmac.compare_digest(api_key, settings.NFC_API_KEY)
-
-
-def _get_client_ip(request: Request) -> str:
-    forwarded = request.headers.get("x-forwarded-for", "")
-    if forwarded:
-        return forwarded.split(",")[0].strip()
-    return request.client.host if request.client else "unknown"
 
 
 def _token_from_headers(headers: dict[bytes, bytes]) -> str | None:
@@ -85,6 +83,10 @@ def _token_from_query(query_string: bytes) -> str | None:
     return unquote(raw).strip() or None
 
 
+def _api_key_from_headers(headers: dict[bytes, bytes]) -> str:
+    return headers.get(b"x-api-key", b"").decode("latin-1", errors="ignore")
+
+
 class AuthMiddleware:
     def __init__(self, app):
         self.app = app
@@ -101,9 +103,9 @@ class AuthMiddleware:
             return await self.app(scope, receive, send)
 
         headers = {k.lower(): v for k, v in (scope.get("headers") or [])}
-        api_key = headers.get(b"x-api-key", b"").decode("latin-1", errors="ignore")
 
-        if is_nfc_path(path) and _valid_api_key(api_key):
+        # Solo rutas NFC: la llave de estación autoriza al lector físico.
+        if is_nfc_path(path) and _valid_station_key(_api_key_from_headers(headers)):
             return await self.app(scope, receive, send)
 
         token = _token_from_headers(headers)
@@ -134,14 +136,11 @@ class AuthMiddleware:
         return await response(scope, None, send)
 
 
-async def get_current_user_from_request(
-    request: Request,
-    db: AsyncSession = Depends(get_db),
-):
+async def _usuario_desde_request(request: Request, db: AsyncSession):
     """Extrae y valida el Bearer token del request (para dependencias de ruta)."""
     credentials_exception = HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
-        detail="Credenciales invalidas",
+        detail="Credenciales inválidas",
         headers={"WWW-Authenticate": "Bearer"},
     )
     auth_header = request.headers.get("Authorization", "")
@@ -159,21 +158,55 @@ async def get_current_user_from_request(
     return usuario
 
 
+async def get_current_user_from_request(
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+):
+    return await _usuario_desde_request(request, db)
+
+
+async def _rol_nombre(db: AsyncSession, id_rol: int) -> str:
+    result = await db.execute(select(Rol).where(Rol.id_rol == id_rol))
+    rol = result.scalar_one_or_none()
+    return rol.nombre if rol else ""
+
+
+ROLES_REGISTRAR_ACCESO = ("Entrada", "Prefectura")
+
+
+async def require_registrar_acceso(
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+):
+    """Autoriza registrar entradas/salidas.
+
+    - Lector físico: llave de estación (X-API-Key = NFC_API_KEY del servidor).
+    - Personal web: sesión JWT con rol Entrada o Prefectura.
+    """
+    api_key = request.headers.get("X-API-Key", "")
+    if _valid_station_key(api_key):
+        return None
+
+    usuario = await _usuario_desde_request(request, db)
+    if await _rol_nombre(db, usuario.id_rol) not in ROLES_REGISTRAR_ACCESO:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="No tienes permisos para registrar entradas o salidas",
+        )
+    return usuario
+
+
 def require_roles(*roles: str):
     """Factory de dependencia: exige que el usuario tenga uno de los roles."""
     async def _checker(
         current_user=Depends(get_current_user_from_request),
         db: AsyncSession = Depends(get_db),
     ):
-        result = await db.execute(
-            select(Rol).where(Rol.id_rol == current_user.id_rol)
-        )
-        rol = result.scalar_one_or_none()
-        rol_nombre = rol.nombre if rol else ""
+        rol_nombre = await _rol_nombre(db, current_user.id_rol)
         if rol_nombre not in roles:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
-                detail="No tienes permisos para esta accion",
+                detail="No tienes permisos para esta acción",
             )
         return current_user
 

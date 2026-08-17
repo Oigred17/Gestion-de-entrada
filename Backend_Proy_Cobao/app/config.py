@@ -32,16 +32,16 @@ class Settings(BaseSettings):
     # Hosts que se confian para los headers de proxy (X-Forwarded-Proto/Host).
     TRUSTED_HOSTS: str = "*"
 
-    # Longitud minima de contrasena (para pruebas locales usa un valor bajo).
+    # Longitud mínima de contraseña (para pruebas locales usa un valor bajo).
     MIN_PASSWORD_LENGTH: int = 4
 
-    # Limites anti fuerza bruta en login/recuperacion.
+    # Límites anti fuerza bruta en login/recuperación.
     LOGIN_MAX_ATTEMPTS: int = 5
     LOGIN_WINDOW_SECONDS: int = 300
     RECOVERY_MAX_ATTEMPTS: int = 5
     RECOVERY_WINDOW_SECONDS: int = 600
 
-    # Envio de correo (SMTP). Para Gmail usar una contrasena de aplicacion.
+    # Envío de correo (SMTP). Para Gmail usar una contraseña de aplicación.
     SMTP_HOST: str = "smtp.gmail.com"
     SMTP_PORT: int = 587
     SMTP_USER: str = ""
@@ -49,7 +49,7 @@ class Settings(BaseSettings):
     SMTP_FROM: str = ""
     SMTP_USE_TLS: bool = True
 
-    # Recuperacion de contrasena
+    # Recuperación de contraseña
     RECOVERY_CODE_EXPIRE_MINUTES: int = 10
 
     model_config = {

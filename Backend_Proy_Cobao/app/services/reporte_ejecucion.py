@@ -1,4 +1,4 @@
-"""Generacion bajo demanda de reportes programados (CSV) para envio por correo."""
+"""Generación bajo demanda de reportes programados (CSV) para envío por correo."""
 
 from datetime import date, datetime, time, timedelta
 

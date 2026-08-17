@@ -4,12 +4,26 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.crud._helpers import build_alumno_dict
+from app.crud.credencial import get_credenciales
 from app.models.alumno import Alumno
 from app.models.grupo import Grupo
 from app.models.incidencia import Incidencia
 from app.schemas.incidencia import IncidenciaCreate, IncidenciaUpdate
 
 ESTADOS_INCIDENCIA = {"Abierto", "En revision", "Resuelto"}
+
+
+def _normalizar_texto(texto: str) -> str:
+    """Normaliza a minúsculas y sin tildes/ñ para comparaciones robustas."""
+    return (
+        texto.lower()
+        .replace("á", "a")
+        .replace("é", "e")
+        .replace("í", "i")
+        .replace("ó", "o")
+        .replace("ú", "u")
+        .replace("ñ", "n")
+    )
 
 
 def _row_to_dict(incidencia: Incidencia, alumno: Alumno | None, grupo_nombre: str | None = None) -> dict:
@@ -67,6 +81,10 @@ async def create_incidencia(db: AsyncSession, data: IncidenciaCreate):
     )
     db.add(incidencia)
     await db.flush()
+    if "danada" in _normalizar_texto(data.tipo):
+        credenciales = await get_credenciales(db, alumno_id=data.id_alumno, solo_activas=True)
+        for credencial in credenciales:
+            credencial.activa = False
     await db.refresh(incidencia)
     return incidencia
 

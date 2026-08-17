@@ -153,12 +153,12 @@ export default function PermissionsPage({ role }: PermissionsPageProps) {
       toastSuccess(
         estado === "Aprobado" ? "Permiso aprobado" : "Permiso rechazado",
         estado === "Aprobado"
-          ? `Codigo generado: ${updated.codigo_autorizacion ?? ""}`
+          ? `Código generado: ${updated.codigo_autorizacion ?? ""}`
           : undefined
       );
     } catch (e: unknown) {
       const err = e as { response?: { data?: { detail?: string } } };
-      toastError("No se pudo actualizar", err.response?.data?.detail || "Ocurrio un error");
+      toastError("No se pudo actualizar", err.response?.data?.detail || "Ocurrió un error");
     }
   };
 
@@ -166,7 +166,7 @@ export default function PermissionsPage({ role }: PermissionsPageProps) {
     const esAprobado = estado === "Aprobado";
     setConfirm({
       title: esAprobado ? "Aprobar permiso" : "Rechazar permiso",
-      message: `¿Seguro que deseas ${esAprobado ? "aprobar" : "rechazar"} el permiso de ${nombreCompleto(permiso)}? Ingrese su contrasena para confirmar.`,
+      message: `¿Seguro que deseas ${esAprobado ? "aprobar" : "rechazar"} el permiso de ${nombreCompleto(permiso)}? Ingrese su contraseña para confirmar.`,
       confirmLabel: esAprobado ? "Aprobar" : "Rechazar",
       run: () => performSetEstado(permiso, estado),
     });
@@ -174,8 +174,8 @@ export default function PermissionsPage({ role }: PermissionsPageProps) {
 
   const copyCode = (codigo: string) => {
     navigator.clipboard?.writeText(codigo).then(
-      () => toastSuccess("Codigo copiado"),
-      () => toastError("No se pudo copiar el codigo")
+      () => toastSuccess("Código copiado"),
+      () => toastError("No se pudo copiar el código")
     );
   };
 
@@ -207,7 +207,7 @@ export default function PermissionsPage({ role }: PermissionsPageProps) {
       toastSuccess("Permiso creado", `Permiso solicitado para ${nombreCompleto(nuevo)}`);
     } catch (e: unknown) {
       const err = e as { response?: { data?: { detail?: string } } };
-      toastError("No se pudo crear", err.response?.data?.detail || "Ocurrio un error");
+      toastError("No se pudo crear", err.response?.data?.detail || "Ocurrió un error");
     } finally {
       setSaving(false);
     }
@@ -244,7 +244,7 @@ export default function PermissionsPage({ role }: PermissionsPageProps) {
             />
             <input
               type="text"
-              placeholder="Buscar por nombre, matricula o grupo"
+              placeholder="Buscar por nombre, matrícula o grupo"
               value={search}
               onChange={(e) => {
                 setSearch(e.target.value);
@@ -625,7 +625,7 @@ export default function PermissionsPage({ role }: PermissionsPageProps) {
                     letterSpacing: 0.5,
                   }}
                 >
-                  Codigo de autorizacion
+                  Código de autorización
                 </h3>
                 <div
                   style={{
@@ -637,7 +637,7 @@ export default function PermissionsPage({ role }: PermissionsPageProps) {
                   }}
                 >
                   <div style={{ fontSize: 12, color: "#1792AB", marginBottom: 8, fontWeight: 600 }}>
-                    Presentar este codigo en control de acceso
+                        Presentar este código en control de acceso
                   </div>
                   <div
                     style={{
@@ -688,7 +688,7 @@ export default function PermissionsPage({ role }: PermissionsPageProps) {
                   </div>
                 </div>
                 <div>
-                  <span style={{ color: "#5F5657" }}>Telefono</span>
+                  <span style={{ color: "#5F5657" }}>Teléfono</span>
                   <div style={{ fontWeight: 500 }}>
                     {selectedPermission.alumno?.tutor_telefono ?? "No registrado"}
                   </div>
@@ -736,7 +736,7 @@ export default function PermissionsPage({ role }: PermissionsPageProps) {
                     <input
                       type="text"
                       className="input input--search"
-                      placeholder="Buscar por nombre o matricula..."
+                      placeholder="Buscar por nombre o matrícula..."
                       value={newAlumno ? `${newAlumno.nombre} ${newAlumno.apellido_paterno} - ${newAlumno.matricula}` : newAlumnoSearch}
                       onChange={(e) => {
                         setNewAlumnoSearch(e.target.value);

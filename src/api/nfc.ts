@@ -46,6 +46,26 @@ export const nfcApi = {
     return response.data;
   },
 
+  async abrirEstacion(): Promise<{ status: string; abierta: boolean; usuario?: string | null }> {
+    const response = await apiClient.post('/nfc/estacion/abrir');
+    return response.data;
+  },
+
+  async heartbeatEstacion(): Promise<{ status: string; abierta: boolean }> {
+    const response = await apiClient.post('/nfc/estacion/heartbeat');
+    return response.data;
+  },
+
+  async cerrarEstacion(): Promise<{ status: string; abierta: boolean }> {
+    const response = await apiClient.post('/nfc/estacion/cerrar');
+    return response.data;
+  },
+
+  async estadoEstacion(): Promise<{ abierta: boolean; usuario?: string | null }> {
+    const response = await apiClient.get('/nfc/estacion');
+    return response.data;
+  },
+
   connectWebSocket(onMessage: (msg: NFCWSMessage) => void, onOpen?: () => void, onClose?: () => void): WebSocket {
     const configured = import.meta.env.VITE_API_URL;
     let base: string;

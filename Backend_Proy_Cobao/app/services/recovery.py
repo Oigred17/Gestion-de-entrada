@@ -1,8 +1,8 @@
 """
-Servicio de codigos de recuperacion de contrasena.
+Servicio de códigos de recuperación de contraseña.
 
-Los codigos se guardan en memoria con fecha de expiracion. El proceso de
-uvicorn usa un solo worker, por lo que es suficiente para esta aplicacion.
+Los códigos se guardan en memoria con fecha de expiración. El proceso de
+uvicorn usa un solo worker, por lo que es suficiente para esta aplicación.
 """
 
 import secrets
@@ -26,7 +26,7 @@ def generate_code() -> str:
 
 
 def create_code(username: str) -> str:
-    """Genera y guarda un codigo para el usuario. Devuelve el codigo."""
+    """Genera y guarda un código para el usuario. Devuelve el código."""
     code = generate_code()
     _codes[username.lower()] = ResetEntry(
         code=code,
@@ -46,7 +46,7 @@ def verify_code(username: str, code: str) -> bool:
 
 
 def consume_code(username: str, code: str) -> bool:
-    """Valida el codigo y, si es correcto, lo elimina (un solo uso)."""
+    """Valida el código y, si es correcto, lo elimina (un solo uso)."""
     if not verify_code(username, code):
         return False
     _codes.pop(username.lower(), None)

@@ -1,1 +1,1 @@
-https://stations-kennedy-scotia-millions.trycloudflare.com/api/v1/nfc/scan
+https://charlie-proprietary-guitar-ranks.trycloudflare.com/api/v1/nfc/scan

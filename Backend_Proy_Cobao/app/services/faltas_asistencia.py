@@ -1,4 +1,4 @@
-"""Generacion automatica de faltas de asistencia.
+"""Generación automática de faltas de asistencia.
 
 Reglas:
 - FALTANTE: alumno activo (grupo del ciclo activo) sin registro de ENTRADA en
@@ -34,10 +34,10 @@ logger = logging.getLogger(__name__)
 DIAS_NOMBRES = ["Lunes", "Martes", "Miercoles", "Jueves", "Viernes", "Sabado", "Domingo"]
 
 INCIDENCIA_TIPO = "Falta por inasistencia"
-INCIDENCIA_DESC = "No registro entrada (faltante)"
+INCIDENCIA_DESC = "No registró entrada (faltante)"
 
 REPORTE_MOTIVO = "Registro de entrada sin salida"
-REPORTE_SANCION = "Pendiente de sancion"
+REPORTE_SANCION = "Pendiente de sanción"
 
 HORA_SALIDA_DEFECTO = "14:00"
 
@@ -245,7 +245,7 @@ async def generar_faltas(db, fecha: date) -> dict:
 
 
 async def generar_faltas_para_dia(fecha: date) -> dict:
-    """Version para tareas en segundo plano: abre su propia sesion y commitea."""
+    """Version para tareas en segundo plano: abre su propia sesión y commitea."""
     async with async_session() as db:
         try:
             resultado = await generar_faltas(db, fecha)
