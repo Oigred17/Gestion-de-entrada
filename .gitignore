@@ -2,6 +2,7 @@
 .env
 nfc_key.txt
 nfc_pass.txt
+nfc_url.txt
 **/nfc_pass.txt
 **/nfc_user.txt
 
@@ -25,3 +26,17 @@ __pycache__/
 *.py[cod]
 .venv/
 venv/
+
+# Binarios NFC (compilar localmente con build_nfc_reader.bat)
+*.exe
+lector_nfc/nfc_reader.exe
+
+# Build artifacts
+build/
+
+# Archivos de datos (no versionar)
+*.xlsx
+*.xls
+
+# Archivos temporales
+.impeccable/
