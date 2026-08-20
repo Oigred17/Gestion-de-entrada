@@ -108,10 +108,14 @@ async def migrate_database():
         # Columnas propias que la app necesita (esquema oficial no las trae)
         # ------------------------------------------------------------------
         await _exec(conn, "ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS email VARCHAR(120)")
+        await _exec(conn, "ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS mfa_enabled BOOLEAN NOT NULL DEFAULT FALSE")
+        await _exec(conn, "ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS mfa_secret VARCHAR(32)")
         await _exec(conn, "ALTER TABLE alumnos ADD COLUMN IF NOT EXISTS capacitacion VARCHAR(100)")
         await _exec(conn, "ALTER TABLE alumnos ADD COLUMN IF NOT EXISTS turno VARCHAR(20)")
         await _exec(conn, "ALTER TABLE alumnos ADD COLUMN IF NOT EXISTS cohorte VARCHAR(10)")
         await _exec(conn, "ALTER TABLE alumnos ADD COLUMN IF NOT EXISTS fecha_nacimiento VARCHAR(20)")
+        await _exec(conn, "ALTER TABLE alumnos ADD COLUMN IF NOT EXISTS estatus VARCHAR(20) DEFAULT 'Activo'")
+        await _exec(conn, "UPDATE alumnos SET estatus = CASE WHEN activo THEN 'Activo' ELSE 'Inactivo' END WHERE estatus IS NULL OR estatus = ''")
         await _exec(
             conn,
             "ALTER TABLE alumnos ADD COLUMN IF NOT EXISTS id_grupo INTEGER REFERENCES grupos(id)",
@@ -756,12 +760,21 @@ async def migrate_database():
 
         # ------------------------------------------------------------------
         # Seed del ciclo escolar (igual que bd_COBAO.sql)
+        # Respetar idx_un_solo_ciclo_activo: solo marcar activo si no hay otro.
         # ------------------------------------------------------------------
         await _exec(
             conn,
-            "INSERT INTO ciclos_escolares (nombre, fecha_inicio, fecha_fin, activo) "
-            "VALUES ('2025-2026', '2025-08-15', '2026-07-15', true) "
-            "ON CONFLICT (nombre) DO NOTHING",
+            """
+            INSERT INTO ciclos_escolares (nombre, fecha_inicio, fecha_fin, activo)
+            SELECT
+                '2025-2026',
+                '2025-08-15',
+                '2026-07-15',
+                NOT EXISTS (SELECT 1 FROM ciclos_escolares WHERE activo = true)
+            WHERE NOT EXISTS (
+                SELECT 1 FROM ciclos_escolares WHERE nombre = '2025-2026'
+            )
+            """,
         )
 
 
@@ -825,6 +838,9 @@ app = FastAPI(
     title="COBAO - API",
     version="1.0.0",
     lifespan=lifespan,
+    docs_url=None if settings.COOKIE_SECURE else "/docs",
+    redoc_url=None if settings.COOKIE_SECURE else "/redoc",
+    openapi_url=None if settings.COOKIE_SECURE else "/openapi.json",
 )
 
 app.add_middleware(AuthMiddleware)
@@ -843,6 +859,18 @@ app.add_middleware(
     ProxyHeadersMiddleware, trusted_hosts=settings.trusted_hosts_set
 )
 
+
+@app.middleware("http")
+async def security_headers(request: Request, call_next):
+    response = await call_next(request)
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    response.headers["X-Frame-Options"] = "DENY"
+    response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+    response.headers["Permissions-Policy"] = "camera=(), microphone=(), geolocation=()"
+    if settings.COOKIE_SECURE:
+        response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
+    return response
+
 app.include_router(auth.router, prefix=API_PREFIX)
 app.include_router(
     roles.router,
@@ -852,7 +880,7 @@ app.include_router(
 app.include_router(
     usuarios.router,
     prefix=API_PREFIX,
-    dependencies=[Depends(require_roles("Directivo", "Servicios Escolares"))],
+    dependencies=[Depends(require_roles("Directivo", "Servicios Escolares", "Prefectura"))],
 )
 app.include_router(ciclos_escolares.router, prefix=API_PREFIX)
 app.include_router(

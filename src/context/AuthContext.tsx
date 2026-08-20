@@ -1,92 +1,75 @@
-import { createContext, useContext, useState, useEffect, type ReactNode } from 'react';
-import { authApi } from '../api';
+import { createContext, useContext, useState, useEffect, useCallback, type ReactNode } from 'react';
+import { authApi, setAuthToken, setOnUnauthorized } from '../api';
 import type { User, LoginRequest } from '../types';
 
 interface AuthContextType {
   user: User | null;
   isAuthenticated: boolean;
   isLoading: boolean;
-  login: (credentials: LoginRequest, remember?: boolean) => Promise<void>;
-  logout: () => void;
+  login: (credentials: LoginRequest) => Promise<{ mfa_required?: boolean; temp_token?: string }>;
+  logout: () => Promise<void>;
   getUserRole: () => string;
+  refreshUser: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
-
-function readStorage(key: string): string | null {
-  return localStorage.getItem(key) ?? sessionStorage.getItem(key);
-}
-
-function writeStorage(key: string, value: string, remember: boolean) {
-  if (remember) {
-    localStorage.setItem(key, value);
-    sessionStorage.removeItem(key);
-  } else {
-    sessionStorage.setItem(key, value);
-    localStorage.removeItem(key);
-  }
-}
-
-function clearStorages() {
-  localStorage.removeItem('access_token');
-  localStorage.removeItem('user');
-  sessionStorage.removeItem('access_token');
-  sessionStorage.removeItem('user');
-}
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
+  const redirectToLogin = useCallback(() => {
+    setAuthToken(null);
+    setUser(null);
+    if (window.location.pathname !== '/login') {
+      window.location.href = '/login';
+    }
+  }, []);
+
   useEffect(() => {
-    const token = readStorage('access_token');
-    const savedUser = readStorage('user');
+    setOnUnauthorized(redirectToLogin);
+    return () => setOnUnauthorized(null);
+  }, [redirectToLogin]);
 
-    if (!token || !savedUser) {
-      setIsLoading(false);
-      return;
-    }
-
+  const refreshUser = async () => {
     try {
-      const cached: User = JSON.parse(savedUser);
-      setUser(cached);
+      const current = await authApi.getCurrentUser();
+      setUser(current);
     } catch {
-      clearStorages();
-      setIsLoading(false);
-      return;
+      setUser(null);
     }
+  };
 
-    // Validar el token contra el backend para refrescar datos y detectar sesion expirada
+  useEffect(() => {
     authApi.getCurrentUser()
       .then((current) => {
         setUser(current);
-        writeStorage('user', JSON.stringify(current), !!localStorage.getItem('access_token'));
       })
-      .catch((err) => {
-        const status = err?.response?.status;
-        if (status === 401 || status === 403) {
-          clearStorages();
-          setUser(null);
-        }
-        // Para errores de red se conserva el usuario en cache
+      .catch(() => {
+        setAuthToken(null);
+        setUser(null);
       })
       .finally(() => setIsLoading(false));
   }, []);
 
-  const login = async (credentials: LoginRequest, remember = false) => {
+  const login = async (credentials: LoginRequest) => {
     const response = await authApi.login(credentials);
-    writeStorage('access_token', response.access_token, remember);
 
+    if (response.mfa_required) {
+      return { mfa_required: true, temp_token: response.temp_token };
+    }
+
+    setAuthToken(response.access_token);
     const currentUser = await authApi.getCurrentUser();
-    writeStorage('user', JSON.stringify(currentUser), remember);
     setUser(currentUser);
+    return {};
   };
 
-  const logout = () => {
-    authApi.logout();
-    sessionStorage.removeItem('access_token');
-    sessionStorage.removeItem('user');
+  const logout = async () => {
+    await authApi.logout();
+    setAuthToken(null);
     setUser(null);
+    window.location.href = '/login';
   };
 
   const getUserRole = () => {
@@ -102,6 +85,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         login,
         logout,
         getUserRole,
+        refreshUser,
       }}
     >
       {children}

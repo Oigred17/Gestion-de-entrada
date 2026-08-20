@@ -26,11 +26,6 @@ class VerifyPasswordResponse(BaseModel):
     valid: bool = True
 
 
-class TokenResponse(BaseModel):
-    access_token: str
-    token_type: str = "bearer"
-
-
 class UserResponse(BaseModel):
     id: int
     username: str
@@ -39,5 +34,16 @@ class UserResponse(BaseModel):
     apellido_paterno: str
     apellido_materno: str
     rol: str
+    mfa_enabled: bool = False
 
     model_config = {"from_attributes": True}
+
+
+class MfaSetupResponse(BaseModel):
+    secret: str
+    provisioning_uri: str
+
+
+class VerifyMfaRequest(BaseModel):
+    code: str
+    temp_token: str | None = None

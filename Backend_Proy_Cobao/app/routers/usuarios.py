@@ -1,6 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.config import settings
 from app.crud import usuario as crud_usuario
 from app.database import get_db
 from app.schemas.usuario import (
@@ -37,6 +38,11 @@ async def obtener_usuario_por_username(
 
 @router.post("/", response_model=UsuarioResponse, status_code=201)
 async def crear_usuario(data: UsuarioCreate, db: AsyncSession = Depends(get_db)):
+    if len(data.password_user) < settings.MIN_PASSWORD_LENGTH:
+        raise HTTPException(
+            status_code=400,
+            detail=f"La contraseña debe tener al menos {settings.MIN_PASSWORD_LENGTH} caracteres.",
+        )
     return await crud_usuario.create_usuario(db, data)
 
 
@@ -44,6 +50,11 @@ async def crear_usuario(data: UsuarioCreate, db: AsyncSession = Depends(get_db))
 async def actualizar_usuario(
     id_usuario: int, data: UsuarioUpdate, db: AsyncSession = Depends(get_db)
 ):
+    if data.password_user and len(data.password_user) < settings.MIN_PASSWORD_LENGTH:
+        raise HTTPException(
+            status_code=400,
+            detail=f"La contraseña debe tener al menos {settings.MIN_PASSWORD_LENGTH} caracteres.",
+        )
     usuario = await crud_usuario.update_usuario(db, id_usuario, data)
     if not usuario:
         raise HTTPException(status_code=404, detail="Usuario no encontrado")

@@ -20,8 +20,19 @@ interface CacheEntry<T = unknown> {
 
 const getCache: Map<string, CacheEntry> = new Map();
 
-function getToken(): string {
-  return localStorage.getItem('access_token') ?? sessionStorage.getItem('access_token') ?? '';
+let _memoryToken: string | null = null;
+let onUnauthorized: (() => void) | null = null;
+
+export function setAuthToken(token: string | null) {
+  _memoryToken = token;
+}
+
+export function getAuthToken(): string | null {
+  return _memoryToken;
+}
+
+export function setOnUnauthorized(handler: (() => void) | null) {
+  onUnauthorized = handler;
 }
 
 function normalizeParams(params?: unknown): string {
@@ -34,7 +45,7 @@ function normalizeParams(params?: unknown): string {
 }
 
 function cacheKey(method: string, url: string | undefined, params?: unknown): string {
-  return `${getToken()}|${method}|${url ?? ''}|${normalizeParams(params)}`;
+  return `${method}|${url ?? ''}|${normalizeParams(params)}`;
 }
 
 function isCacheable(method?: string): boolean {
@@ -43,13 +54,14 @@ function isCacheable(method?: string): boolean {
 
 const apiClient = axios.create({
   baseURL: API_BASE_URL,
+  withCredentials: true,
   headers: {
     'Content-Type': 'application/json',
   },
 });
 
 apiClient.interceptors.request.use((config) => {
-  const token = getToken();
+  const token = _memoryToken;
   if (token) {
     config.headers.Authorization = `Bearer ${token}`;
   }
@@ -92,11 +104,7 @@ apiClient.interceptors.response.use(
   (error) => {
     if (error.response?.status === 401) {
       getCache.clear();
-      localStorage.removeItem('access_token');
-      localStorage.removeItem('user');
-      sessionStorage.removeItem('access_token');
-      sessionStorage.removeItem('user');
-      window.location.href = '/login';
+      onUnauthorized?.();
     }
     return Promise.reject(error);
   }

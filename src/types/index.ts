@@ -87,6 +87,9 @@ export interface Grupo {
   ciclo_escolar_id?: number;
   profesor_id?: number;
   estatus: string;
+  semestre?: number;
+  periodo?: string;
+  anio?: number;
   created_at?: string;
   updated_at?: string;
 }
@@ -102,7 +105,8 @@ export interface GrupoCreate {
 
 export interface Credencial {
   id: number;
-  alumno_id: number;
+  alumno_id?: number;
+  id_profesor?: number;
   numero?: string;
   tipo?: string;
   estatus: string;
@@ -111,10 +115,12 @@ export interface Credencial {
   created_at?: string;
   updated_at?: string;
   alumno?: Alumno;
+  profesor?: Profesor;
 }
 
 export interface CredencialCreate {
-  alumno_id: number;
+  alumno_id?: number;
+  id_profesor?: number;
   numero?: string;
   tipo?: string;
   estatus?: string;
@@ -183,6 +189,18 @@ export interface CicloEscolarCreate {
   fecha_inicio: string;
   fecha_fin: string;
   estatus?: string;
+}
+
+export interface CicloTransicionResponse {
+  ciclo_anterior_id: number;
+  ciclo_nuevo_id: number;
+  grupos_creados: number;
+  inscripciones_creadas: number;
+  alumnos_migrados: number;
+  credenciales_desactivadas: number;
+  alumnos_graduados: number;
+  grupos_nuevos: { clave_anterior: number; clave_nueva: number; id_nuevo: number }[];
+  alumnos_graduados_detalle: { id_alumno: number; matricula: string; nombre: string }[];
 }
 
 export interface Justificacion {
@@ -408,6 +426,18 @@ export interface LoginRequest {
 export interface LoginResponse {
   access_token: string;
   token_type: string;
+  mfa_required?: boolean;
+  temp_token?: string;
+}
+
+export interface MfaSetupResponse {
+  secret: string;
+  provisioning_uri: string;
+}
+
+export interface VerifyMfaRequest {
+  code: string;
+  temp_token?: string;
 }
 
 export interface RecoveryResponse {
@@ -430,4 +460,5 @@ export interface User {
   apellido_paterno: string;
   apellido_materno: string;
   rol: string;
+  mfa_enabled: boolean;
 }

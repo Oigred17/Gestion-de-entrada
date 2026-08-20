@@ -5,9 +5,25 @@ import {
 import { alumnosApi } from '../api/alumnos';
 import { registrosApi } from '../api/registros';
 import { credencialesApi } from '../api/credenciales';
-import { gruposApi } from '../api';
-import type { Alumno, Credencial, RegistroAcceso } from '../types';
+import { gruposApi, ciclosApi } from '../api';
+import type { Alumno, CicloEscolar, Credencial, Grupo, RegistroAcceso } from '../types';
+import { normalizeText } from '../lib/normalizeText';
 import Loader from '../components/Loader';
+
+interface GrupoCard {
+  grupo: string;
+  claveGrupo?: number;
+  semestre?: number;
+  cicloNombre?: string;
+  total: number;
+  activos: number;
+  inactivos: number;
+  credencialesTotal: number;
+  credencialesActivas: number;
+  alumnos: Alumno[];
+  registros: number;
+  entradas: number;
+}
 
 export default function GruposPage() {
   const [search, setSearch] = useState('');
@@ -16,7 +32,8 @@ export default function GruposPage() {
   const [alumnosData, setAlumnosData] = useState<Alumno[]>([]);
   const [credencialesData, setCredencialesData] = useState<Credencial[]>([]);
   const [registrosData, setRegistrosData] = useState<RegistroAcceso[]>([]);
-  const [gruposMap, setGruposMap] = useState<Record<number, string>>({});
+  const [gruposData, setGruposData] = useState<Grupo[]>([]);
+  const [cicloActivo, setCicloActivo] = useState<CicloEscolar | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -25,20 +42,19 @@ export default function GruposPage() {
       setLoading(true);
       setError(null);
       try {
-        const [al, cr, rg, gr] = await Promise.all([
+        const [al, cr, rg, gr, ciclos] = await Promise.all([
           alumnosApi.getAll(),
           credencialesApi.getAll(),
           registrosApi.getAll(),
           gruposApi.getAll(),
+          ciclosApi.getAll(),
         ]);
         setAlumnosData(al);
         setCredencialesData(cr);
         setRegistrosData(rg);
-        const map: Record<number, string> = {};
-        for (const g of gr) {
-          if (g.id) map[g.id] = g.nombre;
-        }
-        setGruposMap(map);
+        setGruposData(gr);
+        const activo = ciclos.find(c => c.estatus === 'Activo');
+        setCicloActivo(activo ?? null);
       } catch (err) {
         console.error('Error fetching data:', err);
         setError('No se pudo conectar con el servidor. Revisa que el backend este corriendo.');
@@ -49,23 +65,30 @@ export default function GruposPage() {
     fetchData();
   }, []);
 
-  const getNombreGrupo = (id_grupo?: number | null): string => {
-    return id_grupo ? (gruposMap[id_grupo] || String(id_grupo)) : 'Sin grupo';
+  const getGrupoName = (id_grupo?: number | null): string => {
+    if (!id_grupo) return 'Sin grupo';
+    const found = gruposData.find(g => g.id === id_grupo);
+    return found ? found.nombre : String(id_grupo);
   };
 
   const hoy = new Date().toISOString().slice(0, 10);
 
-  const grupos = Array.from(
+  const gruposDelCiclo = cicloActivo
+    ? gruposData.filter(g => g.ciclo_escolar_id === cicloActivo.id)
+    : gruposData;
+
+  const grupoCards: GrupoCard[] = Array.from(
     new Set([
-      ...Object.values(gruposMap),
-      ...alumnosData.map(s => getNombreGrupo(s.id_grupo)),
+      ...gruposDelCiclo.map(g => g.nombre),
+      ...alumnosData
+        .filter(s => s.id_grupo && gruposDelCiclo.some(g => g.id === s.id_grupo))
+        .map(s => getGrupoName(s.id_grupo)),
     ])
   )
     .sort()
     .map(grupo => {
-      const groupStudents = alumnosData.filter(s => {
-        return getNombreGrupo(s.id_grupo) === grupo;
-      });
+      const gObj = gruposDelCiclo.find(g => g.nombre === grupo);
+      const groupStudents = alumnosData.filter(s => getGrupoName(s.id_grupo) === grupo && s.id_grupo && gruposDelCiclo.some(g => g.id === s.id_grupo));
       const activos = groupStudents.filter(s => (s.estatus ?? 'Activo').toLowerCase() === 'activo').length;
       const groupCreds = credencialesData.filter(c =>
         groupStudents.some(s => s.id === c.alumno_id)
@@ -77,6 +100,9 @@ export default function GruposPage() {
       const entradas = records.filter(r => r.tipo_acceso === 'ENTRADA').length;
       return {
         grupo,
+        claveGrupo: gObj?.clave_grupo,
+        semestre: gObj?.semestre,
+        cicloNombre: cicloActivo?.nombre,
         total: groupStudents.length,
         activos,
         inactivos: groupStudents.length - activos,
@@ -88,10 +114,11 @@ export default function GruposPage() {
       };
     });
 
-  const filtered = grupos.filter(g => {
+  const filtered = grupoCards.filter(g => {
     if (!search) return true;
-    const q = search.toLowerCase();
-    return g.grupo.toLowerCase().includes(q);
+    const q = normalizeText(search);
+    return normalizeText(g.grupo).includes(q) ||
+      (g.semestre && String(g.semestre).includes(q));
   });
 
   const toggleGroup = (grupo: string) => {
@@ -122,11 +149,12 @@ export default function GruposPage() {
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
+
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 16 }}>
         {[
-          { label: 'Total grupos', value: grupos.length, color: '#EB2466', bg: '#FEEBEE', icon: Building2 },
-          { label: 'Total alumnos', value: alumnosData.length, color: '#0F8122', bg: '#E8F5E9', icon: Users },
-          { label: 'Credenciales activas', value: credencialesData.filter(c => c.estatus === 'ACTIVA').length, color: '#1792AB', bg: '#DCF5FF', icon: BookOpen },
+          { label: 'Total grupos', value: grupoCards.length, color: '#EB2466', bg: '#FEEBEE', icon: Building2 },
+          { label: 'Total alumnos', value: grupoCards.reduce((sum, g) => sum + g.total, 0), color: '#0F8122', bg: '#E8F5E9', icon: Users },
+          { label: 'Credenciales activas', value: credencialesData.filter(c => c.estatus === 'ACTIVA' && gruposDelCiclo.some(g => g.id && alumnosData.some(a => a.id === c.alumno_id && a.id_grupo === g.id))).length, color: '#1792AB', bg: '#DCF5FF', icon: BookOpen },
           { label: 'Registros hoy', value: registrosData.filter(r => r.fecha_hora.startsWith(hoy)).length, color: '#5F5657', bg: '#F0EFEF', icon: Calendar },
         ].map(stat => (
           <div key={stat.label} style={{
@@ -151,7 +179,7 @@ export default function GruposPage() {
         <Search size={18} style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', color: '#CAC6C7' }} />
         <input
           type="text"
-          placeholder="Buscar por grupo..."
+          placeholder="Buscar por grupo o semestre..."
           value={search}
           onChange={e => setSearch(e.target.value)}
           style={{
@@ -191,14 +219,24 @@ export default function GruposPage() {
                     width: 44, height: 44, borderRadius: 10,
                     background: `linear-gradient(135deg, #EB2466, #AB1748)`,
                     display: 'flex', alignItems: 'center', justifyContent: 'center',
-                    color: '#fff', fontSize: 16, fontWeight: 800,
+                    color: '#fff', fontSize: 14, fontWeight: 800,
                   }}>
                     {g.grupo}
                   </div>
-                    <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ flex: 1, minWidth: 0 }}>
                     <div style={{ fontSize: 16, fontWeight: 700, color: '#1C1819' }}>
                       {g.grupo === 'Sin grupo' ? 'Sin grupo' : `Grupo ${g.grupo}`}
                     </div>
+                    {g.semestre && (
+                      <div style={{ fontSize: 12, color: '#85787A', marginTop: 1 }}>
+                        {g.semestre}° semestre
+                        {cicloActivo && (
+                          <span style={{ marginLeft: 6, color: '#5F5657' }}>
+                            · {cicloActivo.nombre}
+                          </span>
+                        )}
+                      </div>
+                    )}
                   </div>
                   <div style={{ display: 'flex', gap: 20, alignItems: 'center' }}>
                     <div style={{ textAlign: 'center' }}>
@@ -230,7 +268,7 @@ export default function GruposPage() {
                       <thead>
                         <tr style={{ background: '#F0EFEF' }}>
                           <th style={{ textAlign: 'left', padding: '10px 20px', fontSize: 12, fontWeight: 600, color: '#5F5657' }}>Alumno</th>
-                          <th style={{ textAlign: 'left', padding: '10px 16px', fontSize: 12, fontWeight: 600, color: '#5F5657' }}>Matrícula</th>
+                          <th style={{ textAlign: 'left', padding: '10px 16px', fontSize: 12, fontWeight: 600, color: '#5F5657' }}>Matricula</th>
                           <th style={{ textAlign: 'left', padding: '10px 16px', fontSize: 12, fontWeight: 600, color: '#5F5657' }}>Estado</th>
                           <th style={{ textAlign: 'left', padding: '10px 16px', fontSize: 12, fontWeight: 600, color: '#5F5657' }}>Credencial</th>
                         </tr>

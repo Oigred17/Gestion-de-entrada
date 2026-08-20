@@ -20,13 +20,14 @@ import { alumnosApi, gruposApi, ciclosApi } from "../api";
 import type { Alumno, Grupo } from "../types";
 import { generateStudentListPDF } from "../utils/generateStudentListPDF";
 import { toastSuccess, toastError, toastInfo } from "@/lib/toast";
+import { normalizeText } from "@/lib/normalizeText";
 import Loader from "../components/Loader";
 import ConfirmPasswordModal from "../components/ConfirmPasswordModal";
 
 const ROWS_PER_PAGE_OPTIONS = [10, 25, 50, 100];
 
 interface StudentConfirm {
-  type: "toggle_status" | "save_edit" | "import";
+  type: "toggle_status" | "save_edit" | "edit_student" | "import";
   title: string;
   message: string;
   confirmLabel: string;
@@ -93,7 +94,7 @@ export default function StudentsPage() {
   const fetchAlumnos = async () => {
     try {
       const [data, grupos] = await Promise.all([alumnosApi.getAll(), gruposApi.getAll()]);
-      setAlumnosData(data);
+      setAlumnosData(data.filter(s => s.estatus !== 'Egresado'));
       const map: Record<number, string> = {};
       for (const g of grupos) {
         if (g.id) map[g.id] = g.nombre;
@@ -131,11 +132,11 @@ export default function StudentsPage() {
   const filteredStudents = alumnosData.filter((s) => {
     const nombreCompleto = `${s.nombre} ${s.apellido_paterno} ${s.apellido_materno}`.trim();
     if (search) {
-      const q = search.toLowerCase();
+      const q = normalizeText(search);
       const matchSearch =
-        nombreCompleto.toLowerCase().includes(q) ||
-        s.matricula.toLowerCase().includes(q) ||
-        getGrupoName(s.id_grupo).toLowerCase().includes(q);
+        normalizeText(nombreCompleto).includes(q) ||
+        normalizeText(s.matricula).includes(q) ||
+        normalizeText(getGrupoName(s.id_grupo)).includes(q);
       if (!matchSearch) return false;
     }
     if (activeFilters.length > 0) {
@@ -160,6 +161,7 @@ export default function StudentsPage() {
     generateStudentListPDF({
       students: toExport,
       groupName: label,
+      gruposMap,
     });
     setShowExportModal(false);
   };
@@ -217,35 +219,24 @@ export default function StudentsPage() {
 
   const confirmEdit = () => {
     setShowConfirmEdit(false);
-    setPanelMode("edit");
+    if (!selectedStudent) return;
+    const nombreCompleto = `${selectedStudent.nombre} ${selectedStudent.apellido_paterno} ${selectedStudent.apellido_materno}`.trim();
+    setConfirmAction({
+      type: "edit_student",
+      title: "Confirmar edición",
+      message: `Ingrese su contraseña para editar los datos de ${nombreCompleto}.`,
+      confirmLabel: "Confirmar",
+    });
   };
 
   const handleSaveEdit = async () => {
     if (!selectedStudent) return;
-    try {
-      const nameParts = editName.split(' ');
-      await alumnosApi.update(selectedStudent.id, {
-        matricula: editControl,
-        nombre: nameParts[0] || '',
-        apellido_paterno: nameParts[1] || '',
-        apellido_materno: nameParts.slice(2).join(' ') || '',
-        telefono: editTelefonoTutor,
-        direccion: editDomicilio,
-        curp: editCurp,
-        tipo_sangre: editTipoSangre,
-        capacitacion: editCapacitacion,
-        turno: editTurno,
-        fecha_nacimiento: editFechaNacimiento,
-        tutor_nombre: editTutorNombre,
-        nss: editNss,
-        id_grupo: editGrupo ? Number(editGrupo) : undefined,
-      });
-      setPanelMode("view");
-      showToast("Datos del alumno actualizados correctamente");
-      fetchAlumnos();
-    } catch (error) {
-      showToast(getApiErrorMessage(error, "Error al actualizar el alumno"), "error");
-    }
+    setConfirmAction({
+      type: "save_edit",
+      title: "Confirmar guardado",
+      message: `Ingrese su contraseña para guardar los cambios de ${selectedStudent.nombre} ${selectedStudent.apellido_paterno}.`,
+      confirmLabel: "Guardar",
+    });
   };
 
   const handleClosePanel = () => {
@@ -647,10 +638,6 @@ export default function StudentsPage() {
     fetchAlumnos();
   };
 
-  if (loading) {
-    return <Loader message="Cargando alumnos..." height={220} />;
-  }
-
   return (
     <div className="students-page">
 
@@ -893,12 +880,19 @@ export default function StudentsPage() {
       )}
 
 
-      <div style={{ padding: "0 24px", overflowX: "auto" }}>
+      <div style={{ padding: "0 24px", overflowX: "auto", position: "relative" }}>
+        {loading && (
+          <div style={{ display: "flex", justifyContent: "center", alignItems: "center", padding: "80px 0" }}>
+            <Loader message="Cargando alumnos..." height={120} />
+          </div>
+        )}
         <table
           style={{
             width: "100%",
             borderCollapse: "collapse",
             fontSize: 14,
+            opacity: loading ? 0.3 : 1,
+            pointerEvents: loading ? "none" : "auto",
           }}
         >
           <thead>
@@ -984,7 +978,10 @@ export default function StudentsPage() {
                   <td style={{ padding: "12px" }}>
                     <div style={{ display: "flex", gap: 6 }}>
                       <button
-                        onClick={() => setSelectedStudent(student)}
+                        onClick={() => {
+                          setPanelMode("view");
+                          setSelectedStudent(student);
+                        }}
                         style={{
                           background: "none",
                           border: "none",
@@ -1224,7 +1221,7 @@ export default function StudentsPage() {
                   setEditTutorNombre(selectedStudent.tutor_nombre || '');
                   setEditTelefonoTutor(selectedStudent.tutor_telefono || '');
                   setEditNss(selectedStudent.nss || '');
-                  setPanelMode("edit");
+                  setShowConfirmEdit(true);
                 }} style={{ display: "flex", alignItems: "center", gap: 6, padding: "8px 14px", border: "none", borderRadius: 8, background: "#AB1748", color: "#fff", fontSize: 13, fontWeight: 500, cursor: "pointer" }}>
                   <Edit size={14} /> Editar
                 </button>
@@ -1286,7 +1283,7 @@ export default function StudentsPage() {
                     </div>
                     <div>
                       <span style={{ color: "#5F5657", fontSize: 12 }}>No. Control</span>
-                      <input type="text" value={editControl} onChange={(e) => setEditControl(e.target.value)} style={{ width: "100%", padding: "6px 10px", border: "1px solid #CAC6C7", borderRadius: 6, fontSize: 14, fontWeight: 500, marginTop: 4, fontFamily: "monospace" }} />
+                      <input type="text" value={editControl} onChange={(e) => setEditControl(e.target.value)} maxLength={10} style={{ width: "100%", padding: "6px 10px", border: "1px solid #CAC6C7", borderRadius: 6, fontSize: 14, fontWeight: 500, marginTop: 4, fontFamily: "monospace" }} />
                     </div>
                     <div>
                       <span style={{ color: "#5F5657", fontSize: 12 }}>Grupo</span>
@@ -1728,7 +1725,7 @@ export default function StudentsPage() {
                     </div>
                     <div>
                       <span style={{ color: "#5F5657", fontSize: 12 }}>No. Control *</span>
-                      <input type="text" value={newControl} onChange={(e) => setNewControl(e.target.value)} placeholder="Ej: 2024001" style={{ width: "100%", padding: "8px 10px", border: "1px solid #CAC6C7", borderRadius: 6, fontSize: 14, marginTop: 4, fontFamily: "monospace", boxSizing: "border-box" }} />
+                      <input type="text" value={newControl} onChange={(e) => setNewControl(e.target.value)} maxLength={10} placeholder="Ej: 24B2706669" style={{ width: "100%", padding: "8px 10px", border: "1px solid #CAC6C7", borderRadius: 6, fontSize: 14, marginTop: 4, fontFamily: "monospace", boxSizing: "border-box" }} />
                     </div>
                     <div style={{ gridColumn: "span 2" }}>
                       <span style={{ color: "#5F5657", fontSize: 12 }}>Grupo *</span>
@@ -2047,6 +2044,7 @@ export default function StudentsPage() {
             return performToggleEstatus(confirmAction.student);
           }
           if (confirmAction.type === "save_edit") return performSaveEdit();
+          if (confirmAction.type === "edit_student") { setConfirmAction(null); setPanelMode("edit"); return; }
           if (confirmAction.type === "import") return performUpload();
         }}
       />

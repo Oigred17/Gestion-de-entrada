@@ -11,7 +11,23 @@ async def get_grupos(db: AsyncSession, ciclo_id: int | None = None):
     if ciclo_id is not None:
         stmt = stmt.where(Grupo.ciclo_escolar_id == ciclo_id)
     result = await db.execute(stmt)
-    return result.scalars().all()
+    grupos = list(result.scalars().all())
+
+    ciclo_ids = {g.ciclo_escolar_id for g in grupos if g.ciclo_escolar_id}
+    if ciclo_ids:
+        c_res = await db.execute(
+            select(CicloEscolar.id, CicloEscolar.nombre).where(CicloEscolar.id.in_(ciclo_ids))
+        )
+        ciclo_map = {row[0]: row[1] for row in c_res.all()}
+    else:
+        ciclo_map = {}
+
+    enriched = []
+    for g in grupos:
+        ciclo_nombre = ciclo_map.get(g.ciclo_escolar_id)
+        g._ciclo_nombre = ciclo_nombre
+        enriched.append(g)
+    return enriched
 
 
 async def get_grupo(db: AsyncSession, grupo_id: int):

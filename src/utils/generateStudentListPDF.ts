@@ -4,10 +4,11 @@ import type { Alumno } from '../types';
 interface GenerateListOptions {
   students: Alumno[];
   groupName: string;
+  gruposMap: Record<number, string>;
 }
 
 export function generateStudentListPDF(options: GenerateListOptions) {
-  const { students: alumnos, groupName } = options;
+  const { students: alumnos, groupName, gruposMap } = options;
   const doc = new jsPDF({ orientation: 'portrait', unit: 'pt', format: 'letter' });
 
   const pageW = doc.internal.pageSize.getWidth();
@@ -76,7 +77,7 @@ export function generateStudentListPDF(options: GenerateListOptions) {
       String(idx + 1),
       `${s.nombre} ${s.apellido_paterno} ${s.apellido_materno}`,
       s.matricula,
-      s.id_grupo ? String(s.id_grupo) : 'S/I',
+      s.id_grupo ? (gruposMap[s.id_grupo] || String(s.id_grupo)) : 'S/I',
       s.estatus === 'Activo' ? 'Activo' : 'De baja',
     ];
 
@@ -100,6 +101,8 @@ export function generateStudentListPDF(options: GenerateListOptions) {
     pageH - 20
   );
 
-  const fileName = `lista_${groupName.toLowerCase().replace(/\s+/g, '_')}.pdf`;
+  const fileName = groupName === 'general'
+    ? 'lista_alumnos_general.pdf'
+    : `lista_grupo_${groupName.toLowerCase().replace(/\s+/g, '_')}.pdf`;
   doc.save(fileName);
 }

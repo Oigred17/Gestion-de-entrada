@@ -1,5 +1,5 @@
 import { jsPDF } from 'jspdf';
-import type { Alumno } from '../types';
+import type { Alumno, Profesor } from '../types';
 
 /**
  * Genera un PDF carta con 4 bloques de datos de credencial, apilados en columna.
@@ -90,6 +90,32 @@ function studentToBlock(s: Alumno, reposicion: boolean, layout: CredentialLayout
   };
 }
 
+function profesorToBlock(p: Profesor, reposicion: boolean, layout: CredentialLayout) {
+  const domicilio = p.domicilio?.toUpperCase() ?? '';
+  const domicilioParts = domicilio.split(/,|(?=C\.P\.)/i).map(p => p.trim()).filter(Boolean);
+
+  const overrides = Object.fromEntries(
+    Object.entries(layout)
+      .filter(([, v]) => (v as { text?: string }).text)
+      .map(([k, v]) => [k, (v as { text: string }).text])
+  );
+
+  return {
+    nombre: reposicion ? `NOMBRE: ${p.nombre_completo}  [REPOSICIÓN]` : `NOMBRE: ${p.nombre_completo}`,
+    plantel: overrides.plantel ?? 'PLANTEL 27 MIAHUATLAN',
+    no_control: `NO. DE NÓMINA: ${p.num_nomina}`,
+    domicilio1: `DOMICILIO: ${domicilioParts[0] ?? ''}`,
+    domicilio2: domicilioParts[1] ?? '',
+    domicilio3: domicilioParts[2] ?? '',
+    curp: '',
+    tipo_sangre: '',
+    afiliacion: '',
+    tutor: '',
+    tel_tutor: `TELÉFONO: ${p.telefono ?? ''}`,
+    firma: overrides.firma ?? 'LIC. FABIAN OCAMPO GODINEZ',
+  };
+}
+
 function drawBlock(doc: jsPDF, data: Record<string, string>, topBlock: number, layout: CredentialLayout) {
   const keys = Object.keys(layout) as (keyof CredentialLayout)[];
 
@@ -121,19 +147,26 @@ function drawBlock(doc: jsPDF, data: Record<string, string>, topBlock: number, l
 }
 
 export interface GeneratePDFOptions {
-  students: Alumno[];
+  students?: Alumno[];
+  profesores?: Profesor[];
   groupName: string;
   reposicion?: boolean;
 }
 
 export function generateCredentialsPDF(options: GeneratePDFOptions) {
-  const { students: alumnos, groupName, reposicion = false } = options;
+  const { students: alumnos = [], profesores = [], groupName, reposicion = false } = options;
   const doc = new jsPDF({ orientation: 'portrait', unit: 'pt', format: 'letter' });
   const layout = getCredentialLayout();
 
-  const chunks: Alumno[][] = [];
-  for (let i = 0; i < alumnos.length; i += N_BLOQUES) {
-    chunks.push(alumnos.slice(i, i + N_BLOQUES));
+  type PersonBlock = { nombre: string; plantel: string; no_control: string; domicilio1: string; domicilio2: string; domicilio3: string; curp: string; tipo_sangre: string; afiliacion: string; tutor: string; tel_tutor: string; firma: string };
+  const blocks: PersonBlock[] = [
+    ...alumnos.map(s => studentToBlock(s, reposicion, layout)),
+    ...profesores.map(p => profesorToBlock(p, reposicion, layout)),
+  ];
+
+  const chunks: PersonBlock[][] = [];
+  for (let i = 0; i < blocks.length; i += N_BLOQUES) {
+    chunks.push(blocks.slice(i, i + N_BLOQUES));
   }
 
   chunks.forEach((chunk, pageIdx) => {
@@ -143,10 +176,9 @@ export function generateCredentialsPDF(options: GeneratePDFOptions) {
 
     for (let i = 0; i < N_BLOQUES; i++) {
       const topBlock = FIRST_TOP + i * BLOCK_HEIGHT;
-      const student = chunk[i];
+      const data = chunk[i];
 
-      if (student) {
-        const data = studentToBlock(student, reposicion, layout);
+      if (data) {
         drawBlock(doc, data as Record<string, string>, topBlock, layout);
       }
     }

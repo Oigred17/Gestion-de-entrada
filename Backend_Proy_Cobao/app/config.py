@@ -52,6 +52,12 @@ class Settings(BaseSettings):
     # Recuperación de contraseña
     RECOVERY_CODE_EXPIRE_MINUTES: int = 10
 
+    # Cookie de autenticación: True en producción (HTTPS), False en desarrollo (HTTP).
+    COOKIE_SECURE: bool = False
+
+    # Zona horaria del plantel (IANA). Se usa para fechas del bucle de faltas.
+    TIMEZONE: str = "America/Mexico_City"
+
     model_config = {
         "env_file": ".env",
         "env_file_encoding": "utf-8",

@@ -2,8 +2,8 @@ import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import {
   LayoutDashboard, Users, Building2, CreditCard, FileText,
-  CalendarCheck, AlertTriangle, Settings, LogOut, Bell, Menu, X,
-  ScanLine, ChevronLeft, ChevronRight, Shield, UserCheck,
+  CalendarCheck, Calendar, AlertTriangle, Settings, LogOut, Bell, Menu, X,
+  ScanLine, ChevronLeft, ChevronRight, Shield, UserCheck, GraduationCap,
 } from 'lucide-react';
 import type { UserRole } from '../App';
 import { useAuth } from '../context/AuthContext';
@@ -19,6 +19,7 @@ interface LayoutProps {
 const directivoMenu = [
   { icon: LayoutDashboard, label: 'Dashboard', path: '/dashboard' },
   { icon: Users, label: 'Alumnos', path: '/alumnos' },
+  { icon: GraduationCap, label: 'Egresados', path: '/egresados' },
   { icon: Building2, label: 'Grupos', path: '/grupos' },
   { icon: UserCheck, label: 'Profesores', path: '/profesores' },
   { icon: CreditCard, label: 'Credenciales', path: '/credenciales' },
@@ -26,12 +27,14 @@ const directivoMenu = [
   { icon: CalendarCheck, label: 'Permisos', path: '/permisos' },
   { icon: AlertTriangle, label: 'Incidencias', path: '/incidencias' },
   { icon: Shield, label: 'Faltas al Reglamento', path: '/faltas' },
+  { icon: Calendar, label: 'Ciclos Escolares', path: '/ciclos' },
   { icon: Settings, label: 'Configuración', path: '/configuracion' },
 ];
 
 const serviciosEscolaresMenu = [
   { icon: LayoutDashboard, label: 'Dashboard', path: '/dashboard' },
   { icon: Users, label: 'Alumnos', path: '/alumnos' },
+  { icon: GraduationCap, label: 'Egresados', path: '/egresados' },
   { icon: Building2, label: 'Grupos', path: '/grupos' },
   { icon: UserCheck, label: 'Profesores', path: '/profesores' },
   { icon: CreditCard, label: 'Credenciales', path: '/credenciales' },
@@ -60,6 +63,7 @@ export default function Layout({ children, role, onLogout }: LayoutProps) {
   const menuPaths = menu.map(m => m.path);
 
   const readKey = `notif_read_${user?.username ?? 'anon'}`;
+  const dismissedKey = `notif_dismissed_${user?.username ?? 'anon'}`;
 
   const notifPath = (id: string): string => {
     const target = id.startsWith('inc:') ? '/incidencias'
@@ -78,12 +82,26 @@ export default function Layout({ children, role, onLogout }: LayoutProps) {
     }
   };
 
+  const loadDismissedIds = () => {
+    try {
+      return JSON.parse(localStorage.getItem(dismissedKey) ?? '[]') as string[];
+    } catch {
+      return [];
+    }
+  };
+
   const fetchNotifications = async () => {
     try {
       const items = await notificacionesApi.getAll();
       const read = loadReadIds();
+      const dismissed = loadDismissedIds();
       const readSet = new Set(read);
-      setNotifications(items.map(n => ({ ...n, unread: !readSet.has(n.id) })));
+      const dismissedSet = new Set(dismissed);
+      setNotifications(
+        items
+          .filter(n => !dismissedSet.has(n.id))
+          .map(n => ({ ...n, unread: !readSet.has(n.id) }))
+      );
     } catch {
       setNotifications([]);
     }
@@ -96,8 +114,14 @@ export default function Layout({ children, role, onLogout }: LayoutProps) {
         const items = await notificacionesApi.getAll();
         if (!mounted) return;
         const read = loadReadIds();
+        const dismissed = loadDismissedIds();
         const readSet = new Set(read);
-        setNotifications(items.map(n => ({ ...n, unread: !readSet.has(n.id) })));
+        const dismissedSet = new Set(dismissed);
+        setNotifications(
+          items
+            .filter(n => !dismissedSet.has(n.id))
+            .map(n => ({ ...n, unread: !readSet.has(n.id) }))
+        );
       } catch {
         if (mounted) setNotifications([]);
       }
@@ -120,7 +144,6 @@ export default function Layout({ children, role, onLogout }: LayoutProps) {
     const merged = Array.from(new Set([...loadReadIds(), ...all]));
     localStorage.setItem(readKey, JSON.stringify(merged));
     setNotifications(prev => prev.map(n => ({ ...n, unread: false })));
-    setNotifOpen(false);
   };
 
   const markAsRead = (id: string) => {
@@ -129,6 +152,13 @@ export default function Layout({ children, role, onLogout }: LayoutProps) {
       localStorage.setItem(readKey, JSON.stringify(merged));
       setNotifications(prev => prev.map(n => (n.id === id ? { ...n, unread: false } : n)));
     }
+  };
+
+  const dismissNotification = (e: React.MouseEvent, id: string) => {
+    e.stopPropagation();
+    const merged = Array.from(new Set([...loadDismissedIds(), id]));
+    localStorage.setItem(dismissedKey, JSON.stringify(merged));
+    setNotifications(prev => prev.filter(n => n.id !== id));
   };
 
   const formatRelativeTime = (iso: string | null): string => {
@@ -179,7 +209,10 @@ export default function Layout({ children, role, onLogout }: LayoutProps) {
         )}
 
         <div className="sidebar-logo">
-          <img src={collapsed ? "/images/logo.png" : "/images/logoCompleto.png"} alt="Logo" />
+          {!collapsed && <p className="sidebar-kicker">Control de acceso</p>}
+          <div className="sidebar-logo-plate">
+            <img src={collapsed ? "/images/logo.png" : "/images/logoCompleto.png"} alt="Logo COBAO" />
+          </div>
         </div>
         <div className="sidebar-user">
           <div className="sidebar-user-name">{userFullName}</div>
@@ -223,13 +256,15 @@ export default function Layout({ children, role, onLogout }: LayoutProps) {
             <h1 className="topbar-title">{pageTitle}</h1>
           </div>
           <div className="topbar-right">
-            <span style={{ fontSize: 14, color: '#5F5657', fontWeight: 500 }}>
-              Plantel 27 Miahuatlán
+            <span className="topbar-plantel">
+              Plantel 27<br />Miahuatlán
             </span>
             <div className="relative">
               <button
                 className="topbar-notification"
                 onClick={handleToggleNotifications}
+                aria-label="Notificaciones"
+                aria-expanded={notifOpen}
               >
                 <Bell size={22} />
                 {unreadCount > 0 && <span className="topbar-badge">{unreadCount}</span>}
@@ -237,10 +272,11 @@ export default function Layout({ children, role, onLogout }: LayoutProps) {
               {notifOpen && (
                 <div className="notification-panel">
                   <div className="notification-panel-header">
-                    <span style={{ fontWeight: 600, fontSize: 16 }}>Notificaciones</span>
+                    <span>Notificaciones</span>
                     {unreadCount > 0 && (
                       <button
-                        style={{ background: 'none', border: 'none', color: '#EB2466', cursor: 'pointer', fontSize: 13, fontFamily: 'var(--font-sans)' }}
+                        className="panel-link"
+                        type="button"
                         onClick={markAllAsRead}
                       >
                         Marcar todas como leídas
@@ -283,6 +319,14 @@ export default function Layout({ children, role, onLogout }: LayoutProps) {
                               </div>
                               <p className="notification-card__p">{n.text}</p>
                             </div>
+                            <button
+                              className="notification-card__dismiss"
+                              onClick={(e) => dismissNotification(e, n.id)}
+                              title="Descartar"
+                              aria-label="Descartar notificación"
+                            >
+                              <X size={14} />
+                            </button>
                           </div>
                         );
                       })}
@@ -291,14 +335,12 @@ export default function Layout({ children, role, onLogout }: LayoutProps) {
                 </div>
               )}
             </div>
-            <div className="topbar-avatar">
-              <div style={{ width: 36, height: 36, borderRadius: '50%', background: '#EB2466', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontWeight: 700, fontSize: 14 }}>
-                {userInitials}
-              </div>
+            <div className="topbar-avatar" aria-hidden="true">
+              {userInitials}
             </div>
           </div>
         </header>
-        <div className="content-area" style={{ animation: 'fadeInContent 200ms ease-out' }}>
+        <div className="content-area">
           {children}
         </div>
       </div>

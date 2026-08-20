@@ -22,17 +22,12 @@ services:
       context: .
       dockerfile: Dockerfile
     restart: unless-stopped
-    privileged: true
     ports:
       - "8000:8000"
     environment:
       DATABASE_URL: postgresql+asyncpg://cobao:cobao_pass@db:5432/cobao_db
     env_file:
       - .env
-    devices:
-      - /dev/bus/usb:/dev/bus/usb
-    volumes:
-      - /var/run/pcscd:/var/run/pcscd
     depends_on:
       db:
         condition: service_healthy

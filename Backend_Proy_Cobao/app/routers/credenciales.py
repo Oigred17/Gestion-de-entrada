@@ -55,9 +55,49 @@ async def listar_credenciales(
     solo_activas: bool = Query(False),
     db: AsyncSession = Depends(get_db),
 ):
-    return await crud_credencial.get_credenciales(
+    credenciales = await crud_credencial.get_credenciales(
         db, alumno_id=alumno_id, profesor_id=profesor_id, solo_activas=solo_activas
     )
+    if not credenciales:
+        return []
+
+    from sqlalchemy import select
+    from app.models.alumno import Alumno
+    from app.models.profesor import Profesor
+
+    alumno_ids = {c.id_alumno for c in credenciales if c.id_alumno}
+    profesor_ids = {c.id_profesor for c in credenciales if c.id_profesor}
+
+    alumnos_map: dict[int, dict] = {}
+    if alumno_ids:
+        result = await db.execute(select(Alumno).where(Alumno.id_alumno.in_(alumno_ids)))
+        for a in result.scalars().all():
+            alumnos_map[a.id_alumno] = {
+                "id": a.id_alumno,
+                "nombre": a.nombre_completo,
+                "matricula": a.matricula,
+            }
+
+    profesores_map: dict[int, dict] = {}
+    if profesor_ids:
+        result = await db.execute(select(Profesor).where(Profesor.id_profesor.in_(profesor_ids)))
+        for p in result.scalars().all():
+            profesores_map[p.id_profesor] = {
+                "id": p.id_profesor,
+                "nombre": p.nombre_completo,
+                "num_nomina": p.num_nomina,
+            }
+
+    responses = []
+    for cred in credenciales:
+        resp = CredencialResponse.model_validate(cred, from_attributes=True)
+        if cred.id_alumno and cred.id_alumno in alumnos_map:
+            resp.alumno = alumnos_map[cred.id_alumno]
+        elif cred.id_profesor and cred.id_profesor in profesores_map:
+            resp.profesor = profesores_map[cred.id_profesor]
+        responses.append(resp)
+
+    return responses
 
 
 async def _credencial_response_by_uid(db: AsyncSession, uid_nfc: str) -> CredencialResponse:
@@ -66,25 +106,35 @@ async def _credencial_response_by_uid(db: AsyncSession, uid_nfc: str) -> Credenc
         raise HTTPException(status_code=404, detail="Credencial no encontrada")
     from sqlalchemy import select
     from app.models.alumno import Alumno
+    from app.models.profesor import Profesor
     from app.models.credencial import Credencial as CredencialModel
 
-    result = await db.execute(
-        select(CredencialModel, Alumno)
-        .outerjoin(Alumno, CredencialModel.id_alumno == Alumno.id_alumno)
-        .where(CredencialModel.uid_nfc == uid_nfc)
-    )
-    row = result.first()
-    if row:
-        cred, alumno = row
-        resp = CredencialResponse.model_validate(cred, from_attributes=True)
+    resp = CredencialResponse.model_validate(credencial, from_attributes=True)
+
+    if credencial.id_alumno:
+        result = await db.execute(
+            select(Alumno).where(Alumno.id_alumno == credencial.id_alumno)
+        )
+        alumno = result.scalar_one_or_none()
         if alumno:
             resp.alumno = {
                 "id": alumno.id_alumno,
                 "nombre": alumno.nombre_completo,
                 "matricula": alumno.matricula,
             }
-        return resp
-    return CredencialResponse.model_validate(credencial, from_attributes=True)
+    elif credencial.id_profesor:
+        result = await db.execute(
+            select(Profesor).where(Profesor.id_profesor == credencial.id_profesor)
+        )
+        profesor = result.scalar_one_or_none()
+        if profesor:
+            resp.profesor = {
+                "id": profesor.id_profesor,
+                "nombre": profesor.nombre_completo,
+                "num_nomina": profesor.num_nomina,
+            }
+
+    return resp
 
 
 # Query param evita UIDs con ":" rotos por proxies/Cloudflare en el path.
@@ -110,7 +160,32 @@ async def obtener_credencial(
     credencial = await crud_credencial.get_credencial(db, id_credencial)
     if not credencial:
         raise HTTPException(status_code=404, detail="Credencial no encontrada")
-    return credencial
+    from sqlalchemy import select
+    from app.models.alumno import Alumno
+    from app.models.profesor import Profesor
+
+    resp = CredencialResponse.model_validate(credencial, from_attributes=True)
+
+    if credencial.id_alumno:
+        result = await db.execute(select(Alumno).where(Alumno.id_alumno == credencial.id_alumno))
+        alumno = result.scalar_one_or_none()
+        if alumno:
+            resp.alumno = {
+                "id": alumno.id_alumno,
+                "nombre": alumno.nombre_completo,
+                "matricula": alumno.matricula,
+            }
+    elif credencial.id_profesor:
+        result = await db.execute(select(Profesor).where(Profesor.id_profesor == credencial.id_profesor))
+        profesor = result.scalar_one_or_none()
+        if profesor:
+            resp.profesor = {
+                "id": profesor.id_profesor,
+                "nombre": profesor.nombre_completo,
+                "num_nomina": profesor.num_nomina,
+            }
+
+    return resp
 
 
 @router.post("/", response_model=CredencialResponse, status_code=201)
@@ -137,9 +212,36 @@ async def crear_credencial(
             )
 
     try:
-        return await crud_credencial.create_credencial(db, data)
+        credencial = await crud_credencial.create_credencial(db, data)
     except IntegrityError:
         raise HTTPException(status_code=409, detail=MSG_CHIP_YA_ASIGNADO)
+
+    from sqlalchemy import select
+    from app.models.alumno import Alumno
+    from app.models.profesor import Profesor
+
+    resp = CredencialResponse.model_validate(credencial, from_attributes=True)
+
+    if credencial.id_alumno:
+        result = await db.execute(select(Alumno).where(Alumno.id_alumno == credencial.id_alumno))
+        alumno = result.scalar_one_or_none()
+        if alumno:
+            resp.alumno = {
+                "id": alumno.id_alumno,
+                "nombre": alumno.nombre_completo,
+                "matricula": alumno.matricula,
+            }
+    elif credencial.id_profesor:
+        result = await db.execute(select(Profesor).where(Profesor.id_profesor == credencial.id_profesor))
+        profesor = result.scalar_one_or_none()
+        if profesor:
+            resp.profesor = {
+                "id": profesor.id_profesor,
+                "nombre": profesor.nombre_completo,
+                "num_nomina": profesor.num_nomina,
+            }
+
+    return resp
 
 
 @router.put("/{id_credencial}", response_model=CredencialResponse)
@@ -177,7 +279,33 @@ async def actualizar_credencial(
         raise HTTPException(status_code=409, detail=MSG_CHIP_YA_ASIGNADO)
     if not credencial:
         raise HTTPException(status_code=404, detail="Credencial no encontrada")
-    return credencial
+
+    from sqlalchemy import select
+    from app.models.alumno import Alumno
+    from app.models.profesor import Profesor
+
+    resp = CredencialResponse.model_validate(credencial, from_attributes=True)
+
+    if credencial.id_alumno:
+        result = await db.execute(select(Alumno).where(Alumno.id_alumno == credencial.id_alumno))
+        alumno = result.scalar_one_or_none()
+        if alumno:
+            resp.alumno = {
+                "id": alumno.id_alumno,
+                "nombre": alumno.nombre_completo,
+                "matricula": alumno.matricula,
+            }
+    elif credencial.id_profesor:
+        result = await db.execute(select(Profesor).where(Profesor.id_profesor == credencial.id_profesor))
+        profesor = result.scalar_one_or_none()
+        if profesor:
+            resp.profesor = {
+                "id": profesor.id_profesor,
+                "nombre": profesor.nombre_completo,
+                "num_nomina": profesor.num_nomina,
+            }
+
+    return resp
 
 
 @router.delete("/{id_credencial}", status_code=204)

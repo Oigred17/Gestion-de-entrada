@@ -4,7 +4,7 @@ permite descargarlo o eliminarlo. No requiere herramientas externas (pg_dump).
 """
 
 import json
-from datetime import date, datetime
+from datetime import date, datetime, time
 
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import JSONResponse
@@ -13,6 +13,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import Base, get_db
 from app.models.respaldo import Respaldo
+from app.models.usuario import Usuario
+from app.routers.auth import get_current_user
 
 router = APIRouter(prefix="/respaldos", tags=["Respaldos"])
 
@@ -20,6 +22,8 @@ router = APIRouter(prefix="/respaldos", tags=["Respaldos"])
 def _serializar(valor):
     if isinstance(valor, (datetime, date)):
         return valor.isoformat()
+    if isinstance(valor, time):
+        return valor.strftime("%H:%M:%S")
     return valor
 
 
@@ -43,7 +47,10 @@ def _formatear_tamano(bytes_: int) -> str:
 
 
 @router.get("/")
-async def listar_respaldos(db: AsyncSession = Depends(get_db)):
+async def listar_respaldos(
+    current_user: Usuario = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
     result = await db.execute(
         select(Respaldo).order_by(Respaldo.fecha.desc()).limit(30)
     )
@@ -51,7 +58,10 @@ async def listar_respaldos(db: AsyncSession = Depends(get_db)):
 
 
 @router.post("/generar", status_code=201)
-async def generar_respaldo(db: AsyncSession = Depends(get_db)):
+async def generar_respaldo(
+    current_user: Usuario = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
     volcado: dict[str, list] = {}
     for tabla in Base.metadata.sorted_tables:
         filas = (await db.execute(select(tabla))).all()
@@ -87,7 +97,11 @@ async def generar_respaldo(db: AsyncSession = Depends(get_db)):
 
 
 @router.get("/{id_respaldo}/descargar")
-async def descargar_respaldo(id_respaldo: int, db: AsyncSession = Depends(get_db)):
+async def descargar_respaldo(
+    id_respaldo: int,
+    current_user: Usuario = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
     result = await db.execute(select(Respaldo).where(Respaldo.id_respaldo == id_respaldo))
     respaldo = result.scalar_one_or_none()
     if not respaldo:
@@ -105,7 +119,11 @@ async def descargar_respaldo(id_respaldo: int, db: AsyncSession = Depends(get_db
 
 
 @router.delete("/{id_respaldo}", status_code=204)
-async def eliminar_respaldo(id_respaldo: int, db: AsyncSession = Depends(get_db)):
+async def eliminar_respaldo(
+    id_respaldo: int,
+    current_user: Usuario = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
     result = await db.execute(select(Respaldo).where(Respaldo.id_respaldo == id_respaldo))
     respaldo = result.scalar_one_or_none()
     if not respaldo:

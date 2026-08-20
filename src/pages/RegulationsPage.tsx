@@ -5,6 +5,7 @@ import type { Reporte, Alumno } from '../types';
 import type { UserRole } from '../App';
 import { useAuth } from '../context/AuthContext';
 import { toastSuccess, toastError } from '@/lib/toast';
+import { normalizeText } from '@/lib/normalizeText';
 import Loader from '../components/Loader';
 import ConfirmPasswordModal from '../components/ConfirmPasswordModal';
 
@@ -49,20 +50,20 @@ export default function RegulationsPage({ role }: { role: UserRole }) {
 
   const alumnoResults = useMemo(() => {
     if (!formAlumnoQuery || formAlumnoSelected) return [];
-    const q = formAlumnoQuery.toLowerCase();
+    const q = normalizeText(formAlumnoQuery);
     return alumnos.filter(a =>
-      `${a.nombre} ${a.apellido_paterno} ${a.apellido_materno}`.toLowerCase().includes(q) ||
-      a.matricula.toLowerCase().includes(q)
+      normalizeText(`${a.nombre} ${a.apellido_paterno} ${a.apellido_materno}`).includes(q) ||
+      normalizeText(a.matricula).includes(q)
     ).slice(0, 10);
   }, [formAlumnoQuery, formAlumnoSelected, alumnos]);
 
   const filtered = useMemo(() => {
     if (!searchQuery) return reportes;
-    const q = searchQuery.toLowerCase();
+    const q = normalizeText(searchQuery);
     return reportes.filter(r =>
-      r.motivo.toLowerCase().includes(q) ||
-      r.sancion.toLowerCase().includes(q) ||
-      (r.alumno && `${r.alumno.nombre} ${r.alumno.apellido_paterno}`.toLowerCase().includes(q))
+      normalizeText(r.motivo).includes(q) ||
+      normalizeText(r.sancion).includes(q) ||
+      (r.alumno && normalizeText(`${r.alumno.nombre} ${r.alumno.apellido_paterno}`).includes(q))
     );
   }, [searchQuery, reportes]);
 
@@ -213,7 +214,7 @@ export default function RegulationsPage({ role }: { role: UserRole }) {
         <div className="toolbar-center">
           <div className="input-wrapper">
             <Search size={18} className="input-icon" />
-            <input type="text" className="input input--search" placeholder="Buscar por motivo, sanción o alumno..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} />
+            <input type="text" className="input input--search" placeholder="Buscar por nombre o matrícula del alumno..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} />
           </div>
         </div>
         <div className="toolbar-right">
@@ -230,7 +231,7 @@ export default function RegulationsPage({ role }: { role: UserRole }) {
           <table className="table">
             <thead>
               <tr>
-                <th>#</th><th>Alumno</th><th>Matrícula</th><th>Motivo</th><th>Sanción</th><th>Cumplida</th><th>Fecha</th><th>Acciones</th>
+                <th>#</th><th>Alumno</th><th>Matrícula</th><th>Motivo</th><th>Sanción</th><th>Cumplida</th><th>Fecha</th><th>Registrado por</th><th>Acciones</th>
               </tr>
             </thead>
             <tbody>
@@ -247,6 +248,7 @@ export default function RegulationsPage({ role }: { role: UserRole }) {
                     </div>
                   </td>
                   <td>{r.fecha}</td>
+                  <td style={{ fontSize: 13, color: '#5F5657' }}>{r.prefecto?.nombre_completo ?? '---'}</td>
                   <td>
                     <button className="table-action" title="Ver detalle" onClick={() => setDetailModal(r)}>
                       <Eye size={18} />
@@ -261,7 +263,7 @@ export default function RegulationsPage({ role }: { role: UserRole }) {
                 </tr>
               ))}
               {filtered.length === 0 && (
-                <tr><td colSpan={8} style={{ textAlign: 'center', padding: 24, color: '#85787A' }}>No hay reportes registrados</td></tr>
+                <tr><td colSpan={9} style={{ textAlign: 'center', padding: 24, color: '#85787A' }}>No hay reportes registrados</td></tr>
               )}
             </tbody>
           </table>

@@ -4,6 +4,7 @@ from sqlalchemy import select, or_
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.alumno import Alumno
+from app.models.ciclo_escolar import CicloEscolar
 from app.models.grupo import Grupo
 from app.schemas.alumno import AlumnoCreate, AlumnoUpdate
 
@@ -29,10 +30,31 @@ def _empty_to_none(value):
     return value
 
 
-async def get_alumnos(db: AsyncSession, solo_activos: bool = False, search: str | None = None):
+async def get_alumnos(
+    db: AsyncSession,
+    solo_activos: bool = False,
+    estatus: str | None = None,
+    search: str | None = None,
+    ciclo_id: int | None = None,
+    ciclo_nombre: str | None = None,
+):
     stmt = select(Alumno)
+    if ciclo_nombre:
+        normalizado = ciclo_nombre.strip().upper()
+        stmt = stmt.where(Alumno.cohorte == normalizado)
+    elif ciclo_id is not None:
+        ciclo_nombre = (
+            await db.execute(select(CicloEscolar.nombre).where(CicloEscolar.id == ciclo_id))
+        ).scalar_one_or_none()
+        grupos_ciclo = select(Grupo.id).where(Grupo.ciclo_escolar_id == ciclo_id)
+        if ciclo_nombre:
+            stmt = stmt.where(or_(Alumno.cohorte == ciclo_nombre, Alumno.id_grupo.in_(grupos_ciclo)))
+        else:
+            stmt = stmt.where(Alumno.id_grupo.in_(grupos_ciclo))
     if solo_activos:
         stmt = stmt.where(Alumno.activo == True)
+    if estatus:
+        stmt = stmt.where(Alumno.estatus == estatus)
     if search:
         pattern = f"%{search}%"
         stmt = stmt.where(
@@ -81,6 +103,7 @@ async def create_alumno(db: AsyncSession, data: AlumnoCreate):
         tutor_nombre=_empty_to_none(data.tutor_nombre),
         tutor_telefono=_empty_to_none(data.tutor_telefono or data.telefono),
         activo=data.activo,
+        estatus=data.estatus if data.estatus else ("Activo" if data.activo else "Inactivo"),
         id_grupo=id_grupo,
     )
     db.add(alumno)
@@ -100,7 +123,8 @@ async def update_alumno(db: AsyncSession, id_alumno: int, data: AlumnoUpdate):
             update_data[key] = _empty_to_none(update_data[key])
     estatus = update_data.pop("estatus", None)
     if estatus is not None:
-        update_data["activo"] = estatus.lower() not in ("inactivo", "baja")
+        update_data["estatus"] = estatus
+        update_data["activo"] = estatus.lower() not in ("inactivo", "baja", "egresado")
     if "direccion" in raw_keys:
         update_data["domicilio"] = update_data.pop("direccion", None)
     if "telefono" in raw_keys:

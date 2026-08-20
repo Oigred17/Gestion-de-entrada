@@ -12,12 +12,25 @@ router = APIRouter(prefix="/alumnos", tags=["Alumnos"])
 @router.get("/", response_model=list[AlumnoResponse])
 async def listar_alumnos(
     solo_activos: bool = Query(False, description="Filtrar solo activos"),
+    estatus: str | None = Query(None, description="Filtrar por estatus (Activo, Inactivo, Egresado)"),
     search: str | None = Query(None),
     skip: int = Query(0),
     limit: int = Query(100),
     db: AsyncSession = Depends(get_db),
 ):
-    return await crud_alumno.get_alumnos(db, solo_activos=solo_activos, search=search)
+    return await crud_alumno.get_alumnos(db, solo_activos=solo_activos, estatus=estatus, search=search)
+
+
+@router.get("/egresados", response_model=list[AlumnoResponse])
+async def listar_egresados(
+    search: str | None = Query(None),
+    ciclo_id: int | None = Query(None, description="Filtrar por id de ciclo escolar"),
+    ciclo_nombre: str | None = Query(None, description="Filtrar por nombre de ciclo (ej. 2026B)"),
+    db: AsyncSession = Depends(get_db),
+):
+    return await crud_alumno.get_alumnos(
+        db, estatus="Egresado", search=search, ciclo_id=ciclo_id, ciclo_nombre=ciclo_nombre,
+    )
 
 
 @router.get("/{id_alumno}", response_model=AlumnoResponse)

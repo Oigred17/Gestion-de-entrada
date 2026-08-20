@@ -1,10 +1,11 @@
 import { useState, useMemo, useEffect } from 'react';
 import { Search, Plus, Eye, Check, Upload, X as XIcon, Loader2 } from 'lucide-react';
-import { alumnosApi, incidenciasApi } from '../api';
+import { alumnosApi, incidenciasApi, usuariosApi } from '../api';
 import type { Alumno, Incidencia } from '../types';
 import type { UserRole } from '../App';
 import { useAuth } from '../context/AuthContext';
 import { toastSuccess, toastError } from '@/lib/toast';
+import { normalizeText } from '@/lib/normalizeText';
 import Loader from '../components/Loader';
 
 const tipoOptions = ['Acceso sin credencial', 'Credencial dañada', 'Acceso fuera de horario', 'Alumno no registrado', 'Intento no autorizado', 'Salida sin credencial', 'Otro'];
@@ -13,10 +14,11 @@ interface IncidentsPageProps {
   role: UserRole;
 }
 
-export default function IncidentsPage({ role }: IncidentsPageProps) {
+export default function IncidentsPage({ role: _role }: IncidentsPageProps) {
   const { user } = useAuth();
   const [apiAlumnos, setApiAlumnos] = useState<Alumno[]>([]);
   const [incidentsList, setIncidentsList] = useState<Incidencia[]>([]);
+  const [usuariosMap, setUsuariosMap] = useState<Record<number, string>>({});
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [tipoFilter, setTipoFilter] = useState('');
@@ -35,7 +37,7 @@ export default function IncidentsPage({ role }: IncidentsPageProps) {
   const [formFoto, setFormFoto] = useState<File | null>(null);
   const [formErrors, setFormErrors] = useState<Record<string, string>>({});
 
-  const registradoPor = role === 'Directivo' ? 'Directivo' : 'Prefectura';
+  const getUsuarioNombre = (id: number) => usuariosMap[id] || '---';
 
   const tipoFilterOptions = Array.from(
     new Set([...tipoOptions, ...incidentsList.map(i => i.tipo)])
@@ -53,6 +55,13 @@ export default function IncidentsPage({ role }: IncidentsPageProps) {
         setIncidentsList(i);
         setApiAlumnos(a);
       })
+      .then(() => usuariosApi.getAll().then(u => {
+        const map: Record<number, string> = {};
+        for (const usr of u) {
+          if (usr.id) map[usr.id] = `${usr.nombre} ${usr.apellido_paterno} ${usr.apellido_materno}`;
+        }
+        setUsuariosMap(map);
+      }).catch(() => {}))
       .catch(() => toastError('Error', 'No se pudieron cargar las incidencias'))
       .finally(() => setLoading(false));
   };
@@ -61,19 +70,19 @@ export default function IncidentsPage({ role }: IncidentsPageProps) {
 
   const alumnoResults = useMemo(() => {
     if (!formAlumnoQuery || formAlumnoSelected) return [];
-    const q = formAlumnoQuery.toLowerCase();
+    const q = normalizeText(formAlumnoQuery);
     return apiAlumnos.filter(s =>
-      `${s.nombre} ${s.apellido_paterno} ${s.apellido_materno}`.toLowerCase().includes(q) ||
-      s.matricula.toLowerCase().includes(q)
+      normalizeText(`${s.nombre} ${s.apellido_paterno} ${s.apellido_materno}`).includes(q) ||
+      normalizeText(s.matricula).includes(q)
     ).slice(0, 6);
   }, [formAlumnoQuery, formAlumnoSelected, apiAlumnos]);
 
   const filtered = incidentsList.filter((inc) => {
     const alumnoName = nombreAlumno(inc);
+    const q = normalizeText(searchQuery);
     const matchSearch = searchQuery === '' ||
-      alumnoName.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      inc.descripcion.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      inc.tipo.toLowerCase().includes(searchQuery.toLowerCase());
+      normalizeText(alumnoName).includes(q) ||
+      (inc.alumno && inc.alumno.matricula && normalizeText(inc.alumno.matricula).includes(q));
     const matchTipo = tipoFilter === '' || inc.tipo === tipoFilter;
     return matchSearch && matchTipo;
   });
@@ -156,7 +165,7 @@ export default function IncidentsPage({ role }: IncidentsPageProps) {
         <div className="toolbar-center">
           <div className="input-wrapper">
             <Search size={18} className="input-icon" />
-            <input type="text" className="input input--search" placeholder="Buscar incidencia..." value={searchQuery} onChange={(e) => { setSearchQuery(e.target.value); setPage(1); }} />
+            <input type="text" className="input input--search" placeholder="Buscar por nombre o matrícula del alumno..." value={searchQuery} onChange={(e) => { setSearchQuery(e.target.value); setPage(1); }} />
           </div>
           <select
             className="select"
@@ -198,7 +207,7 @@ export default function IncidentsPage({ role }: IncidentsPageProps) {
                   <td>{inc.tipo}</td>
                   <td style={{ fontWeight: 500 }}>{nombreAlumno(inc)}</td>
                   <td style={{ maxWidth: 200, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{inc.descripcion}</td>
-                  <td>{registradoPor}</td>
+                  <td style={{ fontSize: 13, color: '#5F5657' }}>{getUsuarioNombre(inc.id_usuario_registro)}</td>
                   <td>
                     <div style={{ display: 'flex', gap: 4 }}>
                       <button className="table-action" title="Ver detalles" onClick={() => setDetail(inc)}><Eye size={18} /></button>
@@ -376,6 +385,10 @@ export default function IncidentsPage({ role }: IncidentsPageProps) {
               <div>
                 <span className="field-label">Descripción</span>
                 <div>{detail.descripcion}</div>
+              </div>
+              <div>
+                <span className="field-label">Registrado por</span>
+                <div style={{ fontWeight: 500 }}>{getUsuarioNombre(detail.id_usuario_registro)}</div>
               </div>
               {detail.evidencia_base64 && (
                 <div>

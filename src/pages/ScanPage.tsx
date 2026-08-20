@@ -5,6 +5,7 @@ import { registrosApi, alumnosApi, credencialesApi } from '../api';
 import { nfcApi } from '../api/nfc';
 import type { RegistroAcceso, Alumno, Credencial } from '../types';
 import { toastSuccess, toastError } from '../lib/toast';
+import { normalizeText } from '../lib/normalizeText';
 
 const getFullName = (alumno: Alumno) =>
   `${alumno.nombre} ${alumno.apellido_paterno} ${alumno.apellido_materno}`.trim();
@@ -67,8 +68,8 @@ export default function ScanPage() {
   const manualResults = (!manualQuery || manualSelected)
     ? []
     : alumnosList.filter(s =>
-        getFullName(s).toLowerCase().includes(manualQuery.toLowerCase()) ||
-        s.matricula.toLowerCase().includes(manualQuery.toLowerCase())
+        normalizeText(getFullName(s)).includes(normalizeText(manualQuery)) ||
+        normalizeText(s.matricula).includes(normalizeText(manualQuery))
       ).slice(0, 6);
 
   const connectWS = useCallback(() => {
@@ -234,7 +235,7 @@ export default function ScanPage() {
   return (
     <div className="scan-page">
       {/* Status de conexion */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 16, padding: '8px 16px', borderRadius: 8, background: wsConnected && estacionAbierta ? '#E8F5E9' : '#FEEBEE', fontSize: 13, fontWeight: 600, color: wsConnected && estacionAbierta ? '#0F8122' : '#AB1748' }}>
+      <div className={`scan-status-bar ${wsConnected && estacionAbierta ? 'scan-status-bar--ok' : 'scan-status-bar--error'}`}>
         {wsConnected ? <Wifi size={16} /> : <WifiOff size={16} />}
         {!estacionAbierta
           ? 'Estación cerrada — no se registrarán lecturas del lector físico'
@@ -258,7 +259,7 @@ export default function ScanPage() {
       )}
 
       {viewMode === 'scan' ? (
-        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', marginBottom: 24 }}>
+        <div className="scan-nfc-container">
           <div className={`nfc-zone ${isScanning ? 'scanning' : ''}`}>
             <div className="nfc-zone-inner">
               <Nfc size={64} color="#EB2466" />
@@ -269,14 +270,14 @@ export default function ScanPage() {
           </div>
         </div>
       ) : (
-        <div style={{ maxWidth: 480, margin: '0 auto 24px', padding: 24, background: '#fff', borderRadius: 12, boxShadow: '0 2px 12px rgba(0,0,0,0.08)' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 20 }}>
-            <div style={{ width: 40, height: 40, borderRadius: 10, background: '#FEEBEE', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+        <div className="scan-manual">
+          <div className="scan-manual-header">
+            <div className="scan-manual-header-icon">
               <LogOut size={22} color="#AB1748" />
             </div>
             <div>
-              <div style={{ fontWeight: 700, fontSize: 16, color: '#1C1819' }}>Salida sin credencial</div>
-              <div style={{ fontSize: 12, color: '#85787A' }}>Busca al alumno y registra su salida manualmente</div>
+              <div className="scan-manual-header-title">Salida sin credencial</div>
+              <div className="scan-manual-header-sub">Busca al alumno y registra su salida manualmente</div>
             </div>
           </div>
           <div style={{ position: 'relative', marginBottom: 16 }}>
@@ -301,7 +302,7 @@ export default function ScanPage() {
               </div>
             )}
             {manualSelected && (
-              <div style={{ marginTop: 8, padding: '10px 12px', background: '#e8f5e9', borderRadius: 8, fontSize: 13, color: '#0F8122', fontWeight: 500, display: 'flex', alignItems: 'center', gap: 8 }}>
+              <div className="scan-manual-selected">
                 <CheckCircle size={16} />
                 <div>
                   <div style={{ fontWeight: 600 }}>{getFullName(manualSelected)}</div>
@@ -311,7 +312,7 @@ export default function ScanPage() {
             )}
           </div>
           <div style={{ marginBottom: 16 }}>
-            <div style={{ fontSize: 13, fontWeight: 600, color: '#5F5657', marginBottom: 6 }}>Código de autorización (opcional)</div>
+            <div className="scan-manual-label">Código de autorización (opcional)</div>
             <div style={{ position: 'relative' }}>
               <KeyRound size={16} style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', color: '#85787A' }} />
               <input
@@ -324,7 +325,7 @@ export default function ScanPage() {
               />
             </div>
           </div>
-          <div style={{ display: 'flex', gap: 8 }}>
+          <div className="scan-manual-actions">
             <button className="btn btn--secondary" onClick={() => { setViewMode('scan'); setManualQuery(''); setManualSelected(null); setCodigoPermiso(''); }}>Cancelar</button>
             <button className="btn btn--primary" disabled={!manualSelected || manualSaving} onClick={handleManualSave} style={{ flex: 1, opacity: !manualSelected || manualSaving ? 0.5 : 1, cursor: !manualSelected || manualSaving ? 'not-allowed' : 'pointer' }}>
               {manualSaving ? 'Registrando...' : 'Registrar salida sin credencial'}
@@ -352,7 +353,7 @@ export default function ScanPage() {
                 {scanResult.type === 'denied' && <><XCircle size={18} color="#AB1748" /> <span style={{ color: '#AB1748' }}>{scanResult.message || 'ACCESO DENEGADO'}</span></>}
               </div>
             </div>
-            <div style={{ width: 48, height: 48, borderRadius: '50%', background: scanResult.type === 'denied' ? '#FEEBEE' : '#70FE7D', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+            <div className={`scan-result-check ${scanResult.type === 'denied' ? 'scan-result-check--denied' : 'scan-result-check--ok'}`}>
               {scanResult.type === 'denied' ? <XCircle size={24} color="#AB1748" /> : <CheckCircle size={24} color="#0F8122" />}
             </div>
           </div>
@@ -368,6 +369,13 @@ export default function ScanPage() {
       <div className="scan-recent">
         <div className="scan-recent-title">Ultimos registros</div>
         <div className="scan-recent-list">
+          <div className="scan-recent-header">
+            <span style={{ width: 8, flexShrink: 0 }} />
+            <span style={{ width: 90, flexShrink: 0 }}>Hora</span>
+            <span style={{ flex: 1 }}>Alumno</span>
+            <span style={{ width: 100, flexShrink: 0, textAlign: 'center' }}>Grupo</span>
+            <span style={{ width: 100, flexShrink: 0, textAlign: 'right' }}>Tipo</span>
+          </div>
           {displayRecords.map((record) => (
             <div key={record.id} className="scan-recent-item">
               <div className={`scan-recent-dot ${record.tipo === 'ENTRADA' ? 'entry' : record.tipo === 'SALIDA' ? 'exit' : 'denied'}`} />
@@ -377,6 +385,11 @@ export default function ScanPage() {
               <span className={`scan-recent-type ${record.tipo.toLowerCase()}`}>{getRecordTypeLabel(record.tipo)}</span>
             </div>
           ))}
+          {displayRecords.length === 0 && (
+            <div style={{ padding: '32px 16px', textAlign: 'center', color: '#A79F9F', fontSize: 14 }}>
+              Sin registros recientes
+            </div>
+          )}
         </div>
       </div>
 

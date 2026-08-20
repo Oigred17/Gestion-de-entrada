@@ -2,7 +2,8 @@ import { useState, useMemo, useEffect } from 'react';
 import { Search, Plus, Eye, Pencil, X, Power } from 'lucide-react';
 import { profesoresApi } from '../api';
 import type { Profesor, ProfesorCreate } from '../types';
-import { toastSuccess, toastError } from '../lib/toast';
+import { toastSuccess, toastError, toastWarning } from '../lib/toast';
+import { normalizeText } from '../lib/normalizeText';
 import Loader from '../components/Loader';
 import ConfirmPasswordModal from '../components/ConfirmPasswordModal';
 
@@ -48,9 +49,9 @@ export default function ProfesoresPage() {
 
   const filtered = useMemo(() => {
     if (!searchQuery) return profesores;
-    const q = searchQuery.toLowerCase();
+    const q = normalizeText(searchQuery);
     return profesores.filter(p =>
-      p.nombre_completo.toLowerCase().includes(q) ||
+      normalizeText(p.nombre_completo).includes(q) ||
       String(p.num_nomina).includes(q) ||
       (p.telefono && p.telefono.includes(q))
     );
@@ -75,31 +76,51 @@ export default function ProfesoresPage() {
   };
 
   const handleSave = async () => {
-    if (!formNumNomina || !formNombre) return;
-    setSaving(true);
-    try {
-      const payload: ProfesorCreate = {
-        num_nomina: Number(formNumNomina),
-        nombre_completo: formNombre,
-        telefono: formTelefono || undefined,
-        domicilio: formDomicilio || undefined,
-      };
-      if (editItem) {
-        const updated = await profesoresApi.update(editItem.id, payload);
-        setProfesores(profesores.map(p => p.id === updated.id ? updated : p));
-        toastSuccess('Profesor actualizado correctamente.');
-      } else {
-        const created = await profesoresApi.create(payload);
-        setProfesores([created, ...profesores]);
-        toastSuccess('Profesor registrado correctamente.');
-      }
-      setModalOpen(false);
-    } catch (e: any) {
-      const detail = e?.response?.data?.detail;
-      toastError(typeof detail === 'string' ? detail : 'No se pudo guardar el profesor.');
-    } finally {
-      setSaving(false);
+    if (!formNumNomina.trim()) {
+      toastWarning('Campo requerido', 'El número de nómina es obligatorio.');
+      return;
     }
+    if (!formNombre.trim()) {
+      toastWarning('Campo requerido', 'El nombre completo es obligatorio.');
+      return;
+    }
+    const nominaNum = Number(formNumNomina);
+    if (isNaN(nominaNum) || nominaNum <= 0) {
+      toastWarning('Dato inválido', 'El número de nómina debe ser un número positivo.');
+      return;
+    }
+    const accionLabel = editItem ? 'actualizar' : 'registrar';
+    setConfirm({
+      title: editItem ? 'Actualizar profesor' : 'Registrar profesor',
+      message: `¿Seguro que deseas ${accionLabel} a ${formNombre.trim()}? Ingrese su contraseña para confirmar.`,
+      confirmLabel: editItem ? 'Guardar cambios' : 'Crear profesor',
+      run: async () => {
+        setSaving(true);
+        try {
+          const payload: ProfesorCreate = {
+            num_nomina: nominaNum,
+            nombre_completo: formNombre.trim(),
+            telefono: formTelefono.trim() || undefined,
+            domicilio: formDomicilio.trim() || undefined,
+          };
+          if (editItem) {
+            const updated = await profesoresApi.update(editItem.id, payload);
+            setProfesores(profesores.map(p => p.id === updated.id ? updated : p));
+            toastSuccess('Profesor actualizado correctamente.');
+          } else {
+            const created = await profesoresApi.create(payload);
+            setProfesores([created, ...profesores]);
+            toastSuccess('Profesor registrado correctamente.');
+          }
+          setModalOpen(false);
+        } catch (e: any) {
+          const detail = e?.response?.data?.detail;
+          toastError(typeof detail === 'string' ? detail : 'No se pudo guardar el profesor.');
+        } finally {
+          setSaving(false);
+        }
+      },
+    });
   };
 
   const handleDelete = (id: number) => {
@@ -225,7 +246,7 @@ export default function ProfesoresPage() {
             </div>
             <div className="modal-footer">
               <button className="btn btn--secondary" onClick={() => setModalOpen(false)}>Cancelar</button>
-              <button className="btn btn--primary" onClick={handleSave} disabled={!formNumNomina || !formNombre || saving}>
+              <button className="btn btn--primary" onClick={handleSave} disabled={saving}>
                 {saving ? 'Guardando...' : (editItem ? 'Guardar cambios' : 'Crear profesor')}
               </button>
             </div>

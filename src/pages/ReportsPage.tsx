@@ -356,41 +356,49 @@ export default function ReportsPage() {
     }
   };
 
-  const reporteTitulo = reportMode === 'individual'
-    ? `Reporte de ${selectedStudent ? getNombreCompleto(selectedStudent) : ''}`
-    : `Reporte del grupo ${selectedGroup}`;
-
   const buildCSV = () => {
+    const bom = '\uFEFF';
     if (reportType === 'incidencias') {
       const header = reportMode === 'individual'
-        ? 'Fecha,Tipo,Descripción,Estado\n'
+        ? 'Fecha,Tipo,Alumno,Matrícula,Descripción,Estado,Registrado por\n'
         : 'Grupo,Incidencias\n';
       const rows = reportMode === 'individual'
-        ? filteredIncidencias.map(i =>
-            `${(i.fecha_registro ?? '').slice(0, 10)},${i.tipo},${i.descripcion.replace(/,/g, ';')},${i.estado}`).join('\n')
+        ? filteredIncidencias.map(i => {
+            const al = alumnoMap[i.id_alumno];
+            const nombre = al ? `${al.nombre} ${al.apellido_paterno} ${al.apellido_materno}` : '';
+            const mat = al?.matricula ?? '';
+            return `${(i.fecha_registro ?? '').slice(0, 10)},${i.tipo},"${nombre}","${mat}","${i.descripcion.replace(/"/g, '""')}",${i.estado}`;
+          }).join('\n')
         : groupStats.map(g => `${g.group},${g.incidencias ?? 0}`).join('\n');
-      return header + rows;
+      return bom + header + rows;
     }
     if (reportType === 'faltas') {
       const header = reportMode === 'individual'
-        ? 'Fecha,Motivo,Sanción,Estado\n'
+        ? 'Fecha,Alumno,Matrícula,Motivo,Sanción,Estado\n'
         : 'Grupo,Faltas,Pendientes,Cumplidas\n';
       const rows = reportMode === 'individual'
-        ? filteredReportes.map(r =>
-            `${(r.fecha ?? '').slice(0, 10)},${r.motivo.replace(/,/g, ';')},${r.sancion.replace(/,/g, ';')},${r.sancion_cumplida ? 'Cumplida' : 'Pendiente'}`).join('\n')
+        ? filteredReportes.map(r => {
+            const al = alumnoMap[r.id_alumno];
+            const nombre = al ? `${al.nombre} ${al.apellido_paterno} ${al.apellido_materno}` : '';
+            const mat = al?.matricula ?? '';
+            return `${(r.fecha ?? '').slice(0, 10)},"${nombre}","${mat}","${r.motivo.replace(/"/g, '""')}","${r.sancion.replace(/"/g, '""')}",${r.sancion_cumplida ? 'Cumplida' : 'Pendiente'}`;
+          }).join('\n')
         : groupStats.map(g => `${g.group},${g.faltas ?? 0},${g.pendientes ?? 0},${g.cumplidas ?? 0}`).join('\n');
-      return header + rows;
+      return bom + header + rows;
     }
     const header = reportMode === 'individual'
-      ? 'Fecha,Hora,Tipo\n'
+      ? 'Fecha,Hora,Alumno,Matrícula,Tipo\n'
       : 'Grupo,Entradas,Retardos,Salidas,Total\n';
     const rows = reportMode === 'individual'
       ? filteredRecords.map(r => {
           const [fecha, hora] = r.fechaHora.split('T');
-          return `${fecha},${hora?.slice(0, 5) ?? ''},${r.tipo}`;
+          const al = registrosData.find(reg => reg.id === r.id)?.alumno || retardosData.find(ret => ret.id === r.id)?.alumno;
+          const nombre = al ? `${al.nombre} ${al.apellido_paterno} ${al.apellido_materno}` : '';
+          const mat = al?.matricula ?? '';
+          return `${fecha},${hora?.slice(0, 5) ?? ''},"${nombre}","${mat}",${r.tipo}`;
         }).join('\n')
       : groupStats.map(g => `${g.group},${g.entradas ?? 0},${g.retardos ?? 0},${g.salidas ?? 0},${(g.entradas ?? 0) + (g.retardos ?? 0) + (g.salidas ?? 0)}`).join('\n');
-    return header + rows;
+    return bom + header + rows;
   };
 
   const downloadBlob = (content: string, filename: string, mime: string) => {
@@ -412,164 +420,417 @@ export default function ReportsPage() {
   };
 
   const buildExcelHtml = () => {
-    const cells = (vals: (string | number)[]) => `<tr>${vals.map(v => `<td>${String(v)}</td>`).join('')}</tr>`;
-    const head = (cols: string[]) => `<tr>${cols.map(c => `<th>${c}</th>`).join('')}</tr>`;
+    const tipo = reportTypes.find(r => r.id === reportType)?.label ?? reportType;
+    const now = new Date().toLocaleString('es-MX', { dateStyle: 'long', timeStyle: 'short' });
+    const periodLabel = `${startDate || 'Inicio'} al ${endDate || 'Hoy'}`;
+
+    const cell = (v: string | number, bold = false) => `<td style="mso-number-format:'\\@';padding:6px 10px;border:1px solid #CAC6C7;font-size:11pt;${bold ? 'font-weight:bold;' : ''}">${String(v)}</td>`;
+    const headerCell = (v: string) => `<th style="background-color:#AB1748;color:#FFFFFF;padding:8px 12px;border:1px solid #8B1040;font-size:11pt;font-weight:bold;text-align:left;">${v}</th>`;
+
+    let tableHtml = '';
+
     if (reportType === 'incidencias') {
-      const body = reportMode === 'individual'
-        ? filteredIncidencias.map(i => cells([(i.fecha_registro ?? '').slice(0, 10), i.tipo, i.descripcion, i.estado])).join('')
-        : groupStats.map(g => cells([g.group, g.incidencias ?? 0])).join('');
-      const cols = reportMode === 'individual' ? ['Fecha', 'Tipo', 'Descripción', 'Estado'] : ['Grupo', 'Incidencias'];
-      return head(cols) + body;
-    }
-    if (reportType === 'faltas') {
-      const body = reportMode === 'individual'
-        ? filteredReportes.map(r => cells([(r.fecha ?? '').slice(0, 10), r.motivo, r.sancion, r.sancion_cumplida ? 'Cumplida' : 'Pendiente'])).join('')
-        : groupStats.map(g => cells([g.group, g.faltas ?? 0, g.pendientes ?? 0, g.cumplidas ?? 0])).join('');
-      const cols = reportMode === 'individual' ? ['Fecha', 'Motivo', 'Sanción', 'Estado'] : ['Grupo', 'Faltas', 'Pendientes', 'Cumplidas'];
-      return head(cols) + body;
-    }
-    const body = reportMode === 'individual'
-      ? filteredRecords.map(r => {
+      if (reportMode === 'individual') {
+        const headers = ['Fecha', 'Tipo', 'Alumno', 'Matrícula', 'Descripción', 'Estado'];
+        const rows = filteredIncidencias.map(i => {
+          const al = alumnoMap[i.id_alumno];
+          const nombre = al ? `${al.nombre} ${al.apellido_paterno} ${al.apellido_materno}` : '';
+          const mat = al?.matricula ?? '';
+          const rowColor = i.estado === 'Abierto' ? '#FEEBEE' : i.estado === 'Resuelto' ? '#E8F5E9' : '';
+          return `<tr style="${rowColor ? `background-color:${rowColor};` : ''}">${cell((i.fecha_registro ?? '').slice(0, 10))}${cell(i.tipo)}${cell(nombre)}${cell(mat)}${cell(i.descripcion)}${cell(i.estado)}</tr>`;
+        }).join('');
+        tableHtml = `<tr>${headers.map(headerCell).join('')}</tr>${rows}`;
+      } else {
+        const headers = ['Grupo', 'Incidencias'];
+        const rows = groupStats.map(g => `<tr>${cell(g.group)}${cell(g.incidencias ?? 0)}</tr>`).join('');
+        tableHtml = `<tr>${headers.map(headerCell).join('')}</tr>${rows}`;
+      }
+    } else if (reportType === 'faltas') {
+      if (reportMode === 'individual') {
+        const headers = ['Fecha', 'Alumno', 'Matrícula', 'Motivo', 'Sanción', 'Estado'];
+        const rows = filteredReportes.map(r => {
+          const al = alumnoMap[r.id_alumno];
+          const nombre = al ? `${al.nombre} ${al.apellido_paterno} ${al.apellido_materno}` : '';
+          const mat = al?.matricula ?? '';
+          const rowColor = r.sancion_cumplida ? '#E8F5E9' : '#FEEBEE';
+          return `<tr style="background-color:${rowColor};">${cell((r.fecha ?? '').slice(0, 10))}${cell(nombre)}${cell(mat)}${cell(r.motivo)}${cell(r.sancion)}${cell(r.sancion_cumplida ? 'Cumplida' : 'Pendiente')}</tr>`;
+        }).join('');
+        tableHtml = `<tr>${headers.map(headerCell).join('')}</tr>${rows}`;
+      } else {
+        const headers = ['Grupo', 'Faltas', 'Pendientes', 'Cumplidas'];
+        const rows = groupStats.map(g => `<tr>${cell(g.group)}${cell(g.faltas ?? 0)}${cell(g.pendientes ?? 0)}${cell(g.cumplidas ?? 0)}</tr>`).join('');
+        tableHtml = `<tr>${headers.map(headerCell).join('')}</tr>${rows}`;
+      }
+    } else {
+      if (reportMode === 'individual') {
+        const headers = ['Fecha', 'Hora', 'Alumno', 'Matrícula', 'Tipo'];
+        const rows = filteredRecords.map(r => {
           const [fecha, hora] = r.fechaHora.split('T');
-          return cells([fecha, hora?.slice(0, 5) ?? '', r.tipo]);
-        }).join('')
-      : groupStats.map(g => cells([g.group, g.entradas ?? 0, g.retardos ?? 0, g.salidas ?? 0, (g.entradas ?? 0) + (g.retardos ?? 0) + (g.salidas ?? 0)])).join('');
-    const cols = reportMode === 'individual' ? ['Fecha', 'Hora', 'Tipo'] : ['Grupo', 'Entradas', 'Retardos', 'Salidas', 'Total'];
-    return head(cols) + body;
+          const reg = registrosData.find(reg => reg.id === r.id);
+          const ret = retardosData.find(ret => ret.id === r.id);
+          const al = reg?.alumno || ret?.alumno;
+          const nombre = al ? `${al.nombre} ${al.apellido_paterno} ${al.apellido_materno}` : '';
+          const mat = al?.matricula ?? '';
+          const rowColor = r.tipo === 'retardo' ? '#FEEBEE' : r.tipo === 'ENTRADA' ? '#E8F5E9' : '';
+          return `<tr style="${rowColor ? `background-color:${rowColor};` : ''}">${cell(fecha)}${cell(hora?.slice(0, 5) ?? '')}${cell(nombre)}${cell(mat)}${cell(r.tipo)}</tr>`;
+        }).join('');
+        tableHtml = `<tr>${headers.map(headerCell).join('')}</tr>${rows}`;
+      } else {
+        const headers = ['Grupo', 'Entradas', 'Retardos', 'Salidas', 'Total'];
+        const rows = groupStats.map(g => `<tr>${cell(g.group)}${cell(g.entradas ?? 0)}${cell(g.retardos ?? 0)}${cell(g.salidas ?? 0)}${cell((g.entradas ?? 0) + (g.retardos ?? 0) + (g.salidas ?? 0))}</tr>`).join('');
+        tableHtml = `<tr>${headers.map(headerCell).join('')}</tr>${rows}`;
+      }
+    }
+
+    return `
+      <html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel">
+      <head>
+        <meta charset="UTF-8">
+        <!--[if gte mso 9]>
+        <xml><x:ExcelWorkbook><x:ExcelWorksheets><x:ExcelWorksheet>
+          <x:Name>${tipo}</x:Name>
+          <x:WorksheetOptions><x:DisplayGridlines/></x:WorksheetOptions>
+        </x:ExcelWorksheet></x:ExcelWorksheets></x:ExcelWorkbook></xml>
+        <![endif]-->
+        <style>
+          body { font-family: 'Calibri', Arial, sans-serif; }
+          h1 { font-size: 16pt; color: #1C1819; margin: 0 0 4px 0; }
+          .subtitle { font-size: 11pt; color: #5F5657; margin: 0 0 16px 0; }
+          .period { font-size: 10pt; color: #85787A; }
+        </style>
+      </head>
+      <body>
+        <h1>COBAO Plantel 27 &mdash; ${tipo}</h1>
+        <p class="subtitle">Periodo: ${periodLabel}</p>
+        <p class="period">Generado: ${now}</p>
+        <table border="0" cellpadding="0" cellspacing="0" style="border-collapse:collapse;width:100%;margin-top:12px;">
+          ${tableHtml}
+        </table>
+      </body>
+      </html>`;
   };
 
   const handleExportExcel = () => {
-    const html = `<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel"><head><meta charset="UTF-8"></head><body><table border="1">${buildExcelHtml()}</table></body></html>`;
-    downloadBlob(html, `reporte_${reportType}.xls`, 'application/vnd.ms-excel');
+    const html = buildExcelHtml();
+    downloadBlob(html, `reporte_${reportType}_${startDate || 'inicio'}_${endDate || 'hoy'}.xls`, 'application/vnd.ms-excel');
     toastSuccess('Reporte Excel descargado.');
   };
 
   const buildPrintTable = (): { headers: string; rows: string } => {
-    const row = (vals: (string | number)[]) => `<tr>${vals.map(v => `<td>${String(v)}</td>`).join('')}</tr>`;
-    const head = (cols: string[]) => `<tr>${cols.map(c => `<th>${c}</th>`).join('')}</tr>`;
+    const cell = (v: string | number, style = '') => `<td style="padding:8px 12px;border:1px solid #CAC6C7;font-size:11pt;${style}">${String(v)}</td>`;
+    const headerCell = (v: string) => `<th style="background-color:#AB1748;color:#FFFFFF;padding:8px 12px;border:1px solid #8B1040;font-size:11pt;font-weight:bold;text-align:left;">${v}</th>`;
+    const headerRow = (cols: string[]) => `<tr>${cols.map(headerCell).join('')}</tr>`;
+
     if (reportType === 'incidencias') {
       if (reportMode === 'individual') {
         return {
-          headers: head(['Fecha', 'Tipo', 'Descripción', 'Estado']),
-          rows: filteredIncidencias.map(i => row([(i.fecha_registro ?? '').slice(0, 10), i.tipo, i.descripcion, i.estado])).join(''),
+          headers: headerRow(['Fecha', 'Tipo', 'Alumno', 'Matrícula', 'Descripción', 'Estado']),
+          rows: filteredIncidencias.map(i => {
+            const al = alumnoMap[i.id_alumno];
+            const nombre = al ? `${al.nombre} ${al.apellido_paterno} ${al.apellido_materno}` : '';
+            const mat = al?.matricula ?? '';
+            const bg = i.estado === 'Abierto' ? 'background-color:#FEEBEE;' : i.estado === 'Resuelto' ? 'background-color:#E8F5E9;' : '';
+            return `<tr style="${bg}">${cell((i.fecha_registro ?? '').slice(0, 10))}${cell(i.tipo)}${cell(nombre)}${cell(mat)}${cell(i.descripcion)}${cell(i.estado)}</tr>`;
+          }).join(''),
         };
       }
       return {
-        headers: head(['Grupo', 'Incidencias']),
-        rows: groupStats.map(g => row([g.group, g.incidencias ?? 0])).join(''),
+        headers: headerRow(['Grupo', 'Incidencias']),
+        rows: groupStats.map(g => `<tr>${cell(g.group)}${cell(g.incidencias ?? 0)}</tr>`).join(''),
       };
     }
     if (reportType === 'faltas') {
       if (reportMode === 'individual') {
         return {
-          headers: head(['Fecha', 'Motivo', 'Sanción', 'Estado']),
-          rows: filteredReportes.map(r => row([(r.fecha ?? '').slice(0, 10), r.motivo, r.sancion, r.sancion_cumplida ? 'Cumplida' : 'Pendiente'])).join(''),
+          headers: headerRow(['Fecha', 'Alumno', 'Matrícula', 'Motivo', 'Sanción', 'Estado']),
+          rows: filteredReportes.map(r => {
+            const al = alumnoMap[r.id_alumno];
+            const nombre = al ? `${al.nombre} ${al.apellido_paterno} ${al.apellido_materno}` : '';
+            const mat = al?.matricula ?? '';
+            const bg = r.sancion_cumplida ? 'background-color:#E8F5E9;' : 'background-color:#FEEBEE;';
+            return `<tr style="${bg}">${cell((r.fecha ?? '').slice(0, 10))}${cell(nombre)}${cell(mat)}${cell(r.motivo)}${cell(r.sancion)}${cell(r.sancion_cumplida ? 'Cumplida' : 'Pendiente')}</tr>`;
+          }).join(''),
         };
       }
       return {
-        headers: head(['Grupo', 'Faltas', 'Pendientes', 'Cumplidas']),
-        rows: groupStats.map(g => row([g.group, g.faltas ?? 0, g.pendientes ?? 0, g.cumplidas ?? 0])).join(''),
+        headers: headerRow(['Grupo', 'Faltas', 'Pendientes', 'Cumplidas']),
+        rows: groupStats.map(g => `<tr>${cell(g.group)}${cell(g.faltas ?? 0)}${cell(g.pendientes ?? 0)}${cell(g.cumplidas ?? 0)}</tr>`).join(''),
       };
     }
     if (reportMode === 'individual') {
       return {
-        headers: head(['Fecha', 'Hora', 'Tipo']),
+        headers: headerRow(['Fecha', 'Hora', 'Alumno', 'Matrícula', 'Tipo']),
         rows: filteredRecords.map(r => {
           const [fecha, hora] = r.fechaHora.split('T');
-          return row([fecha, hora?.slice(0, 5) ?? '', r.tipo]);
+          const reg = registrosData.find(reg => reg.id === r.id);
+          const ret = retardosData.find(ret => ret.id === r.id);
+          const al = reg?.alumno || ret?.alumno;
+          const nombre = al ? `${al.nombre} ${al.apellido_paterno} ${al.apellido_materno}` : '';
+          const mat = al?.matricula ?? '';
+          const bg = r.tipo === 'retardo' ? 'background-color:#FEEBEE;' : r.tipo === 'ENTRADA' ? 'background-color:#E8F5E9;' : '';
+          return `<tr style="${bg}">${cell(fecha)}${cell(hora?.slice(0, 5) ?? '')}${cell(nombre)}${cell(mat)}${cell(r.tipo)}</tr>`;
         }).join(''),
       };
     }
     return {
-      headers: head(['Grupo', 'Entradas', 'Retardos', 'Salidas', 'Total']),
-      rows: groupStats.map(g => row([g.group, g.entradas ?? 0, g.retardos ?? 0, g.salidas ?? 0, (g.entradas ?? 0) + (g.retardos ?? 0) + (g.salidas ?? 0)])).join(''),
+      headers: headerRow(['Grupo', 'Entradas', 'Retardos', 'Salidas', 'Total']),
+      rows: groupStats.map(g => `<tr>${cell(g.group)}${cell(g.entradas ?? 0)}${cell(g.retardos ?? 0)}${cell(g.salidas ?? 0)}${cell((g.entradas ?? 0) + (g.retardos ?? 0) + (g.salidas ?? 0))}</tr>`).join(''),
     };
   };
 
   const handlePrint = () => {
-    const printWindow = window.open('', '_blank', 'width=900,height=700');
+    const printWindow = window.open('', '_blank', 'width=1000,height=800');
     if (!printWindow) {
       toastError('El navegador bloqueo la ventana de impresion.');
       return;
     }
     const { headers, rows } = buildPrintTable();
-    printWindow.document.write(`<!DOCTYPE html><html><head><title>${reporteTitulo}</title><style>body{font-family:'IBM Plex Sans',Arial,sans-serif;padding:24px}h1{color:#1C1819;font-size:18px}table{width:100%;border-collapse:collapse;margin-top:16px}th,td{border:1px solid #CAC6C7;padding:8px;text-align:left;font-size:13px}th{background:#F0EFEF}</style></head><body><h1>COBAO Plantel 27 - ${reporteTitulo}</h1><p style="color:#5F5657">Tipo: ${reportTypes.find(r => r.id === reportType)?.label ?? reportType} | Periodo: ${startDate || 'inicio'} - ${endDate || 'hoy'}</p><table>${headers}${rows}</table></body></html>`);
+    const tipo = reportTypes.find(r => r.id === reportType)?.label ?? reportType;
+    const now = new Date().toLocaleString('es-MX', { dateStyle: 'long', timeStyle: 'short' });
+    const periodLabel = `${startDate || 'Inicio'} al ${endDate || 'Hoy'}`;
+    const title = reportMode === 'individual'
+      ? `${tipo} — ${selectedStudent ? getNombreCompleto(selectedStudent) : ''}`
+      : `${tipo} — Grupo ${selectedGroup}`;
+    printWindow.document.write(`<!DOCTYPE html><html><head><meta charset="UTF-8"><title>${title}</title>
+<style>
+  @page { margin: 15mm; }
+  body { font-family: 'IBM Plex Sans', 'Segoe UI', Arial, sans-serif; color: #1C1819; margin: 0; padding: 24px; }
+  .header { border-bottom: 3px solid #AB1748; padding-bottom: 12px; margin-bottom: 20px; }
+  .school { font-size: 20px; font-weight: 700; color: #AB1748; margin: 0; }
+  .report-title { font-size: 16px; font-weight: 600; color: #1C1819; margin: 6px 0 0 0; }
+  .meta { color: #5F5657; font-size: 12px; margin: 4px 0 0 0; }
+  .meta span { margin-right: 16px; }
+  table { width: 100%; border-collapse: collapse; margin-top: 16px; }
+  th, td { border: 1px solid #CAC6C7; padding: 8px 12px; text-align: left; font-size: 11pt; }
+  th { background-color: #AB1748; color: #FFFFFF; font-weight: 600; }
+  tr:nth-child(even) { background-color: #F9F8F8; }
+  .footer { margin-top: 24px; padding-top: 12px; border-top: 1px solid #CAC6C7; font-size: 10px; color: #85787A; display: flex; justify-content: space-between; }
+</style></head><body>
+<div class="header">
+  <p class="school">COBAO Plantel 27</p>
+  <p class="report-title">${title}</p>
+  <p class="meta"><span>Periodo: ${periodLabel}</span><span>Generado: ${now}</span></p>
+</div>
+<table>${headers}${rows}</table>
+<div class="footer">
+  <span>COBAO Plantel 27 — Sistema de Gestión de Entrada</span>
+  <span>Página 1 de 1</span>
+</div>
+</body></html>`);
     printWindow.document.close();
-    printWindow.focus();
-    printWindow.print();
+    setTimeout(() => printWindow.print(), 400);
   };
 
   const handleExportPDF = () => {
     const doc = new jsPDF({ orientation: 'portrait', unit: 'pt', format: 'letter' });
+    const pageW = doc.internal.pageSize.getWidth();
     const marginX = 40;
-    let y = 60;
+    const contentW = pageW - marginX * 2;
+    let y = 50;
+
+    doc.setDrawColor(171, 23, 72);
+    doc.setLineWidth(2);
+    doc.line(marginX, y, pageW - marginX, y);
+    y += 14;
 
     doc.setFont('helvetica', 'bold');
-    doc.setFontSize(16);
-    doc.setTextColor(28, 24, 25);
-    doc.text(`COBAO Plantel 27 - ${reporteTitulo}`, marginX, y);
-    y += 20;
-    doc.setFont('helvetica', 'normal');
-    doc.setFontSize(11);
-    doc.setTextColor(95, 86, 87);
-    doc.text(`Tipo: ${reportTypes.find(r => r.id === reportType)?.label ?? reportType} | Periodo: ${startDate || 'inicio'} - ${endDate || 'hoy'}`, marginX, y);
-    y += 30;
+    doc.setFontSize(18);
+    doc.setTextColor(171, 23, 72);
+    doc.text('COBAO Plantel 27', marginX, y);
+    y += 18;
 
-    doc.setFontSize(10);
+    const tipo = reportTypes.find(r => r.id === reportType)?.label ?? reportType;
+    const title = reportMode === 'individual'
+      ? `${tipo} — ${selectedStudent ? getNombreCompleto(selectedStudent) : ''}`
+      : `${tipo} — Grupo ${selectedGroup}`;
+
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(14);
     doc.setTextColor(28, 24, 25);
+    doc.text(title, marginX, y);
+    y += 16;
+
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(10);
+    doc.setTextColor(95, 86, 87);
+    const periodLabel = `Periodo: ${startDate || 'Inicio'} al ${endDate || 'Hoy'}`;
+    const nowStr = new Date().toLocaleString('es-MX', { dateStyle: 'long', timeStyle: 'short' });
+    doc.text(`${periodLabel}   |   Generado: ${nowStr}`, marginX, y);
+    y += 14;
+
+    doc.setDrawColor(202, 198, 199);
+    doc.setLineWidth(0.5);
+    doc.line(marginX, y, pageW - marginX, y);
+    y += 18;
+
+    const headerH = 22;
+    const rowH = 18;
+    const drawHeader = (cols: { label: string; w: number; align: 'left' | 'center' | 'right' }[]) => {
+      let x = marginX;
+      doc.setFillColor(171, 23, 72);
+      doc.rect(marginX, y, contentW, headerH, 'F');
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(9);
+      doc.setTextColor(255, 255, 255);
+      for (const col of cols) {
+        if (col.align === 'right') {
+          doc.text(col.label, x + col.w - 8, y + 15, { align: 'right' });
+        } else if (col.align === 'center') {
+          doc.text(col.label, x + col.w / 2, y + 15, { align: 'center' });
+        } else {
+          doc.text(col.label, x + 8, y + 15);
+        }
+        x += col.w;
+      }
+      y += headerH;
+    };
+
+    const drawRow = (cells: (string | number)[], widths: number[], aligns: ('left' | 'center' | 'right')[], bgColor?: [number, number, number]) => {
+      if (y > 690) {
+        doc.addPage('letter', 'portrait');
+        y = 50;
+      }
+      if (bgColor) {
+        doc.setFillColor(...bgColor);
+        doc.rect(marginX, y, contentW, rowH, 'F');
+      }
+      doc.setDrawColor(202, 198, 199);
+      doc.setLineWidth(0.3);
+      doc.rect(marginX, y, contentW, rowH, 'S');
+      let x = marginX;
+      doc.setFont('helvetica', 'normal');
+      doc.setFontSize(9);
+      doc.setTextColor(28, 24, 25);
+      for (let i = 0; i < cells.length; i++) {
+        const text = String(cells[i]);
+        if (aligns[i] === 'right') {
+          doc.text(text, x + widths[i] - 8, y + 13, { align: 'right' });
+        } else if (aligns[i] === 'center') {
+          doc.text(text, x + widths[i] / 2, y + 13, { align: 'center' });
+        } else {
+          const maxW = widths[i] - 12;
+          const truncated = doc.getTextWidth(text) > maxW ? text.slice(0, Math.floor(text.length * maxW / doc.getTextWidth(text))) + '...' : text;
+          doc.text(truncated, x + 8, y + 13);
+        }
+        x += widths[i];
+      }
+      y += rowH;
+    };
 
     if (reportMode === 'individual') {
-      const lines = reportType === 'incidencias'
-        ? filteredIncidencias.map(i => `${(i.fecha_registro ?? '').slice(0, 10)}   ${i.tipo}   ${i.descripcion}`)
-        : reportType === 'faltas'
-          ? filteredReportes.map(r => `${(r.fecha ?? '').slice(0, 10)}   ${r.motivo}   ${r.sancion}   ${r.sancion_cumplida ? 'Cumplida' : 'Pendiente'}`)
-          : filteredRecords.map(r => {
-              const [fecha, hora] = r.fechaHora.split('T');
-              return `${fecha}   ${hora?.slice(0, 5) ?? ''}   ${r.tipo}`;
-            });
-      lines.forEach((line) => {
-        if (y > 720) { doc.addPage('letter', 'portrait'); y = 60; }
-        doc.text(line, marginX, y);
-        y += 16;
-      });
-    } else {
-      const colW = 90;
       if (reportType === 'incidencias') {
-        ['Grupo', 'Incidencias'].forEach((c, i) => doc.text(c, marginX + i * colW, y));
-        y += 18;
-        groupStats.forEach((g) => {
-          if (y > 720) { doc.addPage('letter', 'portrait'); y = 60; }
-          doc.text(g.group, marginX, y);
-          doc.text(String(g.incidencias ?? 0), marginX + colW, y);
-          y += 18;
-        });
+        const cols = [
+          { label: 'Fecha', w: contentW * 0.14, align: 'left' as const },
+          { label: 'Tipo', w: contentW * 0.22, align: 'left' as const },
+          { label: 'Alumno', w: contentW * 0.22, align: 'left' as const },
+          { label: 'Matrícula', w: contentW * 0.14, align: 'center' as const },
+          { label: 'Estado', w: contentW * 0.14, align: 'center' as const },
+          { label: 'Registrado por', w: contentW * 0.14, align: 'left' as const },
+        ];
+        drawHeader(cols);
+        const widths = cols.map(c => c.w);
+        const aligns: ('left' | 'center' | 'right')[] = ['left', 'left', 'left', 'center', 'center', 'left'];
+        for (const i of filteredIncidencias) {
+          const al = alumnoMap[i.id_alumno];
+          const nombre = al ? `${al.nombre} ${al.apellido_paterno}` : '';
+          const mat = al?.matricula ?? '';
+          const bg: [number, number, number] = i.estado === 'Abierto' ? [254, 235, 238] : i.estado === 'Resuelto' ? [232, 245, 233] : undefined!;
+          drawRow([(i.fecha_registro ?? '').slice(0, 10), i.tipo, nombre, mat, i.estado, ''], widths, aligns, bg[0] ? bg : undefined);
+        }
       } else if (reportType === 'faltas') {
-        ['Grupo', 'Faltas', 'Pendientes', 'Cumplidas'].forEach((c, i) => doc.text(c, marginX + i * colW, y));
-        y += 18;
-        groupStats.forEach((g) => {
-          if (y > 720) { doc.addPage('letter', 'portrait'); y = 60; }
-          doc.text(g.group, marginX, y);
-          doc.text(String(g.faltas ?? 0), marginX + colW, y);
-          doc.text(String(g.pendientes ?? 0), marginX + colW * 2, y);
-          doc.text(String(g.cumplidas ?? 0), marginX + colW * 3, y);
-          y += 18;
-        });
+        const cols = [
+          { label: 'Fecha', w: contentW * 0.12, align: 'left' as const },
+          { label: 'Alumno', w: contentW * 0.22, align: 'left' as const },
+          { label: 'Matrícula', w: contentW * 0.12, align: 'center' as const },
+          { label: 'Motivo', w: contentW * 0.24, align: 'left' as const },
+          { label: 'Sanción', w: contentW * 0.18, align: 'left' as const },
+          { label: 'Estado', w: contentW * 0.12, align: 'center' as const },
+        ];
+        drawHeader(cols);
+        const widths = cols.map(c => c.w);
+        const aligns: ('left' | 'center' | 'right')[] = ['left', 'left', 'center', 'left', 'left', 'center'];
+        for (const r of filteredReportes) {
+          const al = alumnoMap[r.id_alumno];
+          const nombre = al ? `${al.nombre} ${al.apellido_paterno}` : '';
+          const mat = al?.matricula ?? '';
+          const estado = r.sancion_cumplida ? 'Cumplida' : 'Pendiente';
+          const bg: [number, number, number] = r.sancion_cumplida ? [232, 245, 233] : [254, 235, 238];
+          drawRow([(r.fecha ?? '').slice(0, 10), nombre, mat, r.motivo, r.sancion, estado], widths, aligns, bg);
+        }
       } else {
-        ['Grupo', 'Entradas', 'Retardos', 'Salidas', 'Total'].forEach((c, i) => doc.text(c, marginX + i * colW, y));
-        y += 18;
-        groupStats.forEach((g) => {
-          if (y > 720) { doc.addPage('letter', 'portrait'); y = 60; }
-          doc.text(g.group, marginX, y);
-          doc.text(String(g.entradas ?? 0), marginX + colW, y);
-          doc.text(String(g.retardos ?? 0), marginX + colW * 2, y);
-          doc.text(String(g.salidas ?? 0), marginX + colW * 3, y);
-          doc.text(String((g.entradas ?? 0) + (g.retardos ?? 0) + (g.salidas ?? 0)), marginX + colW * 4, y);
-          y += 18;
-        });
+        const cols = [
+          { label: 'Fecha', w: contentW * 0.16, align: 'left' as const },
+          { label: 'Hora', w: contentW * 0.12, align: 'center' as const },
+          { label: 'Alumno', w: contentW * 0.28, align: 'left' as const },
+          { label: 'Matrícula', w: contentW * 0.16, align: 'center' as const },
+          { label: 'Tipo', w: contentW * 0.28, align: 'left' as const },
+        ];
+        drawHeader(cols);
+        const widths = cols.map(c => c.w);
+        const aligns: ('left' | 'center' | 'right')[] = ['left', 'center', 'left', 'center', 'left'];
+        for (const r of filteredRecords) {
+          const [fecha, hora] = r.fechaHora.split('T');
+          const reg = registrosData.find(reg => reg.id === r.id);
+          const ret = retardosData.find(ret => ret.id === r.id);
+          const al = reg?.alumno || ret?.alumno;
+          const nombre = al ? `${al.nombre} ${al.apellido_paterno}` : '';
+          const mat = al?.matricula ?? '';
+          const tipoLabel = r.tipo === 'ENTRADA' ? 'Entrada' : r.tipo === 'SALIDA' ? 'Salida' : 'Fuera de horario';
+          const bg: [number, number, number] = r.tipo === 'retardo' ? [254, 235, 238] : r.tipo === 'ENTRADA' ? [232, 245, 233] : undefined!;
+          drawRow([fecha, hora?.slice(0, 5) ?? '', nombre, mat, tipoLabel], widths, aligns, bg[0] ? bg : undefined);
+        }
+      }
+    } else {
+      if (reportType === 'incidencias') {
+        const cols = [
+          { label: 'Grupo', w: contentW * 0.5, align: 'left' as const },
+          { label: 'Incidencias', w: contentW * 0.5, align: 'center' as const },
+        ];
+        drawHeader(cols);
+        for (const g of groupStats) {
+          drawRow([g.group, g.incidencias ?? 0], cols.map(c => c.w), ['left', 'center']);
+        }
+      } else if (reportType === 'faltas') {
+        const cols = [
+          { label: 'Grupo', w: contentW * 0.25, align: 'left' as const },
+          { label: 'Faltas', w: contentW * 0.25, align: 'center' as const },
+          { label: 'Pendientes', w: contentW * 0.25, align: 'center' as const },
+          { label: 'Cumplidas', w: contentW * 0.25, align: 'center' as const },
+        ];
+        drawHeader(cols);
+        for (const g of groupStats) {
+          drawRow([g.group, g.faltas ?? 0, g.pendientes ?? 0, g.cumplidas ?? 0], cols.map(c => c.w), ['left', 'center', 'center', 'center']);
+        }
+      } else {
+        const cols = [
+          { label: 'Grupo', w: contentW * 0.20, align: 'left' as const },
+          { label: 'Entradas', w: contentW * 0.20, align: 'center' as const },
+          { label: 'Retardos', w: contentW * 0.20, align: 'center' as const },
+          { label: 'Salidas', w: contentW * 0.20, align: 'center' as const },
+          { label: 'Total', w: contentW * 0.20, align: 'center' as const },
+        ];
+        drawHeader(cols);
+        for (const g of groupStats) {
+          const total = (g.entradas ?? 0) + (g.retardos ?? 0) + (g.salidas ?? 0);
+          drawRow([g.group, g.entradas ?? 0, g.retardos ?? 0, g.salidas ?? 0, total], cols.map(c => c.w), ['left', 'center', 'center', 'center', 'center']);
+        }
       }
     }
 
-    doc.save(`reporte_${reportType}_${startDate || 'inicio'}.pdf`);
+    const pageCount = doc.getNumberOfPages();
+    for (let i = 1; i <= pageCount; i++) {
+      doc.setPage(i);
+      doc.setFont('helvetica', 'normal');
+      doc.setFontSize(8);
+      doc.setTextColor(133, 120, 122);
+      doc.text(`COBAO Plantel 27 — Sistema de Gestión de Entrada`, marginX, doc.internal.pageSize.getHeight() - 30);
+      doc.text(`Página ${i} de ${pageCount}`, pageW - marginX, doc.internal.pageSize.getHeight() - 30, { align: 'right' });
+      doc.setDrawColor(202, 198, 199);
+      doc.setLineWidth(0.5);
+      doc.line(marginX, doc.internal.pageSize.getHeight() - 38, pageW - marginX, doc.internal.pageSize.getHeight() - 38);
+    }
+
+    doc.save(`reporte_${reportType}_${startDate || 'inicio'}_${endDate || 'hoy'}.pdf`);
     toastSuccess('Reporte PDF descargado.');
   };
 

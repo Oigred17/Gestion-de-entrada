@@ -22,4 +22,5 @@ class Alumno(Base):
     tutor_telefono = Column(String(15), nullable=True)
     id_grupo = Column(Integer, ForeignKey("grupos.id"), nullable=True)
     activo = Column(Boolean, nullable=False, default=True)
+    estatus = Column(String(20), nullable=False, server_default="Activo")
     fecha_registro = Column(DateTime(timezone=True), nullable=False, server_default=func.now())

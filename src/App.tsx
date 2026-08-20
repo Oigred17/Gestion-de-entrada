@@ -20,6 +20,8 @@ const ConfigPage = lazy(() => import('./pages/ConfigPage'));
 const GruposPage = lazy(() => import('./pages/GruposPage'));
 const RegulationsPage = lazy(() => import('./pages/RegulationsPage'));
 const ProfesoresPage = lazy(() => import('./pages/ProfesoresPage'));
+const CiclosEscolaresPage = lazy(() => import('./pages/CiclosEscolaresPage'));
+const EgresadosPage = lazy(() => import('./pages/EgresadosPage'));
 const KioscoEntradasPage = lazy(() => import('./pages/KioscoEntradasPage'));
 
 function SuspenseBoundary({ children }: { children: ReactNode }) {
@@ -61,6 +63,7 @@ function AppRoutes() {
               <Route path="/" element={<DashboardPage />} />
               <Route path="/dashboard" element={<DashboardPage />} />
               <Route path="/alumnos" element={<StudentsPage />} />
+              <Route path="/egresados" element={<EgresadosPage />} />
               <Route path="/grupos" element={<GruposPage />} />
               <Route path="/credenciales" element={<CredentialsPage />} />
               <Route path="/credenciales/:id" element={<CredentialDetailPage />} />
@@ -69,6 +72,7 @@ function AppRoutes() {
               <Route path="/reportes" element={<ReportsPage />} />
               <Route path="/faltas" element={<RegulationsPage role={userRole as UserRole} />} />
               <Route path="/profesores" element={<ProfesoresPage />} />
+              <Route path="/ciclos" element={<CiclosEscolaresPage />} />
               <Route path="/configuracion" element={<ConfigPage />} />
               <Route path="*" element={<Navigate to="/dashboard" replace />} />
             </>
@@ -77,6 +81,7 @@ function AppRoutes() {
               <Route path="/" element={<DashboardPage />} />
               <Route path="/dashboard" element={<DashboardPage />} />
               <Route path="/alumnos" element={<StudentsPage />} />
+              <Route path="/egresados" element={<EgresadosPage />} />
               <Route path="/grupos" element={<GruposPage />} />
               <Route path="/credenciales" element={<CredentialsPage />} />
               <Route path="/credenciales/:id" element={<CredentialDetailPage />} />

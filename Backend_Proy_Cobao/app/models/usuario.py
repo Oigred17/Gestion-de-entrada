@@ -14,4 +14,6 @@ class Usuario(Base):
     email = Column(String(120), nullable=True)
     id_rol = Column(Integer, ForeignKey("roles.id_rol"), nullable=False)
     activo = Column(Boolean, nullable=False, default=True)
+    mfa_enabled = Column(Boolean, nullable=False, default=False)
+    mfa_secret = Column(String(32), nullable=True)
     fecha_creacion = Column(DateTime(timezone=True), nullable=False, server_default=func.now())

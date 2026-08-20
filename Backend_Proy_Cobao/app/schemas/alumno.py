@@ -50,7 +50,7 @@ class AlumnoCreate(BaseModel):
     @property
     def activo(self) -> bool:
         if self.estatus is not None:
-            return self.estatus.lower() not in ("inactivo", "baja")
+            return self.estatus.lower() not in ("inactivo", "baja", "egresado")
         return True
 
 
@@ -103,6 +103,11 @@ class AlumnoResponse(BaseModel):
         if hasattr(data, "id_alumno"):
             parts = _split_nombre(getattr(data, "nombre_completo", "") or "")
             activo = getattr(data, "activo", True)
+            estatus_db = getattr(data, "estatus", None)
+            if estatus_db:
+                estatus = estatus_db
+            else:
+                estatus = "Activo" if activo else "Inactivo"
             return {
                 "id": data.id_alumno,
                 "matricula": data.matricula,
@@ -111,7 +116,7 @@ class AlumnoResponse(BaseModel):
                 "apellido_materno": parts["apellido_materno"],
                 "telefono": getattr(data, "tutor_telefono", None),
                 "direccion": getattr(data, "domicilio", None),
-                "estatus": "Activo" if activo else "Inactivo",
+                "estatus": estatus,
                 "created_at": str(getattr(data, "fecha_registro", "")) if getattr(data, "fecha_registro", None) else None,
                 "curp": getattr(data, "curp", None),
                 "nss": getattr(data, "nss", None),

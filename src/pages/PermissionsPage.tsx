@@ -11,12 +11,13 @@ import {
   Copy,
   Loader2,
 } from "lucide-react";
-import { alumnosApi, permisosApi } from "../api";
+import { alumnosApi, permisosApi, usuariosApi } from "../api";
 import type { UserRole } from "../App";
 import Loader from "../components/Loader";
 import type { Permiso, Alumno } from "../types";
 import { useAuth } from "../context/AuthContext";
 import { toastSuccess, toastError } from "@/lib/toast";
+import { normalizeText } from "@/lib/normalizeText";
 import ConfirmPasswordModal from "../components/ConfirmPasswordModal";
 
 const ROWS_PER_PAGE_OPTIONS = [10, 25, 50, 100];
@@ -44,6 +45,7 @@ export default function PermissionsPage({ role }: PermissionsPageProps) {
   const [selectedPermission, setSelectedPermission] = useState<Permiso | null>(null);
   const [showNewModal, setShowNewModal] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [usuariosMap, setUsuariosMap] = useState<Record<number, string>>({});
 
   const [newAlumnoSearch, setNewAlumnoSearch] = useState("");
   const [newAlumno, setNewAlumno] = useState<Alumno | null>(null);
@@ -63,6 +65,13 @@ export default function PermissionsPage({ role }: PermissionsPageProps) {
         setPermissions(p);
         setAlumnos(a);
       })
+      .then(() => usuariosApi.getAll().then(u => {
+        const map: Record<number, string> = {};
+        for (const usr of u) {
+          if (usr.id) map[usr.id] = `${usr.nombre} ${usr.apellido_paterno} ${usr.apellido_materno}`;
+        }
+        setUsuariosMap(map);
+      }).catch(() => {}))
       .catch(() => toastError("Error", "No se pudieron cargar los permisos"))
       .finally(() => setLoading(false));
   };
@@ -74,14 +83,17 @@ export default function PermissionsPage({ role }: PermissionsPageProps) {
       ? `${permiso.alumno.nombre} ${permiso.alumno.apellido_paterno} ${permiso.alumno.apellido_materno}`
       : `Alumno #${permiso.id_alumno}`;
 
+  const getUsuarioNombre = (id: number) => usuariosMap[id] || '---';
+
   const filteredPermissions = permissions.filter((p) => {
     const estado = displayEstado(p);
+    const q = normalizeText(search);
     const matchesSearch =
       !search ||
-      nombreCompleto(p).toLowerCase().includes(search.toLowerCase()) ||
-      (p.alumno?.matricula ?? "").toLowerCase().includes(search.toLowerCase()) ||
-      (p.alumno?.grupo ?? "").toLowerCase().includes(search.toLowerCase()) ||
-      p.motivo.toLowerCase().includes(search.toLowerCase());
+      normalizeText(nombreCompleto(p)).includes(q) ||
+      normalizeText(p.alumno?.matricula ?? "").includes(q) ||
+      normalizeText(p.alumno?.grupo ?? "").includes(q) ||
+      normalizeText(p.motivo).includes(q);
 
     const matchesTab =
       activeTab === "Todos" ||
@@ -115,8 +127,8 @@ export default function PermissionsPage({ role }: PermissionsPageProps) {
   const filteredAlumnos = alumnos.filter(
     (s) =>
       (s.estatus ?? "Activo").toLowerCase() === "activo" &&
-      (`${s.nombre} ${s.apellido_paterno} ${s.apellido_materno}`.toLowerCase().includes(newAlumnoSearch.toLowerCase()) ||
-        s.matricula.toLowerCase().includes(newAlumnoSearch.toLowerCase()))
+      (normalizeText(`${s.nombre} ${s.apellido_paterno} ${s.apellido_materno}`).includes(normalizeText(newAlumnoSearch)) ||
+        normalizeText(s.matricula).includes(normalizeText(newAlumnoSearch)))
   );
 
   const estadoBadge = (estado: Permiso["estado"]) => {
@@ -212,8 +224,6 @@ export default function PermissionsPage({ role }: PermissionsPageProps) {
       setSaving(false);
     }
   };
-
-  const solicitadoPor = role === 'Directivo' ? 'Directivo' : 'Prefectura';
 
   return (
     <div>
@@ -311,7 +321,7 @@ export default function PermissionsPage({ role }: PermissionsPageProps) {
                         </span>
                       </td>
                       <td>{perm.motivo}</td>
-                      <td>{solicitadoPor}</td>
+                      <td style={{ fontSize: 13, color: '#5F5657' }}>{getUsuarioNombre(perm.id_usuario_registro)}</td>
                       <td>{estadoBadge(displayEstado(perm))}</td>
                       <td>
                         <div style={{ display: "flex", gap: 6 }}>
@@ -601,7 +611,7 @@ export default function PermissionsPage({ role }: PermissionsPageProps) {
                 </div>
                 <div style={{ gridColumn: "span 2" }}>
                   <span style={{ color: "#5F5657" }}>Solicitado por</span>
-                  <div style={{ fontWeight: 500 }}>{solicitadoPor}</div>
+                  <div style={{ fontWeight: 500 }}>{getUsuarioNombre(selectedPermission.id_usuario_registro)}</div>
                 </div>
                 <div style={{ gridColumn: "span 2" }}>
                   <span style={{ color: "#5F5657" }}>Notificar a tutor</span>
@@ -820,7 +830,7 @@ export default function PermissionsPage({ role }: PermissionsPageProps) {
                   <input
                     type="text"
                     className="input"
-                    value={solicitadoPor}
+                    value={user ? `${user.nombre} ${user.apellido_paterno} ${user.apellido_materno}` : (role === 'Directivo' ? 'Directivo' : 'Prefectura')}
                     readOnly
                     style={{ background: '#F0EFEF', color: '#5F5657', cursor: 'not-allowed' }}
                   />

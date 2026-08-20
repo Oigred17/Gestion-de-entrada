@@ -8,6 +8,10 @@ como WebSockets, salvo rutas explicitamente publicas:
   - /api/v1/auth/login             (login)
   - /api/v1/auth/recover/*         (recuperación de contraseña)
 
+El token se extrae en este orden de prioridad:
+  1. Header Authorization: Bearer <token>  (para NFC reader y API clients)
+  2. Cookie access_token_cookie           (para el navegador web)
+
 Estación NFC (lector físico en otra PC):
   - Solo los paths /api/v1/nfc/* aceptan la llave de estación (X-API-Key),
     además del Bearer JWT del personal.
@@ -41,6 +45,8 @@ PUBLIC_PATHS = {
 
 NFC_PATHS = f"{API_PREFIX}/nfc/"
 
+COOKIE_NAME = "access_token_cookie"
+
 
 def is_public_path(path: str) -> bool:
     if path in PUBLIC_PATHS:
@@ -69,18 +75,15 @@ def _token_from_headers(headers: dict[bytes, bytes]) -> str | None:
     return None
 
 
-def _token_from_query(query_string: bytes) -> str | None:
-    from urllib.parse import unquote, urlparse
-
-    query = urlparse("?" + query_string.decode("latin-1", errors="ignore")).query
-    try:
-        params = dict(p.split("=", 1) for p in query.split("&") if p)
-    except ValueError:
+def _token_from_cookies(headers: dict[bytes, bytes]) -> str | None:
+    cookie_header = headers.get(b"cookie", b"").decode("latin-1", errors="ignore")
+    if not cookie_header:
         return None
-    raw = params.get("token")
-    if not raw:
-        return None
-    return unquote(raw).strip() or None
+    for part in cookie_header.split(";"):
+        part = part.strip()
+        if part.startswith(f"{COOKIE_NAME}="):
+            return part[len(COOKIE_NAME) + 1:].strip() or None
+    return None
 
 
 def _api_key_from_headers(headers: dict[bytes, bytes]) -> str:
@@ -108,9 +111,13 @@ class AuthMiddleware:
         if is_nfc_path(path) and _valid_station_key(_api_key_from_headers(headers)):
             return await self.app(scope, receive, send)
 
+        # 1. Intentar token desde header Authorization (NFC reader, API clients)
         token = _token_from_headers(headers)
-        if not token and scope["type"] == "websocket":
-            token = _token_from_query(scope.get("query_string", b""))
+
+        # 2. Si no hay header, intentar desde cookie (navegador web)
+        if not token:
+            token = _token_from_cookies(headers)
+
         if not token:
             return await self._deny(scope, send)
 
@@ -137,16 +144,23 @@ class AuthMiddleware:
 
 
 async def _usuario_desde_request(request: Request, db: AsyncSession):
-    """Extrae y valida el Bearer token del request (para dependencias de ruta)."""
+    """Extrae y valida el token del request (header o cookie)."""
     credentials_exception = HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
         detail="Credenciales inválidas",
         headers={"WWW-Authenticate": "Bearer"},
     )
+
+    # 1. Intentar header Authorization
     auth_header = request.headers.get("Authorization", "")
-    if not auth_header.startswith("Bearer "):
-        raise credentials_exception
-    token = auth_header[len("Bearer "):].strip()
+    token = None
+    if auth_header.startswith("Bearer "):
+        token = auth_header[len("Bearer "):].strip()
+
+    # 2. Intentar cookie
+    if not token:
+        token = request.cookies.get(COOKIE_NAME)
+
     if not token:
         raise credentials_exception
 

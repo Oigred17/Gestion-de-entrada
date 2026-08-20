@@ -1,5 +1,5 @@
 import apiClient from './client';
-import type { LoginRequest, LoginResponse, User, RecoveryResponse, ResetPasswordRequest } from '../types';
+import type { LoginRequest, LoginResponse, User, RecoveryResponse, ResetPasswordRequest, MfaSetupResponse } from '../types';
 
 export const authApi = {
   async login(credentials: LoginRequest): Promise<LoginResponse> {
@@ -27,8 +27,27 @@ export const authApi = {
     return response.data;
   },
 
-  logout() {
-    localStorage.removeItem('access_token');
-    localStorage.removeItem('user');
+  async logout(): Promise<void> {
+    await apiClient.post('/auth/logout');
+  },
+
+  async mfaSetup(): Promise<MfaSetupResponse> {
+    const response = await apiClient.post<MfaSetupResponse>('/auth/mfa/setup');
+    return response.data;
+  },
+
+  async mfaEnable(code: string): Promise<{ status: string; message: string }> {
+    const response = await apiClient.post('/auth/mfa/enable', { code });
+    return response.data;
+  },
+
+  async mfaDisable(password: string): Promise<{ status: string; message: string }> {
+    const response = await apiClient.post('/auth/mfa/disable', { password });
+    return response.data;
+  },
+
+  async mfaVerify(code: string, temp_token?: string): Promise<LoginResponse> {
+    const response = await apiClient.post('/auth/mfa/verify', { code, temp_token });
+    return response.data;
   },
 };

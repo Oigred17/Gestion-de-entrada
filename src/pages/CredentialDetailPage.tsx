@@ -56,7 +56,7 @@ export default function CredentialDetailPage() {
           setStudentData(cred.alumno);
           setLoading(false);
         } else {
-          return alumnosApi.getById(cred.alumno_id);
+          return alumnosApi.getById(cred.alumno_id!);
         }
       })
       .then((alumno) => {
@@ -284,7 +284,7 @@ export default function CredentialDetailPage() {
             <div>
               <FieldLabel>No. Control</FieldLabel>
               {isEditing ? (
-                <input type="text" value={editControl} onChange={(e) => setEditControl(e.target.value)}
+                <input type="text" value={editControl} onChange={(e) => setEditControl(e.target.value)} maxLength={10}
                   style={{ width: '100%', padding: '6px 10px', border: '1px solid #CAC6C7', borderRadius: 6, fontSize: 14, fontWeight: 500, fontFamily: 'monospace', marginTop: 4 }} />
               ) : (
                 <FieldValue mono>{studentData.matricula}</FieldValue>

@@ -2,10 +2,10 @@ import apiClient from './client';
 import type { Alumno, AlumnoCreate, AlumnoUpdate } from '../types';
 
 export const alumnosApi = {
-  async getAll(skip = 0, limit = 100): Promise<Alumno[]> {
-    const response = await apiClient.get<Alumno[]>('/alumnos', {
-      params: { skip, limit },
-    });
+  async getAll(skip = 0, limit = 100, estatus?: string): Promise<Alumno[]> {
+    const params: Record<string, string | number> = { skip, limit };
+    if (estatus) params.estatus = estatus;
+    const response = await apiClient.get<Alumno[]>('/alumnos', { params });
     return response.data;
   },
 

@@ -52,6 +52,7 @@ class CredencialResponse(BaseModel):
 
     id: int
     alumno_id: int | None = None
+    id_profesor: int | None = None
     numero: str | None = None
     tipo: str | None = None
     estatus: str
@@ -60,6 +61,7 @@ class CredencialResponse(BaseModel):
     created_at: str | None = None
     updated_at: str | None = None
     alumno: dict | None = None
+    profesor: dict | None = None
 
     @model_validator(mode="before")
     @classmethod
@@ -67,10 +69,12 @@ class CredencialResponse(BaseModel):
         if hasattr(data, "id_credencial"):
             activa = getattr(data, "activa", True)
             id_alumno = getattr(data, "id_alumno", None)
-            tipo = "Alumno" if id_alumno else "Profesor"
+            id_profesor = getattr(data, "id_profesor", None)
+            tipo = "Alumno" if id_alumno else "Profesor" if id_profesor else "Alumno"
             return {
                 "id": data.id_credencial,
                 "alumno_id": id_alumno,
+                "id_profesor": id_profesor,
                 "numero": data.uid_nfc,
                 "tipo": tipo,
                 "estatus": "ACTIVA" if activa else "INACTIVA",
@@ -79,5 +83,6 @@ class CredencialResponse(BaseModel):
                 "created_at": None,
                 "updated_at": None,
                 "alumno": None,
+                "profesor": None,
             }
         return data

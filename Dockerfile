@@ -24,8 +24,8 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 COPY Backend_Proy_Cobao/app/ ./app/
 COPY Backend_Proy_Cobao/bd_COBAO.sql .
-
 COPY nfc_reader.py .
+
 COPY start.sh .
 RUN chmod +x start.sh
 

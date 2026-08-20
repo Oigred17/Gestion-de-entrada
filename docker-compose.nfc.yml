@@ -1,0 +1,9 @@
+# Extensión opcional para lector NFC en Linux.
+# Uso: docker compose -f docker-compose.yml -f docker-compose.nfc.yml up -d
+services:
+  app:
+    privileged: true
+    devices:
+      - /dev/bus/usb:/dev/bus/usb
+    volumes:
+      - /var/run/pcscd:/var/run/pcscd

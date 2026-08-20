@@ -130,6 +130,10 @@ export default function ConfigPage({ role }: ConfigPageProps) {
   const [cargandoConfig, setCargandoConfig] = useState(true);
   const [guardando, setGuardando] = useState(false);
 
+  const [editingGeneral, setEditingGeneral] = useState(false);
+  const [editingHorarios, setEditingHorarios] = useState(false);
+  const [editingNotif, setEditingNotif] = useState(false);
+
   const [usuarios, setUsuarios] = useState<Usuario[]>([]);
   const [showUsuarioModal, setShowUsuarioModal] = useState(false);
   const [usuarioEnEdicion, setUsuarioEnEdicion] = useState<Usuario | null>(null);
@@ -500,6 +504,7 @@ export default function ConfigPage({ role }: ConfigPageProps) {
     btnIcon: (danger?: boolean): React.CSSProperties => ({
       display: 'inline-flex', alignItems: 'center', justifyContent: 'center', padding: '8px', border: 'none', background: 'transparent', borderRadius: '8px', cursor: 'pointer', color: danger ? colors.primary : colors.textMuted, transition: 'all 0.2s',
     }),
+    sectionHeaderBtn: { display: 'inline-flex', alignItems: 'center', gap: '6px', padding: '6px 14px', borderRadius: '6px', border: 'none', fontSize: '13px', fontWeight: 600, cursor: 'pointer', transition: 'all 0.2s' } as React.CSSProperties,
     actions: { display: 'flex', justifyContent: 'flex-end', gap: '12px', paddingTop: '8px' } as React.CSSProperties,
     tableWrapper: { overflowX: 'auto' as const } as React.CSSProperties,
     table: { width: '100%', borderCollapse: 'collapse' as const } as React.CSSProperties,
@@ -563,96 +568,133 @@ export default function ConfigPage({ role }: ConfigPageProps) {
     </div>
   );
 
-  const renderGeneralTab = () => (
+  const renderGeneralTab = () => {
+    const dis = !editingGeneral;
+    return (
     <div style={s.tabContent}>
       <div style={s.section}>
-        <h3 style={s.sectionTitle}>Información del Plantel</h3>
+        <div style={s.sectionHeader}>
+          <h3 style={{ ...s.sectionTitle, marginBottom: 0 }}>Información del Plantel</h3>
+          {!editingGeneral && (
+            <button style={{ ...s.sectionHeaderBtn, background: colors.lightPink, color: colors.primary }} onClick={() => setEditingGeneral(true)}><Edit size={14} /> Editar</button>
+          )}
+        </div>
         <div style={s.grid2}>
           <div style={s.field}>
             <label style={s.label}>Nombre del Plantel</label>
-            <input type="text" style={s.input} value={plantelNombre} onChange={e => setPlantelNombre(e.target.value)} onFocus={handleInputFocus} onBlur={handleInputBlur} />
+            <input type="text" style={s.input} value={plantelNombre} onChange={e => setPlantelNombre(e.target.value)} onFocus={handleInputFocus} onBlur={handleInputBlur} disabled={dis} />
           </div>
           <div style={s.field}>
             <label style={s.label}>Teléfono</label>
-            <input type="tel" style={s.input} value={telefono} onChange={e => setTelefono(e.target.value)} placeholder="(273) 123-4567" onFocus={handleInputFocus} onBlur={handleInputBlur} />
+            <input type="tel" style={s.input} value={telefono} onChange={e => setTelefono(e.target.value)} placeholder="(273) 123-4567" onFocus={handleInputFocus} onBlur={handleInputBlur} disabled={dis} />
           </div>
         </div>
         <div style={s.field}>
           <label style={s.label}>Dirección</label>
-          <textarea style={s.textarea} rows={3} value={direccion} onChange={e => setDireccion(e.target.value)} placeholder="Dirección completa del plantel" onFocus={handleInputFocus} onBlur={handleInputBlur} />
+          <textarea style={s.textarea} rows={3} value={direccion} onChange={e => setDireccion(e.target.value)} placeholder="Dirección completa del plantel" onFocus={handleInputFocus} onBlur={handleInputBlur} disabled={dis} />
         </div>
         <div style={s.grid2}>
           <div style={s.field}>
             <label style={s.label}>Correo Institucional</label>
-            <input type="email" style={s.input} value={correoInstitucional} onChange={e => setCorreoInstitucional(e.target.value)} placeholder="contacto@plantel27.edu.mx" onFocus={handleInputFocus} onBlur={handleInputBlur} />
+            <input type="email" style={s.input} value={correoInstitucional} onChange={e => setCorreoInstitucional(e.target.value)} placeholder="contacto@plantel27.edu.mx" onFocus={handleInputFocus} onBlur={handleInputBlur} disabled={dis} />
           </div>
         </div>
+        {editingGeneral && (
+          <div style={s.actions}>
+            <button style={s.btnSecondary} onClick={() => setEditingGeneral(false)}>Cancelar</button>
+            <button style={s.btnPrimary} onClick={async () => { await guardarGeneral(); setEditingGeneral(false); }} disabled={guardando || cargandoConfig}><Save size={16} /> {guardando ? 'Guardando...' : 'Guardar'}</button>
+          </div>
+        )}
       </div>
 
       <div style={s.section}>
-        <h3 style={s.sectionTitle}>Logo del Plantel</h3>
+        <div style={s.sectionHeader}>
+          <h3 style={{ ...s.sectionTitle, marginBottom: 0 }}>Logo del Plantel</h3>
+          {!editingGeneral && (
+            <button style={{ ...s.sectionHeaderBtn, background: colors.lightPink, color: colors.primary }} onClick={() => setEditingGeneral(true)}><Edit size={14} /> Editar</button>
+          )}
+        </div>
         <div style={s.logoUpload}>
           {logo ? (
             <div style={s.logoPreview}>
               <img src={logo} alt="Logo" style={s.logoPreviewImg} />
-              <button style={s.btnRemove} onClick={() => setLogo(null)}>
-                <Trash2 size={16} /> Eliminar
-              </button>
+              {editingGeneral && (
+                <button style={s.btnRemove} onClick={() => setLogo(null)}>
+                  <Trash2 size={16} /> Eliminar
+                </button>
+              )}
             </div>
           ) : (
             <div style={s.dropzone}>
               <Upload size={48} color={colors.textMuted} />
               <p style={s.dropzoneText}>Arrastra el logo aqui o haz clic para seleccionar</p>
               <span style={s.dropzoneHint}>Formatos: PNG, JPG, SVG (Max 5MB)</span>
-              <input
-                type="file"
-                accept="image/*"
-                style={s.fileInput}
-                onChange={e => {
-                  const file = e.target.files?.[0];
-                  if (file) {
-                    const reader = new FileReader();
-                    reader.onload = ev => setLogo(ev.target?.result as string);
-                    reader.readAsDataURL(file);
-                  }
-                }}
-              />
+              {editingGeneral && (
+                <input
+                  type="file"
+                  accept="image/*"
+                  style={s.fileInput}
+                  onChange={e => {
+                    const file = e.target.files?.[0];
+                    if (file) {
+                      const reader = new FileReader();
+                      reader.onload = ev => setLogo(ev.target?.result as string);
+                      reader.readAsDataURL(file);
+                    }
+                  }}
+                />
+              )}
             </div>
           )}
         </div>
       </div>
-
-      <div style={s.actions}>
-        <button style={s.btnPrimary} onClick={guardarGeneral} disabled={guardando || cargandoConfig}><Save size={16} /> {guardando ? 'Guardando...' : 'Guardar cambios'}</button>
-      </div>
     </div>
-  );
+    );
+  };
 
-  const renderHorariosTab = () => (
+  const renderHorariosTab = () => {
+    const dis = !editingHorarios;
+    return (
     <div style={s.tabContent}>
       <div style={s.section}>
-        <h3 style={s.sectionTitle}>Horario Oficial</h3>
+        <div style={s.sectionHeader}>
+          <h3 style={{ ...s.sectionTitle, marginBottom: 0 }}>Horario Oficial</h3>
+          {!editingHorarios && (
+            <button style={{ ...s.sectionHeaderBtn, background: colors.lightPink, color: colors.primary }} onClick={() => setEditingHorarios(true)}><Edit size={14} /> Editar</button>
+          )}
+        </div>
         <div style={s.grid2}>
           <div style={s.field}>
             <label style={s.label}>Hora de entrada oficial</label>
-            <input type="time" style={s.input} value={horaEntrada} onChange={e => setHoraEntrada(e.target.value)} onFocus={handleInputFocus} onBlur={handleInputBlur} />
+            <input type="time" style={s.input} value={horaEntrada} onChange={e => setHoraEntrada(e.target.value)} onFocus={handleInputFocus} onBlur={handleInputBlur} disabled={dis} />
           </div>
           <div style={s.field}>
             <label style={s.label}>Hora de salida oficial</label>
-            <input type="time" style={s.input} value={horaSalida} onChange={e => setHoraSalida(e.target.value)} onFocus={handleInputFocus} onBlur={handleInputBlur} />
+            <input type="time" style={s.input} value={horaSalida} onChange={e => setHoraSalida(e.target.value)} onFocus={handleInputFocus} onBlur={handleInputBlur} disabled={dis} />
           </div>
         </div>
         <div style={s.field}>
           <label style={s.label}>Minutos de tolerancia para entrada fuera de horario</label>
-          <input type="number" style={s.inputSm} value={toleranciaRetardo} onChange={e => setToleranciaRetardo(Number(e.target.value))} min={0} max={120} onFocus={handleInputFocus} onBlur={handleInputBlur} />
+          <input type="number" style={s.inputSm} value={toleranciaRetardo} onChange={e => setToleranciaRetardo(Number(e.target.value))} min={0} max={120} onFocus={handleInputFocus} onBlur={handleInputBlur} disabled={dis} />
         </div>
+        {editingHorarios && (
+          <div style={s.actions}>
+            <button style={s.btnSecondary} onClick={() => setEditingHorarios(false)}>Cancelar</button>
+            <button style={s.btnPrimary} onClick={async () => { await guardarHorarios(); setEditingHorarios(false); }} disabled={guardando}><Save size={16} /> {guardando ? 'Guardando...' : 'Guardar'}</button>
+          </div>
+        )}
       </div>
 
       <div style={s.section}>
-        <h3 style={s.sectionTitle}>Dias Habiles</h3>
+        <div style={s.sectionHeader}>
+          <h3 style={{ ...s.sectionTitle, marginBottom: 0 }}>Dias Habiles</h3>
+          {!editingHorarios && (
+            <button style={{ ...s.sectionHeaderBtn, background: colors.lightPink, color: colors.primary }} onClick={() => setEditingHorarios(true)}><Edit size={14} /> Editar</button>
+          )}
+        </div>
         <div style={s.diasGrid}>
           {Object.entries(diasHabiles).map(([dia, activo]) => (
-            <label key={dia} style={s.diaChip(activo)} onClick={() => toggleDia(dia)}>
+            <label key={dia} onClick={() => { if (editingHorarios) toggleDia(dia); }} style={{ ...s.diaChip(activo), cursor: editingHorarios ? 'pointer' : 'default', opacity: dis ? 0.7 : 1 }}>
               <input type="checkbox" checked={activo} readOnly style={{ display: 'none' }} />
               {dia}
             </label>
@@ -690,12 +732,9 @@ export default function ConfigPage({ role }: ConfigPageProps) {
           </table>
         </div>
       </div>
-
-      <div style={s.actions}>
-        <button style={s.btnPrimary} onClick={guardarHorarios} disabled={guardando}><Save size={16} /> {guardando ? 'Guardando...' : 'Guardar cambios'}</button>
-      </div>
     </div>
-  );
+    );
+  };
 
   const renderUsuariosTab = () => (
     <div style={s.tabContent}>
@@ -812,38 +851,62 @@ export default function ConfigPage({ role }: ConfigPageProps) {
     </div>
   );
 
-  const renderNotificacionesTab = () => (
+  const renderNotificacionesTab = () => {
+    const dis = !editingNotif;
+    return (
     <div style={s.tabContent}>
       <div style={s.section}>
-        <h3 style={s.sectionTitle}>Canales de Notificacion</h3>
-        {renderToggle(notifEmail, setNotifEmail, 'Correo electronico')}
+        <div style={s.sectionHeader}>
+          <h3 style={{ ...s.sectionTitle, marginBottom: 0 }}>Canales de Notificacion</h3>
+          {!editingNotif && (
+            <button style={{ ...s.sectionHeaderBtn, background: colors.lightPink, color: colors.primary }} onClick={() => setEditingNotif(true)}><Edit size={14} /> Editar</button>
+          )}
+        </div>
+        {renderToggle(notifEmail, editingNotif ? setNotifEmail : () => {}, 'Correo electronico')}
+        {editingNotif && (
+          <div style={{ ...s.actions, paddingTop: 0 }}>
+            <button style={s.btnSecondary} onClick={() => setEditingNotif(false)}>Cancelar</button>
+            <button style={s.btnPrimary} onClick={async () => { await guardarNotificaciones(); setEditingNotif(false); }} disabled={guardando}><Save size={16} /> {guardando ? 'Guardando...' : 'Guardar'}</button>
+          </div>
+        )}
       </div>
 
       {notifEmail && (
         <div style={s.section}>
-          <h3 style={s.sectionTitle}>Configuración SMTP</h3>
+          <div style={s.sectionHeader}>
+            <h3 style={{ ...s.sectionTitle, marginBottom: 0 }}>Configuración SMTP</h3>
+            {!editingNotif && (
+              <button style={{ ...s.sectionHeaderBtn, background: colors.lightPink, color: colors.primary }} onClick={() => setEditingNotif(true)}><Edit size={14} /> Editar</button>
+            )}
+          </div>
           <div style={s.grid2}>
             <div style={s.field}>
               <label style={s.label}>Servidor SMTP</label>
-              <input style={s.input} value={smtp.servidor} onChange={e => setSmtp({ ...smtp, servidor: e.target.value })} onFocus={handleInputFocus} onBlur={handleInputBlur} />
+              <input style={s.input} value={smtp.servidor} onChange={e => setSmtp({ ...smtp, servidor: e.target.value })} onFocus={handleInputFocus} onBlur={handleInputBlur} disabled={dis} />
             </div>
             <div style={s.field}>
               <label style={s.label}>Puerto</label>
-              <input style={s.input} value={smtp.puerto} onChange={e => setSmtp({ ...smtp, puerto: e.target.value })} onFocus={handleInputFocus} onBlur={handleInputBlur} />
+              <input style={s.input} value={smtp.puerto} onChange={e => setSmtp({ ...smtp, puerto: e.target.value })} onFocus={handleInputFocus} onBlur={handleInputBlur} disabled={dis} />
             </div>
             <div style={s.field}>
               <label style={s.label}>Usuario</label>
-              <input style={s.input} value={smtp.usuario} onChange={e => setSmtp({ ...smtp, usuario: e.target.value })} placeholder="usuario@gmail.com" onFocus={handleInputFocus} onBlur={handleInputBlur} />
+              <input style={s.input} value={smtp.usuario} onChange={e => setSmtp({ ...smtp, usuario: e.target.value })} placeholder="usuario@gmail.com" onFocus={handleInputFocus} onBlur={handleInputBlur} disabled={dis} />
             </div>
             <div style={s.field}>
-          <label style={s.label}>Contraseña</label>
-          <input type="password" style={s.input} value={smtp.contrasena} onChange={e => setSmtp({ ...smtp, contrasena: e.target.value })} onFocus={handleInputFocus} onBlur={handleInputBlur} />
+              <label style={s.label}>Contraseña</label>
+              <input type="password" style={s.input} value={smtp.contrasena} onChange={e => setSmtp({ ...smtp, contrasena: e.target.value })} onFocus={handleInputFocus} onBlur={handleInputBlur} disabled={dis} />
             </div>
           </div>
           <div style={s.field}>
             <label style={s.label}>Dirección remitente</label>
-            <input style={s.input} value={smtp.remitente} onChange={e => setSmtp({ ...smtp, remitente: e.target.value })} placeholder="Plantel 27 <notificaciones@plantel27.edu.mx>" onFocus={handleInputFocus} onBlur={handleInputBlur} />
+            <input style={s.input} value={smtp.remitente} onChange={e => setSmtp({ ...smtp, remitente: e.target.value })} placeholder="Plantel 27 <notificaciones@plantel27.edu.mx>" onFocus={handleInputFocus} onBlur={handleInputBlur} disabled={dis} />
           </div>
+          {editingNotif && (
+            <div style={s.actions}>
+              <button style={s.btnSecondary} onClick={() => setEditingNotif(false)}>Cancelar</button>
+              <button style={s.btnPrimary} onClick={async () => { await guardarNotificaciones(); setEditingNotif(false); }} disabled={guardando}><Save size={16} /> {guardando ? 'Guardando...' : 'Guardar'}</button>
+            </div>
+          )}
         </div>
       )}
 
@@ -883,12 +946,9 @@ export default function ConfigPage({ role }: ConfigPageProps) {
             ))}
           </div>
         </div>
-
-      <div style={s.actions}>
-        <button style={s.btnPrimary} onClick={guardarNotificaciones} disabled={guardando}><Save size={16} /> {guardando ? 'Guardando...' : 'Guardar cambios'}</button>
-      </div>
     </div>
-  );
+    );
+  };
 
   const saveCredLayout = () => {
     localStorage.setItem('credentialLayout', JSON.stringify(credLayout));
@@ -1320,18 +1380,23 @@ export default function ConfigPage({ role }: ConfigPageProps) {
           <button
             style={s.btnPrimary}
             disabled={generandoRespaldo}
-            onClick={async () => {
-              setGenerandoRespaldo(true);
-              try {
-                const nuevo = await respaldosApi.generar();
-                setRespaldos(prev => [nuevo, ...prev]);
-                toastSuccess('Respaldo generado', `El respaldo quedo listo (${nuevo.tamano}).`);
-              } catch (err) {
-                toastError('No se pudo generar el respaldo', errMsg(err, 'Ocurrió un error'));
-              } finally {
-                setGenerandoRespaldo(false);
-              }
-            }}
+            onClick={() => setConfirm({
+              title: 'Generar respaldo',
+              message: 'Ingrese su contraseña para confirmar la generación del respaldo de la base de datos.',
+              confirmLabel: 'Generar',
+              run: async () => {
+                setGenerandoRespaldo(true);
+                try {
+                  const nuevo = await respaldosApi.generar();
+                  setRespaldos(prev => [nuevo, ...prev]);
+                  toastSuccess('Respaldo generado', `El respaldo quedo listo (${nuevo.tamano}).`);
+                } catch (err) {
+                  toastError('No se pudo generar el respaldo', errMsg(err, 'Ocurrió un error'));
+                } finally {
+                  setGenerandoRespaldo(false);
+                }
+              },
+            })}
           >
             <RefreshCw size={16} /> {generandoRespaldo ? 'Generando...' : 'Generar respaldo manual'}
           </button>
@@ -1373,22 +1438,27 @@ export default function ConfigPage({ role }: ConfigPageProps) {
                       <button
                         style={s.btnIcon()}
                         title="Descargar"
-                        onClick={async () => {
-                          try {
-                            const data = await respaldosApi.descargar(r.id);
-                            const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
-                            const url = URL.createObjectURL(blob);
-                            const a = document.createElement('a');
-                            a.href = url;
-                            a.download = `respaldo_cobao_${r.id}.json`;
-                            document.body.appendChild(a);
-                            a.click();
-                            a.remove();
-                            URL.revokeObjectURL(url);
-                          } catch (err) {
-                            toastError('No se pudo descargar', errMsg(err, 'Ocurrió un error'));
-                          }
-                        }}
+                        onClick={() => setConfirm({
+                          title: 'Descargar respaldo',
+                          message: 'Ingrese su contraseña para confirmar la descarga del respaldo.',
+                          confirmLabel: 'Descargar',
+                          run: async () => {
+                            try {
+                              const data = await respaldosApi.descargar(r.id);
+                              const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+                              const url = URL.createObjectURL(blob);
+                              const a = document.createElement('a');
+                              a.href = url;
+                              a.download = `respaldo_cobao_${r.id}.json`;
+                              document.body.appendChild(a);
+                              a.click();
+                              a.remove();
+                              URL.revokeObjectURL(url);
+                            } catch (err) {
+                              toastError('No se pudo descargar', errMsg(err, 'Ocurrió un error'));
+                            }
+                          },
+                        })}
                       >
                         <Download size={16} />
                       </button>

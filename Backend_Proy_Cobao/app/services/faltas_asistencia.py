@@ -12,9 +12,11 @@ Reglas:
 import asyncio
 import logging
 from datetime import date, datetime, time, timedelta
+from zoneinfo import ZoneInfo
 
 from sqlalchemy import func, select
 
+from app.config import settings
 from app.database import async_session
 from app.models.alumno import Alumno
 from app.models.ciclo_escolar import CicloEscolar
@@ -30,6 +32,19 @@ from app.models.rol import Rol
 from app.models.usuario import Usuario
 
 logger = logging.getLogger(__name__)
+
+
+def _tz() -> ZoneInfo:
+    return ZoneInfo(settings.TIMEZONE)
+
+
+def _ahora_local() -> datetime:
+    return datetime.now(_tz())
+
+
+def _hoy_local() -> date:
+    return _ahora_local().date()
+
 
 DIAS_NOMBRES = ["Lunes", "Martes", "Miercoles", "Jueves", "Viernes", "Sabado", "Domingo"]
 
@@ -82,6 +97,8 @@ async def _usuario_sistema(db) -> int:
     """Usuario que registra las incidencias automaticas (admin)."""
     result = await db.execute(select(Usuario.id_usuario).where(Usuario.username == "admin"))
     uid = result.scalar_one_or_none()
+    if uid is None:
+        logger.warning("No se encontro usuario 'admin'; se usa id_usuario=1 como respaldo.")
     return uid or 1
 
 
@@ -95,6 +112,8 @@ async def _usuario_prefecto(db) -> int:
         .limit(1)
     )
     uid = result.scalar_one_or_none()
+    if uid is None:
+        logger.warning("No se encontro usuario con rol Prefectura; se usa id_usuario=1 como respaldo.")
     return uid or 1
 
 
@@ -120,9 +139,17 @@ async def generar_faltas(db, fecha: date) -> dict:
         "mensaje": "",
     }
 
+    dia_nombre = DIAS_NOMBRES[fecha.weekday()]
+    dias_habiles = _dias_habiles_set(general)
+    logger.info(
+        "generar_faltas %s: dia=%s, dias_habiles=%s, general_existe=%s",
+        fecha, dia_nombre, dias_habiles, general is not None,
+    )
+
     if _descanso_activo(general, fecha):
         resultado["es_dia_habile"] = False
         resultado["mensaje"] = "No es dia habil, no se generan faltas."
+        logger.info("generar_faltas %s: SALIDA TEMPRANA - no es dia habil", fecha)
         return resultado
 
     horarios = (await db.execute(select(Horario))).scalars().all()
@@ -144,6 +171,11 @@ async def generar_faltas(db, fecha: date) -> dict:
 
     if not alumnos:
         resultado["mensaje"] = "No hay alumnos activos en el ciclo actual."
+        logger.warning(
+            "generar_faltas %s: SALIDA TEMPRANA - 0 alumnos activos "
+            "(verifique que exista un CicloEscolar con activo=true y alumnos asignados a grupos)",
+            fecha,
+        )
         return resultado
 
     # Conjuntos de actividad del dia (sin filtrar credencial activa: importa el registro).
@@ -170,6 +202,11 @@ async def generar_faltas(db, fecha: date) -> dict:
         )
     ).scalars().all()
     permisos_set = set(permisos)
+
+    logger.info(
+        "generar_faltas %s: alumnos=%d, entradas=%d, salidas=%d, permisos=%d",
+        fecha, len(alumnos), len(entradas), len(salidas), len(permisos_set),
+    )
 
     # Faltas ya registradas para esa fecha (para no duplicar).
     incidencias_existentes = (
@@ -233,6 +270,11 @@ async def generar_faltas(db, fecha: date) -> dict:
     if nuevas_incidencias or nuevos_reportes:
         await db.flush()
 
+    from app.services.reglamento_automatico import verificar_umbral_reglamento
+
+    for inc in nuevas_incidencias:
+        await verificar_umbral_reglamento(db, inc.id_alumno, inc.tipo)
+
     resultado["faltantes"] = len(nuevas_incidencias)
     resultado["sin_salida"] = len(nuevos_reportes)
     resultado["total"] = len(nuevas_incidencias) + len(nuevos_reportes)
@@ -257,29 +299,84 @@ async def generar_faltas_para_dia(fecha: date) -> dict:
             raise
 
 
-async def run_faltas_automaticas_loop():
-    """Bucle en segundo plano: cada dia (pasadas las 00:30 UTC) genera las
-    faltas de asistencia del dia anterior y expira los permisos vencidos."""
+async def _obtener_hora_cierre_hoy(db) -> time:
+    """Retorna la hora de cierre configurada para hoy."""
+    general = (
+        await db.execute(select(ConfiguracionGeneral).where(ConfiguracionGeneral.id == 1))
+    ).scalar_one_or_none()
+    horarios = (await db.execute(select(Horario))).scalars().all()
+    return hora_salida_para(_hoy_local(), general, horarios)
+
+
+async def _marcar_permisos_vencidos() -> int:
+    """Marca permisos vencidos usando su propia sesion."""
     from app.crud import permiso as crud_permiso
 
-    objetivo: date | None = None
+    async with async_session() as db:
+        try:
+            n = await crud_permiso.marcar_vencidos(db)
+            return n
+        except Exception:
+            logger.exception("Error al marcar permisos vencidos")
+            return 0
+
+
+async def _procesar_dia(dia: date) -> None:
+    """Marca permisos vencidos y genera faltas para un dia dado."""
+    n = await _marcar_permisos_vencidos()
+    if n:
+        logger.info("Permisos vencidos automaticamente (%s): %d", dia, n)
+    res = await generar_faltas_para_dia(dia)
+    logger.info("Faltas automaticas (%s): %s", dia, res["mensaje"])
+
+
+async def run_faltas_automaticas_loop():
+    """Bucle en segundo plano: genera faltas de asistencia de forma automatica.
+
+    Se activa en dos momentos:
+    1. En la hora de cierre del dia (hora_salida de configuracion_general):
+       genera las faltas del dia actual para que aparezcan de inmediato.
+    2. A las 00:30 (pasada la medianoche): genera las faltas del dia anterior
+       como respaldo (por si el servidor estuvo apagado durante la tarde).
+       Tambien revisa dias anteriores no procesados (catch-up multi-dia).
+    """
+    cierre_hoy_procesado: date | None = None
+    ultimo_catchup_dia: date | None = None
     while True:
         try:
-            ahora = datetime.now()
-            ayer = date.today() - timedelta(days=1)
-            if (ahora.hour, ahora.minute) >= (0, 30) and objetivo != ayer:
-                try:
-                    async with async_session() as db:
-                        n = await crud_permiso.marcar_vencidos(db)
-                        if n:
-                            logger.info("Permisos vencidos automaticamente: %d", n)
-                    res = await generar_faltas_para_dia(ayer)
-                    logger.info("Faltas automaticas %s: %s", ayer, res["mensaje"])
-                except Exception:
-                    logger.exception(
-                        "Fallo la generacion automatica de faltas para %s", ayer
-                    )
-                objetivo = ayer
+            ahora = _ahora_local()
+            hoy = _hoy_local()
+
+            try:
+                async with async_session() as db:
+                    hora_cierre = await _obtener_hora_cierre_hoy(db)
+
+                # --- 1. Activar a la hora de cierre del dia ---
+                momento_cierre = datetime.combine(hoy, hora_cierre, tzinfo=_tz())
+                if ahora >= momento_cierre and cierre_hoy_procesado != hoy:
+                    try:
+                        await _procesar_dia(hoy)
+                    except Exception:
+                        logger.exception("Fallo la generacion automatica de faltas para %s", hoy)
+                    cierre_hoy_procesado = hoy
+
+                # --- 2. Activar a las 00:30 como respaldo (catch-up multi-dia) ---
+                if (ahora.hour, ahora.minute) >= (0, 30):
+                    if ultimo_catchup_dia is None:
+                        inicio = hoy - timedelta(days=7)
+                    else:
+                        inicio = ultimo_catchup_dia + timedelta(days=1)
+                    dia = inicio
+                    while dia < hoy:
+                        try:
+                            await _procesar_dia(dia)
+                        except Exception:
+                            logger.exception("Fallo la generacion automatica de faltas para %s (catch-up)", dia)
+                        dia += timedelta(days=1)
+                    ultimo_catchup_dia = hoy - timedelta(days=1)
+
+            except Exception:
+                logger.exception("Error en el bucle de faltas automaticas")
         except Exception:
-            logger.exception("Error en el bucle de faltas automaticas")
+            logger.exception("Error inesperado en el bucle de faltas automaticas")
         await asyncio.sleep(60)

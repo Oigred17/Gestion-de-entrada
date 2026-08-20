@@ -9,6 +9,7 @@ from app.models.alumno import Alumno
 from app.models.grupo import Grupo
 from app.models.incidencia import Incidencia
 from app.schemas.incidencia import IncidenciaCreate, IncidenciaUpdate
+from app.services.reglamento_automatico import verificar_umbral_reglamento
 
 ESTADOS_INCIDENCIA = {"Abierto", "En revision", "Resuelto"}
 
@@ -85,6 +86,7 @@ async def create_incidencia(db: AsyncSession, data: IncidenciaCreate):
         credenciales = await get_credenciales(db, alumno_id=data.id_alumno, solo_activas=True)
         for credencial in credenciales:
             credencial.activa = False
+    await verificar_umbral_reglamento(db, data.id_alumno, data.tipo)
     await db.refresh(incidencia)
     return incidencia
 

@@ -18,4 +18,6 @@ export { justificacionesApi } from './justificaciones';
 export { reposicionesApi } from './reposiciones';
 export { notificacionesApi } from './notificaciones';
 export { respaldosApi } from './respaldos';
-export { default as apiClient } from './client';
+export { egresadosApi } from './egresados';
+export { default as apiClient, setAuthToken, getAuthToken } from './client';
+export { setOnUnauthorized } from './client';

@@ -5,6 +5,7 @@ import { nfcApi } from '../api/nfc';
 import type { Credencial, Alumno, Grupo, Reposicion } from '../types';
 import { generateCredentialsPDF } from '../utils/generateCredentialsPDF';
 import { toastSuccess, toastError, toastInfo } from '@/lib/toast';
+import { normalizeText } from '@/lib/normalizeText';
 import Loader from '../components/Loader';
 import ConfirmPasswordModal from '../components/ConfirmPasswordModal';
 
@@ -197,8 +198,9 @@ export default function CredentialsPage() {
   const filtered = creds.filter((c) => {
     const isActive = c.estatus === 'Activa' || c.estatus === 'ACTIVA';
     const matchTab = activeTab === 'Todas' || (activeTab === 'Activa' ? isActive : !isActive);
-    const name = getStudentName(c.alumno_id).toLowerCase();
-    const matchSearch = search === '' || name.includes(search.toLowerCase()) || (c.numero ?? '').toLowerCase().includes(search.toLowerCase()) || String(c.alumno_id).includes(search);
+    const name = getStudentName(c.alumno_id!);
+    const q = normalizeText(search);
+    const matchSearch = search === '' || normalizeText(name).includes(q) || normalizeText(c.numero ?? '').includes(q) || String(c.alumno_id).includes(search);
     return matchTab && matchSearch;
   });
 
@@ -220,7 +222,7 @@ export default function CredentialsPage() {
         try {
           const found = await credencialesApi.getByUid(uid);
           setScannedCredential(found);
-          setScannedStudent(getStudent(found.alumno_id) ?? null);
+          setScannedStudent(getStudent(found.alumno_id!) ?? null);
           setScanState('found');
         } catch {
           setScanState('not-found');
@@ -529,16 +531,16 @@ export default function CredentialsPage() {
 
   const filteredExportStudents = exportStudentQuery
     ? localStudents.filter(s => s.estatus === 'Activo' && (
-        getFullName(s).toLowerCase().includes(exportStudentQuery.toLowerCase()) ||
-        s.matricula.toLowerCase().includes(exportStudentQuery.toLowerCase()) ||
-        getGrupoNombre(s.id_grupo).toLowerCase().includes(exportStudentQuery.toLowerCase())
+        normalizeText(getFullName(s)).includes(normalizeText(exportStudentQuery)) ||
+        normalizeText(s.matricula).includes(normalizeText(exportStudentQuery)) ||
+        normalizeText(getGrupoNombre(s.id_grupo)).includes(normalizeText(exportStudentQuery))
       ))
     : [];
 
   const filteredStudents = localStudents.filter((s) => {
     if (!studentQuery) return false;
-    const q = studentQuery.toLowerCase();
-    return getFullName(s).toLowerCase().includes(q) || s.matricula.toLowerCase().includes(q) || getGrupoNombre(s.id_grupo).toLowerCase().includes(q);
+    const q = normalizeText(studentQuery);
+    return normalizeText(getFullName(s)).includes(q) || normalizeText(s.matricula).includes(q) || normalizeText(getGrupoNombre(s.id_grupo)).includes(q);
   });
 
   const canStartGroup = assignGroupId !== '' && localStudents.filter(s => getGrupoNombre(s.id_grupo) === assignGroupId && s.estatus === 'Activo').length > 0;
@@ -659,8 +661,8 @@ export default function CredentialsPage() {
             {filtered.map((cred, index) => (
               <tr key={cred.id}>
                 <td>{index + 1}</td>
-                <td style={{ fontWeight: 500 }}>{getStudentName(cred.alumno_id)}</td>
-                <td style={{ fontFamily: 'var(--font-mono)' }}>{getStudentControl(cred.alumno_id)}</td>
+                <td style={{ fontWeight: 500 }}>{getStudentName(cred.alumno_id!)}</td>
+                <td style={{ fontFamily: 'var(--font-mono)' }}>{getStudentControl(cred.alumno_id!)}</td>
                 <td style={{ fontFamily: 'var(--font-mono)', fontSize: 13 }}>{cred.numero ?? '---'}</td>
                 <td>{cred.fecha_emision ?? '---'}</td>
                 <td><span className={estadoBadgeClass[(cred.estatus === 'Activa' || cred.estatus === 'ACTIVA') ? 'Activa' : 'Inactiva']}>{(cred.estatus === 'Activa' || cred.estatus === 'ACTIVA') ? 'Activa' : 'Inactiva'}</span></td>
@@ -1134,7 +1136,7 @@ export default function CredentialsPage() {
                       try {
                         const found = await credencialesApi.getByUid(uid);
                         setScannedCredential(found);
-                        setScannedStudent(getStudent(found.alumno_id) ?? null);
+                        setScannedStudent(getStudent(found.alumno_id!) ?? null);
                         setScanState('found');
                       } catch {
                         setScanState('not-found');
@@ -1154,7 +1156,7 @@ export default function CredentialsPage() {
                       try {
                         const found = await credencialesApi.getByUid(uid);
                         setScannedCredential(found);
-                        setScannedStudent(getStudent(found.alumno_id) ?? null);
+                        setScannedStudent(getStudent(found.alumno_id!) ?? null);
                         setScanState('found');
                       } catch {
                         setScanState('not-found');
@@ -1324,7 +1326,7 @@ export default function CredentialsPage() {
       {selectedCredentialId !== null && (() => {
         const cred = creds.find(c => c.id === selectedCredentialId);
         if (!cred) return null;
-        const student = getStudent(cred.alumno_id);
+        const student = getStudent(cred.alumno_id!);
         if (!student) return null;
 
         const isCredActive = cred.estatus === 'Activa' || cred.estatus === 'ACTIVA';

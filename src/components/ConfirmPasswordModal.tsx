@@ -26,15 +26,26 @@ export default function ConfirmPasswordModal({
 
   if (!open) return null;
 
+  const handleClose = () => {
+    if (verifying) return;
+    setPassword('');
+    setError('');
+    onClose();
+  };
+
   const handleConfirm = async () => {
-    if (!password) return;
+    if (!password.trim()) {
+      setError('Ingrese su contraseña para confirmar.');
+      return;
+    }
     setVerifying(true);
     setError('');
+    const action = onConfirm;
     try {
       await authApi.verifyPassword(password);
       setPassword('');
-      await onConfirm();
-      onClose();
+      handleClose();
+      await action();
     } catch (err) {
       const status = (err as { response?: { status?: number } })?.response?.status;
       if (status === 401) {
@@ -48,14 +59,14 @@ export default function ConfirmPasswordModal({
   };
 
   return (
-    <div className="modal-backdrop" onClick={onClose} style={{ zIndex: 9998 }}>
+    <div className="modal-backdrop" onClick={handleClose} style={{ zIndex: 9998 }}>
       <div className="modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 440 }}>
         <div className="modal-header">
           <h3 style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
             <Shield size={20} color="#AB1748" />
             {title}
           </h3>
-          <button className="modal-close" onClick={onClose}><X size={20} /></button>
+          <button className="modal-close" onClick={handleClose}><X size={20} /></button>
         </div>
         <div className="modal-body">
           <p style={{ fontSize: 14, color: '#5F5657', lineHeight: 1.6, marginBottom: 16 }}>{message}</p>
@@ -66,16 +77,17 @@ export default function ConfirmPasswordModal({
               className={`input ${error ? 'input--error' : ''}`}
               placeholder="Ingrese su contraseña..."
               value={password}
+              required
               onChange={(e) => { setPassword(e.target.value); setError(''); }}
-              onKeyDown={(e) => { if (e.key === 'Enter') handleConfirm(); }}
+              onKeyDown={(e) => { if (e.key === 'Enter' && !verifying) handleConfirm(); }}
               autoFocus
             />
             {error && <span style={{ fontSize: 12, color: '#AB1748', marginTop: 4, display: 'block' }}>{error}</span>}
           </div>
         </div>
         <div className="modal-footer">
-          <button className="btn btn--secondary" onClick={onClose}>Cancelar</button>
-          <button className="btn btn--danger" onClick={handleConfirm} disabled={!password || verifying}>
+          <button className="btn btn--secondary" onClick={handleClose} disabled={verifying}>Cancelar</button>
+          <button className="btn btn--danger" onClick={handleConfirm} disabled={!password.trim() || verifying}>
             {verifying ? 'Verificando...' : confirmLabel}
           </button>
         </div>
