@@ -15,6 +15,7 @@ from app.database import get_db
 from app.models.rol import Rol
 from app.models.usuario import Usuario
 from app.schemas.auth import (
+    ChangePasswordRequest,
     LoginRequest,
     MfaSetupResponse,
     RecoverRequest,
@@ -306,6 +307,36 @@ async def verify_password_endpoint(
             detail="Contraseña incorrecta",
         )
     return VerifyPasswordResponse(valid=True)
+
+
+@router.post("/change-password")
+async def change_password(
+    data: ChangePasswordRequest,
+    current_user: Usuario = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Cambia la contraseña del usuario autenticado (requiere la contraseña actual)."""
+    if not verify_password(data.current_password, current_user.password_user):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="La contraseña actual es incorrecta.",
+        )
+
+    if len(data.new_password) < settings.MIN_PASSWORD_LENGTH:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"La nueva contraseña debe tener al menos {settings.MIN_PASSWORD_LENGTH} caracteres.",
+        )
+
+    if verify_password(data.new_password, current_user.password_user):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="La nueva contraseña debe ser diferente a la actual.",
+        )
+
+    current_user.password_user = hash_password(data.new_password)
+    await db.commit()
+    return {"status": "ok", "message": "Contraseña actualizada correctamente."}
 
 
 @router.get("/me", response_model=UserResponse)

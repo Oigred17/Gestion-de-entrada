@@ -38,7 +38,6 @@ class UsuarioCreate(BaseModel):
 
 class UsuarioUpdate(BaseModel):
     username: UsernameStr | None = None
-    password_user: str | None = None
     nombre: NombreStr | None = None
     apellido_paterno: NombreStr | None = None
     apellido_materno: NombreStr | None = None

@@ -47,3 +47,8 @@ class MfaSetupResponse(BaseModel):
 class VerifyMfaRequest(BaseModel):
     code: str
     temp_token: str | None = None
+
+
+class ChangePasswordRequest(BaseModel):
+    current_password: str
+    new_password: str
